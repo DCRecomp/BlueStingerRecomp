@@ -1,7 +1,7 @@
 // N8.7 (docs/N8-7-KAMUI.md, passo 5b): o system block do Holly que sobra no produto (system_block.h).
-#include "render/kamui/system_block.h"
+#include "kamui/system_block.h"
 
-namespace bs::native::render::kamui {
+namespace bs::kamui {
 
 SystemBlock::Region SystemBlock::removed(uint32_t p, unsigned size, bool write, uint32_t v) {
     const bool gd = p >= kGdBase && p < kGdEnd, g1 = p >= kG1Base && p < kG1End;
@@ -30,4 +30,4 @@ SystemBlock::Action SystemBlock::write(uint32_t p, uint32_t v) {
     return Action::None;
 }
 
-} // namespace bs::native::render::kamui
+} // namespace bs::kamui

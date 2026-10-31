@@ -1,9 +1,9 @@
-#include "render/kamui/texture_heap.h"
+#include "kamui/texture_heap.h"
 
 #include <algorithm>
 #include <cstring>
 
-namespace bs::native::render::kamui {
+namespace bs::kamui {
 
 void TextureHeap::reset() {
     std::fill(mem_.begin(), mem_.end(), uint8_t(0));
@@ -53,4 +53,4 @@ uint64_t TextureHeap::generation64(uint32_t off64, uint32_t n) const {
     return g;
 }
 
-} // namespace bs::native::render::kamui
+} // namespace bs::kamui

@@ -1,8 +1,8 @@
-#include "render/kamui/frame_state.h"
+#include "kamui/frame_state.h"
 
 #include <algorithm>
 
-namespace bs::native::render::kamui {
+namespace bs::kamui {
 namespace {
 constexpr uint32_t kDefaultLines = 263;  // NTSC nao entrelacado
 } // namespace
@@ -122,4 +122,4 @@ SpgPosition FrameState::spg_position(uint64_t t) const {
     return p;
 }
 
-} // namespace bs::native::render::kamui
+} // namespace bs::kamui

@@ -59,7 +59,7 @@ bool Renderer::draw(uint32_t w, uint32_t h, std::vector<uint32_t>& image) {
 
 // N8.7 (produto): a IR do ListSink (as listas do Kamui decodificadas direto) substitui a montagem pelos retornos do
 // decodificador do legado; o resto (dispositivo, texturas, estatisticas) e o mesmo
-bool Renderer::render_list(const bs::native::render::kamui::ListFrame& lf, uint32_t w, uint32_t h,
+bool Renderer::render_list(const bs::kamui::ListFrame& lf, uint32_t w, uint32_t h,
                            std::vector<uint32_t>& image) {
     frame                   = {};
     frame.cl                = lf.cl;
@@ -440,14 +440,14 @@ void Renderer::dump(std::span<const uint32_t> sw, uint32_t w, uint32_t h, double
 }
 
 nr::DrawState draw_state(const PvrTri& t, uint32_t texture_handle) {
-    return bs::native::render::kamui::draw_state(t, texture_handle);  // N8.7: as regras ficam no ListSink
+    return bs::kamui::draw_state(t, texture_handle);  // N8.7: as regras ficam no ListSink
 }
 
 PvrTri pvr_state(const nr::DrawState& s, const TextureKey* tex) {  // a mesma conversao do renderizador em software
     return soft::tri_state(s, tex ? tex->tcw : 0, tex ? tex->width : 0, tex ? tex->height : 0);
 }
 
-nr::Vertex vertex(const PvrVertex& v) { return bs::native::render::kamui::ir_vertex(v); }
+nr::Vertex vertex(const PvrVertex& v) { return bs::kamui::ir_vertex(v); }
 
 PvrVertex pvr_vertex(const nr::Vertex& v) { return soft::tri_vertex(v); }
 

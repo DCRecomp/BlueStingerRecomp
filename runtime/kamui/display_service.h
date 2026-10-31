@@ -14,7 +14,7 @@
 #include <cstdint>
 #include <vector>
 
-namespace bs::native::render::kamui {
+namespace bs::kamui {
 
 struct DisplayRegs {
     uint32_t fb_r_ctrl   = 0;  // 005F8044
@@ -41,4 +41,4 @@ struct DisplayRegs {
 // redimensionado.
 void scanout(const DisplayRegs& r, const uint8_t* mem, std::vector<uint32_t>& argb, uint32_t& width, uint32_t& height);
 
-} // namespace bs::native::render::kamui
+} // namespace bs::kamui

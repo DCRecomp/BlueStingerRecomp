@@ -1,10 +1,10 @@
 // N8.7 (docs/N8-7-KAMUI.md, D-K2 e incremento 3b): no produto, a area 1 (0x04000000-0x07FFFFFF, as duas vistas da
-// VRAM) e a memoria das texturas nativa (native/render/kamui/texture_heap): os mesmos bytes nos mesmos enderecos, com a
+// VRAM) e a memoria das texturas nativa (runtime/kamui/texture_heap): os mesmos bytes nos mesmos enderecos, com a
 // geracao por pagina que o cache de texturas usa. O modelo do legado (pvr/vram.cpp) fica na validacao como referencia.
 #include "pvr/vram.h"
 
 #include "cpu/sh4_runtime.h"
-#include "render/kamui/texture_heap.h"
+#include "kamui/texture_heap.h"
 #include "system/graphics_ports.h"
 
 #include <cstdio>
@@ -15,7 +15,7 @@
 namespace bs {
 namespace {
 
-native::render::kamui::TextureHeap g_heap;
+kamui::TextureHeap g_heap;
 
 // offset no armazenamento (layout de 32 bits), ou -1 se `a` nao e area 1 (0x04000000-0x07FFFFFF, espelhos 0x06/0x07)
 int64_t locate(uint32_t a) {

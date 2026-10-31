@@ -1,8 +1,8 @@
-#include "render/kamui/display_service.h"
+#include "kamui/display_service.h"
 
-#include "render/kamui/texture_heap.h"
+#include "kamui/texture_heap.h"
 
-namespace bs::native::render::kamui {
+namespace bs::kamui {
 namespace {
 
 uint32_t expand5(uint32_t v) { return (v << 3) | (v >> 2); }
@@ -48,4 +48,4 @@ void scanout(const DisplayRegs& r, const uint8_t* mem, std::vector<uint32_t>& ar
     }
 }
 
-} // namespace bs::native::render::kamui
+} // namespace bs::kamui

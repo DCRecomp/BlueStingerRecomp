@@ -25,7 +25,7 @@
 #include "pvr/pvr_render.h"
 #include "pvr/ta.h"
 #include "cpu/sh4_runtime.h"
-#include "render/kamui/frame_state.h"
+#include "kamui/frame_state.h"
 
 #include <algorithm>
 #include <array>
@@ -78,7 +78,7 @@ uint32_t reg(uint32_t a) { return g_regs[(a - kBase) / 4]; }
 // TA, o banco inteiro a cada STARTRENDER e as contas da temporizacao do video. Negativos (BS_FRAME_STATE_MUTACAO):
 // leitura (o valor lido da sombra + 1), escrita (a sombra perde uma escrita de dado simples), fase (a fase do feixe
 // carregada errada), efeitos (a sombra nao pede a sincronizacao do INTC), prazo (a formula do produto + 1 ciclo)
-native::render::kamui::FrameState g_shadow(kFieldCycles);
+kamui::FrameState g_shadow(kFieldCycles);
 uint64_t                          g_shadowChecks = 0, g_shadowMismatch = 0;
 // revisao Codex 20261028-212527: os efeitos de cada escrita, na ordem (R render, S sincronizacao do INTC, I listas novas,
 // C listas continuadas, G temporizacao nova, Y YUV): o legado registra os que executa, a sombra os que pede
@@ -106,7 +106,7 @@ void shadow_check(bool same, const char* what, uint32_t p, uint64_t a, uint64_t 
     }
 }
 
-class NoEffects final : public native::render::kamui::FrameEffects {
+class NoEffects final : public kamui::FrameEffects {
 public:
     void start_render() override { g_fxShadow += 'R'; }
     void spg_sync() override { g_fxShadow += shadow_mutation() == "efeitos" ? "" : "S"; }
@@ -328,7 +328,7 @@ bool pvr_reg_write(Sh4Context* c, uint32_t a, unsigned size, uint32_t v) {
     shadow_check(g_fxLegacy == g_fxShadow, ("efeitos " + g_fxLegacy + " x " + g_fxShadow).c_str(), p, g_fxLegacy.size(),
                  g_fxShadow.size());
     if (p == kStartRender) {  // o prazo do fim de render: o instante do legado + a formula compartilhada do produto
-        const uint64_t cost = native::render::kamui::render_done_cost(ta_bytes()) + (shadow_mutation() == "prazo" ? 1 : 0);
+        const uint64_t cost = kamui::render_done_cost(ta_bytes()) + (shadow_mutation() == "prazo" ? 1 : 0);
         shadow_check(g_renderDue == g_renderNow + cost, "prazo do fim de render", p, g_renderDue, g_renderNow + cost);
     }
     if (p == kTaListInit) {

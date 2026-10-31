@@ -14,7 +14,9 @@
 #include <cstdint>
 #include <vector>
 
-namespace bs::native::render::kamui {
+namespace bs::kamui {
+
+using namespace native::render;  // a IR e o rasterizador nativos (native/render), que o contrato do Kamui alimenta
 
 // Um parametro do TA: 8 ou 16 palavras e a lista em que chegou (0 opaca, 1 modificador opaco, 2 translucida,
 // 3 modificador translucido, 4 punch-through).
@@ -77,4 +79,4 @@ Vertex    ir_vertex(const soft::Vertex& v);
 // soft_raster/pvr_texture: os formatos de textura que o decodificador aceita (os outros: o poligono e omitido)
 bool texture_supported(uint32_t tcw);
 
-} // namespace bs::native::render::kamui
+} // namespace bs::kamui

@@ -30,7 +30,7 @@ public:
     // desenha `frame` no dispositivo do modo e preenche `image` (w x h ARGB8888); false = nada desenhado
     bool draw(uint32_t w, uint32_t h, std::vector<uint32_t>& image);
     // N8.7 (produto): a IR do ListSink no lugar da montagem pelos retornos do decodificador do legado
-    bool render_list(const bs::native::render::kamui::ListFrame& lf, uint32_t w, uint32_t h,
+    bool render_list(const bs::kamui::ListFrame& lf, uint32_t w, uint32_t h,
                      std::vector<uint32_t>& image) override;
     void account();  // as estatisticas de cada render (desenhos, fog, sombra, volumes)
     bool soft_render(uint32_t w, uint32_t h, std::vector<uint32_t>& out);

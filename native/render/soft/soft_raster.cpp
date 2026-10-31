@@ -1,5 +1,5 @@
 // N8.7: rasterizador de referencia do PowerVR2 em software (soft_raster.h). As contas sao as do rasterizador do N1,
-// movidas de runtime/pvr/pvr_render.cpp sem mudanca; so a origem dos texels passou para a TexelSource.
+// movidas do rasterizador do legado (pvr_render.cpp) sem mudanca; so a origem dos texels passou para a TexelSource.
 // Documentacao de comportamento: KallistiOS (pvr_regs, pvr_internal); Flycast so como referencia, nenhum codigo copiado.
 #include "render/soft/soft_raster.h"
 

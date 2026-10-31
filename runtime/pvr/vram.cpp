@@ -7,7 +7,7 @@
 #include "pvr/vram.h"
 
 #include "cpu/sh4_runtime.h"
-#include "render/kamui/texture_heap.h"
+#include "kamui/texture_heap.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -26,7 +26,7 @@ std::vector<uint8_t> g_vram(kVramSize);
 // recebe cada escrita e e comparada pagina a pagina a cada render (as paginas tocadas desde a ultima comparacao). A
 // geracao que o cache de texturas usa vem dela. Negativo (BS_TEXTURE_HEAP_MUTACAO=marca): os blocos do caminho direto de
 // textura (16 bytes em cada banco) e as escritas da CPU nao marcam a pagina (o cache tem de acusar a textura velha)
-native::render::kamui::TextureHeap g_shadow;
+kamui::TextureHeap g_shadow;
 std::set<uint32_t>                 g_dirty;  // paginas tocadas desde a ultima comparacao
 uint64_t                           g_checks = 0, g_mismatch = 0;
 std::string                        g_first;
@@ -40,7 +40,7 @@ bool mutation_unmarked() {
 }
 
 void dirty(uint32_t off, uint32_t n) {  // com a volta no fim dos 8 MB (revisao Codex 20261029-013355)
-    constexpr uint32_t kPage = native::render::kamui::TextureHeap::kPage;
+    constexpr uint32_t kPage = kamui::TextureHeap::kPage;
     if (!n) return;
     off &= kVramSize - 1;
     n                    = std::min<uint32_t>(n, kVramSize);
@@ -83,7 +83,7 @@ uint64_t vram_generation64(uint32_t off64, uint32_t n) { return g_shadow.generat
 const uint8_t* vram_shadow_data() { return g_shadow.data(); }  // N8.7 3c: a entrada do servico de exibicao em sombra
 
 void vram_heap_check() {
-    constexpr uint32_t kPage = native::render::kamui::TextureHeap::kPage;
+    constexpr uint32_t kPage = kamui::TextureHeap::kPage;
     for (const uint32_t p : g_dirty) {
         ++g_checks;
         if (std::memcmp(g_vram.data() + size_t(p) * kPage, g_shadow.data() + size_t(p) * kPage, kPage) != 0) {

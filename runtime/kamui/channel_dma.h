@@ -9,7 +9,7 @@
 //   SB_C2DSTAT 0x005F6800 (destino), SB_C2DLEN 0x005F6804 (bytes), SB_C2DST 0x005F6808 (partida).
 #include <cstdint>
 
-namespace bs::native::render::kamui {
+namespace bs::kamui {
 
 class ChannelDma {
 public:
@@ -48,4 +48,4 @@ private:
     uint64_t transfers_ = 0;
 };
 
-} // namespace bs::native::render::kamui
+} // namespace bs::kamui

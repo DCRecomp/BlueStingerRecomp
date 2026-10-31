@@ -44,8 +44,8 @@ namespace nr = bs::native::render;
 
 // O que identifica os texels de uma textura (a IR so guarda o handle): TCW (endereco, formato, paleta, modos),
 // tamanho do TSP e o stride linear (TEXT_CONTROL).
-// N8.7: o mesmo tipo do ListSink nativo (native/render/kamui/list_sink.h)
-using TextureKey = bs::native::render::kamui::TextureKey;
+// N8.7: o mesmo tipo do ListSink nativo (runtime/kamui/list_sink.h)
+using TextureKey = bs::kamui::TextureKey;
 
 struct Frame {
     nr::CommandList         cl;

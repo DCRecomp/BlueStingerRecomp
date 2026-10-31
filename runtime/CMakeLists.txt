@@ -4,6 +4,16 @@
 # n8_produto_papeis).
 set(BS_RT_PAPEIS)
 
+# N8.7 (docs/N8-7-KAMUI.md): o contrato do Kamui com o hardware grafico, sobre os enderecos do guest (D-K1 a): as listas
+# para a IR, o estado do quadro, a memoria das texturas, a imagem exibida, o banco de status, a copia do canal 2, a
+# entrada da area 4, a passagem de render e o system block. Os servicos do produto (system/*_bus) e as sombras da
+# validacao os usam. N8.8: saiu de native/render/kamui, porque native/ nao conhece o Dreamcast (n0_native_limpo).
+add_library(bs_kamui STATIC kamui/list_sink.cpp kamui/frame_state.cpp kamui/texture_heap.cpp kamui/display_service.cpp
+            kamui/event_status.cpp kamui/channel_dma.cpp kamui/area4_entry.cpp kamui/render_pass.cpp
+            kamui/system_block.cpp)
+target_include_directories(bs_kamui PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(bs_kamui PUBLIC bs_native_render)
+
 # substrato AOT (L1-L3, L7, L21: ate o N10): contexto, despacho, servico e cadencia, fibras, RAM e roteamento, mods
 add_library(bs_rt_aot OBJECT
   cpu/sh4_context.cpp
@@ -103,14 +113,14 @@ foreach(o ${BS_RT_OBJ} bs_rt_hle)
   target_include_directories(${o} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
   # dados do jogo (RuntimeDisc, IP.BIN, descrambler) e o mapa de regioes; o leitor de CDI fica fora (bs_disc)
   # N8.7: o rasterizador em software e nativo (native/render/soft); o caminho do TA o usa com os texels da VRAM
-  target_link_libraries(${o} PUBLIC bs_disc_data bs_native_render PRIVATE xinput bs_dcmap)
+  target_link_libraries(${o} PUBLIC bs_disc_data bs_native_render bs_kamui PRIVATE xinput bs_dcmap)
 endforeach()
 
 add_library(bs_runtime STATIC
   $<TARGET_OBJECTS:bs_rt_aot> $<TARGET_OBJECTS:bs_rt_nativo> $<TARGET_OBJECTS:bs_rt_simulacao>
   $<TARGET_OBJECTS:bs_rt_estavel> $<TARGET_OBJECTS:bs_rt_diagnostico> $<TARGET_OBJECTS:bs_rt_validacao>)
 target_include_directories(bs_runtime PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(bs_runtime PUBLIC bs_disc_data bs_native_render PRIVATE xinput bs_dcmap)
+target_link_libraries(bs_runtime PUBLIC bs_disc_data bs_native_render bs_kamui PRIVATE xinput bs_dcmap)
 string(REPLACE ";" "\n" BS_RT_PAPEIS_TXT "${BS_RT_PAPEIS}")
 file(WRITE ${CMAKE_BINARY_DIR}/runtime_papeis.txt "${BS_RT_PAPEIS_TXT}\n")
 # manifesto canonico papel<TAB>fonte, das mesmas listas dos alvos (catraca n8_produto_papeis; revisao Codex 2026-10-26)

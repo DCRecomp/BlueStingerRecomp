@@ -16,7 +16,7 @@
 #include "pvr/pvr_regs.h"
 #include "system/maple_bus.h"
 #include "pvr/pvr_video.h"
-#include "render/kamui/event_status.h"
+#include "kamui/event_status.h"
 
 #include <array>
 #include <cstdio>
@@ -46,7 +46,7 @@ uint64_t g_vblankFused = 0;  // VBlank-In com o bit ainda aceso: um atendimento 
 // N8.7 4a (docs/N8-7-KAMUI.md, D-K3): este controlador e a referencia; o banco de status nativo (o do produto) roda em
 // sombra, recebe os mesmos eventos e escritas e e comparado depois de cada operacao (os 16 registradores, o nivel IRL e
 // as contagens). Negativo (BS_EVENT_STATUS_MUTACAO=limpa): a sombra ignora a limpeza do bit 19 (fim do DMA do canal 2)
-native::render::kamui::EventStatus g_shadow;
+kamui::EventStatus g_shadow;
 uint64_t                           g_checks = 0, g_differ = 0;
 std::string                        g_first;
 
@@ -114,7 +114,7 @@ void update(uint64_t now) {
     }
     g_last = now;
     if (due) {
-        native::render::kamui::EventStatus::Due d;
+        kamui::EventStatus::Due d;
         d.vblank_in = vblankIn, d.vblank_out = due & kDueVblankOut, d.render = due & kDueRender, d.maple = due & kDueMaple;
         g_shadow.deliver(d);
         shadow_check("eventos vencidos");

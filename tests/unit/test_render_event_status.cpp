@@ -1,10 +1,10 @@
 // N8.7 (docs/N8-7-KAMUI.md, D-K3 e incremento 4a): o banco minimo de status de interrupcao nativo
-// (native/render/kamui/event_status): eventos entregues e levantados, limpeza por escrita de 1, mascaras e nivel IRL.
+// (runtime/kamui/event_status): eventos entregues e levantados, limpeza por escrita de 1, mascaras e nivel IRL.
 #include "test.h"
 
-#include "render/kamui/event_status.h"
+#include "kamui/event_status.h"
 
-using bs::native::render::kamui::EventStatus;
+using bs::kamui::EventStatus;
 
 // a sequencia do tratador 8C1C53E2 por render (fase 0): fim do DMA + fim do modificador opaco, limpos pelo tratador
 BS_TEST(event_status_raise_and_write_one_to_clear) {

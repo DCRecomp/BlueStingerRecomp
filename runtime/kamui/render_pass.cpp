@@ -1,9 +1,9 @@
-#include "render/kamui/render_pass.h"
+#include "kamui/render_pass.h"
 
 #include <algorithm>
 #include <cstring>
 
-namespace bs::native::render::kamui {
+namespace bs::kamui {
 namespace {
 
 constexpr uint32_t R(uint32_t off) { return 0x005F8000 + off; }
@@ -114,4 +114,4 @@ void RenderPass::write_back(Reg reg, void* ctx, const std::vector<uint32_t>& col
     }
 }
 
-} // namespace bs::native::render::kamui
+} // namespace bs::kamui

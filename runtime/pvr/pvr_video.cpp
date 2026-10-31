@@ -4,7 +4,7 @@
 
 #include "pvr/pvr_regs.h"
 #include "pvr/vram.h"
-#include "render/kamui/display_service.h"
+#include "kamui/display_service.h"
 
 #include <algorithm>
 #include <cstdlib>
@@ -34,7 +34,7 @@ bool mutation_field() {
 }
 
 void shadow_check(const std::vector<uint32_t>& argb, uint32_t width, uint32_t height) {
-    namespace k = native::render::kamui;
+    namespace k = kamui;
     auto r = k::DisplayRegs::from([](uint32_t a) { return pvr_shadow_reg(a); });
     if (mutation_field()) std::swap(r.fb_r_sof1, r.fb_r_sof2);
     static std::vector<uint32_t> nat;

@@ -5,7 +5,7 @@
 // tile de 32 bits, profundidade em 1/w, fundo, listas opaca/punch-through/translucida),
 // com aproximacoes documentadas em pvr_render.cpp.
 #include "cpu/sh4_context.h"
-#include "render/kamui/list_sink.h"
+#include "kamui/list_sink.h"
 #include "render/render.h"
 #include "render/soft/soft_raster.h"
 
@@ -47,7 +47,7 @@ PvrFrame pvr_frame_from_regs();
 // N8.7: os parametros do quadro da IR (tamanho, fundo, fog, sombra, HALF_OFFSET, clamp...) a partir dos registradores
 native::render::FrameParams pvr_frame_params(uint32_t width, uint32_t height);
 
-using TaParam = native::render::kamui::ListParam;  // N8.7: o parametro do TA (pvr/ta.h)
+using TaParam = kamui::ListParam;  // N8.7: o parametro do TA (pvr/ta.h)
 
 // N8.7 5a (produto, system/render_bus): o renderizador sobre a IR (transitional/render_core) recebe a IR que o ListSink
 // decodificou das listas do Kamui; desenha e preenche `image` (w x h ARGB8888). false = nada desenhado (erro explicito
@@ -55,7 +55,7 @@ using TaParam = native::render::kamui::ListParam;  // N8.7: o parametro do TA (p
 class PvrListRenderer {
 public:
     virtual ~PvrListRenderer() = default;
-    virtual bool render_list(const native::render::kamui::ListFrame&, uint32_t, uint32_t, std::vector<uint32_t>&) = 0;
+    virtual bool render_list(const kamui::ListFrame&, uint32_t, uint32_t, std::vector<uint32_t>&) = 0;
 };
 void     pvr_render_set_renderer(PvrListRenderer* renderer);  // nullptr desliga; so o produto
 uint32_t pvr_background_color();                               // cor do plano de fundo do render atual (ISP_BACKGND_T), RGB

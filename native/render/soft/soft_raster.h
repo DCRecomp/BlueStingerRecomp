@@ -1,6 +1,6 @@
 #pragma once
 // N8.7: o rasterizador de referencia do PowerVR2 em software, sem o hardware simulado. E o recuo permanente do Vulkan e
-// a referencia das comparacoes. As contas sao as do rasterizador do N1 (antes em runtime/pvr/pvr_render.cpp, movidas sem
+// a referencia das comparacoes. As contas sao as do rasterizador do N1 (antes no pvr_render.cpp do legado, movidas sem
 // mudanca): buffer de 32 bits e profundidade em 1/w; listas opaca, punch-through e translucida (autosort por pixel ou na
 // ordem de submissao); interpolacao com correcao de perspectiva, regra top-left, amostras por HALF_OFFSET; recorte do
 // usuario; color clamp. Os triangulos chegam com as palavras do hardware (ISP/TSP/TCW) e os texels vem de uma

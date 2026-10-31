@@ -1,6 +1,6 @@
-#include "render/kamui/channel_dma.h"
+#include "kamui/channel_dma.h"
 
-namespace bs::native::render::kamui {
+namespace bs::kamui {
 
 void ChannelDma::reset() {
     for (auto& ch : ch_)
@@ -39,4 +39,4 @@ ChannelDma::Result ChannelDma::ch2_start(SbRegs& sb, Reader read, Sink sink, voi
     return Result::Done;
 }
 
-} // namespace bs::native::render::kamui
+} // namespace bs::kamui

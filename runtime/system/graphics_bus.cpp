@@ -1,5 +1,5 @@
 // N8.7 (docs/N8-7-KAMUI.md secao 12, incremento 3a): no produto, os registradores graficos (005F8000-005F9FFF) sao o
-// estado do quadro nativo (native/render/kamui/frame_state): a mesma API de pvr/pvr_regs.h sobre o FrameState, sem o
+// estado do quadro nativo (runtime/kamui/frame_state): a mesma API de pvr/pvr_regs.h sobre o FrameState, sem o
 // banco de hardware do legado (pvr/pvr_regs.cpp, que fica na validacao como referencia). Os efeitos das escritas de
 // comando (render, listas, temporizacao do video) rodam na ordem do modelo anterior; os prazos e os relogios nao mudam.
 #include "pvr/pvr_regs.h"
@@ -12,7 +12,7 @@
 #include "pvr/holly_intc.h"
 #include "pvr/pvr_render.h"
 #include "pvr/ta.h"
-#include "render/kamui/frame_state.h"
+#include "kamui/frame_state.h"
 #include "system/graphics_ports.h"
 
 #include <algorithm>
@@ -24,7 +24,7 @@
 namespace bs {
 namespace {
 
-using native::render::kamui::FrameState;
+using kamui::FrameState;
 
 FrameState                          g_fs(kCompatTicksPerField);
 std::array<bool, FrameState::kSize / 4> g_reported{};
@@ -34,7 +34,7 @@ int                                 g_startCount = 0;
 
 uint32_t canon(uint32_t a) { return a < 0xE0000000 ? (a & 0x1FFFFFFF) : 0; }
 
-class Effects final : public native::render::kamui::FrameEffects {
+class Effects final : public kamui::FrameEffects {
 public:
     Effects(Sh4Context* c, uint32_t p) : c_(c), p_(p) {}
 
@@ -70,7 +70,7 @@ public:
                              std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count());
         }
         // fim de render: a estimativa do Flycast, min(450000 + bytes do TA * 100, 1500000) ciclos; depois, ISTNRM 0-2
-        g_renderDue = time_now(c_) + native::render::kamui::render_done_cost(ta_bytes());
+        g_renderDue = time_now(c_) + kamui::render_done_cost(ta_bytes());
         time_provider().render_scheduled(g_renderDue);
     }
     void spg_sync() override { holly_intc_sync(time_now(c_)); }

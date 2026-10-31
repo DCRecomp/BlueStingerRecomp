@@ -11,7 +11,7 @@
 // translucida 9, modificador translucido 10, punch-through 21.
 //
 // N8.7 4c (docs/N8-7-KAMUI.md): so na validacao. A FIFO de poligonos do legado e a referencia do ListSink, e este
-// arquivo, a da entrada da area 4 nativa (native/render/kamui/area4_entry), que roda em sombra: em cada bloco, o
+// arquivo, a da entrada da area 4 nativa (runtime/kamui/area4_entry), que roda em sombra: em cada bloco, o
 // caminho, o bit do fim de lista e os offsets do caminho de textura sao comparados com os do legado ([area-4]). No
 // produto, a entrada e system/area4_bus.cpp.
 #include "pvr/ta.h"
@@ -19,7 +19,7 @@
 #include "cpu/sh4_runtime.h"
 #include "pvr/holly_intc.h"
 #include "pvr/vram.h"
-#include "render/kamui/area4_entry.h"
+#include "kamui/area4_entry.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -44,12 +44,12 @@ std::vector<TaParam> g_params;
 uint32_t             g_bytes = 0;  // bytes recebidos pela FIFO de poligonos desde o init
 int                  g_lastEnd = -1;  // a lista fechada pelo ultimo bloco (-1: nenhuma)
 uint64_t             g_endMismatch = 0;
-native::render::kamui::ListSink g_list;  // N8.7: as listas do Kamui, decodificadas direto para a IR
+kamui::ListSink g_list;  // N8.7: as listas do Kamui, decodificadas direto para a IR
 
 constexpr uint32_t kListEndBit[5] = {1u << 7, 1u << 8, 1u << 9, 1u << 10, 1u << 21};
 
 // N8.7 4c: a entrada da area 4 nativa em sombra
-using native::render::kamui::Area4Entry;
+using kamui::Area4Entry;
 uint64_t    g_a4Blocks = 0, g_a4Poly = 0, g_a4Tex = 0, g_a4Ends = 0, g_a4Differ = 0;
 std::string g_a4First;
 
@@ -186,7 +186,7 @@ void ta_list_continue() {
     g_list.list_continue();
 }
 
-native::render::kamui::ListSink& ta_list_sink() { return g_list; }
+kamui::ListSink& ta_list_sink() { return g_list; }
 
 bool ta_fifo_write(Sh4Context* c, uint32_t target, const uint32_t* data) {
     const uint32_t p = target & 0x1FFFFFFF;
@@ -198,7 +198,7 @@ bool ta_fifo_write(Sh4Context* c, uint32_t target, const uint32_t* data) {
     if (region == 0) {
         area4_route(target, Area4Entry::Path::Polygon);
         ++g_a4Poly;
-        const native::render::kamui::BlockResult r = g_list.feed(data);
+        const kamui::BlockResult r = g_list.feed(data);
         // a FIFO do legado e a referencia (interrupcoes e erro); o fim de lista do ListSink tem de ser o mesmo
         g_bytes += 32;
         g_lastEnd = -1;

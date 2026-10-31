@@ -16,7 +16,7 @@
 // volumes, buffers secundarios (SRC/DST select) e escala do SCALER_CTL; empates de
 // amostragem exatamente na fronteira de texels dependem da precisao numerica.
 //
-// N8.7 4d (docs/N8-7-KAMUI.md): so na validacao, como referencia da passagem nativa (native/render/kamui/render_pass),
+// N8.7 4d (docs/N8-7-KAMUI.md): so na validacao, como referencia da passagem nativa (runtime/kamui/render_pass),
 // que roda em sombra em cada render: tamanho, fundo, parametros do quadro, Region Array e a gravacao no framebuffer
 // (as mesmas faixas, com os mesmos bytes) sao comparados com os deste arquivo ([render-pass]). No produto, o render e
 // system/render_bus.cpp.
@@ -27,7 +27,7 @@
 #include "pvr/pvr_texture.h"
 #include "pvr/ta.h"
 #include "pvr/vram.h"
-#include "render/kamui/render_pass.h"
+#include "kamui/render_pass.h"
 #include "render/soft/soft_raster.h"
 
 #include <algorithm>
@@ -60,7 +60,7 @@ PvrCaptureSink*    g_sink       = nullptr;  // N7a: captura da IR de render (pvr
 const RenderStats* g_inProgress = nullptr;  // as contagens do legado durante o end() da captura
 
 // N8.7 4d: a passagem nativa em sombra
-using native::render::kamui::RenderPass;
+using kamui::RenderPass;
 uint64_t    g_rpRenders = 0, g_rpBytes = 0, g_rpDiffer = 0;
 std::string g_rpFirst;
 std::vector<std::pair<uint32_t, uint32_t>>* g_legacyTouches = nullptr;  // as faixas que writeBack marca

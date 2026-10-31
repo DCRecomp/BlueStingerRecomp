@@ -1,13 +1,13 @@
-// N8.7 (docs/N8-7-KAMUI.md, incremento 4b): a copia do canal 2 nativa (native/render/kamui/channel_dma): habilitacao,
+// N8.7 (docs/N8-7-KAMUI.md, incremento 4b): a copia do canal 2 nativa (runtime/kamui/channel_dma): habilitacao,
 // FIFO de poligonos x caminho de textura, comprimento fora do multiplo de 32 e destino recusado.
 #include "test.h"
 
-#include "render/kamui/channel_dma.h"
+#include "kamui/channel_dma.h"
 
 #include <utility>
 #include <vector>
 
-using bs::native::render::kamui::ChannelDma;
+using bs::kamui::ChannelDma;
 
 namespace {
 

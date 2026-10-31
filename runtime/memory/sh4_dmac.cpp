@@ -4,7 +4,7 @@
 // Holly: o boot do jogo grava SAR2 (origem na RAM) e CHCR2, e dispara por SB_C2DST.
 //
 // N8.7 4b (docs/N8-7-KAMUI.md): so na validacao, como referencia da copia do canal 2 nativa
-// (native/render/kamui/channel_dma), que roda em sombra: recebe as mesmas escritas e, em cada
+// (runtime/kamui/channel_dma), que roda em sombra: recebe as mesmas escritas e, em cada
 // disparo, copia antes do legado para um destino que so registra os blocos. Depois de cada
 // operacao a comparacao confere os registradores do DMAC, os do system block, o resultado e a
 // sequencia de blocos (destino e conteudo).
@@ -14,7 +14,7 @@
 #include "debug/gfx_probe.h"
 #include "cpu/sh4_runtime.h"
 #include "pvr/ta.h"
-#include "render/kamui/channel_dma.h"
+#include "kamui/channel_dma.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -38,7 +38,7 @@ bool chanReg(uint32_t a, uint32_t*& r) {
 bool ch2_transfer(Sh4Context* c, uint32_t dest, uint32_t len);
 
 // a sombra: FNV-1a dos blocos (destino e as 8 palavras), na ordem
-using native::render::kamui::ChannelDma;
+using kamui::ChannelDma;
 ChannelDma  g_shadow;
 uint64_t    g_checks = 0, g_differ = 0, g_blocks = 0;
 std::string g_first;

@@ -1,5 +1,5 @@
 // N8.7 (docs/N8-7-KAMUI.md, incremento 4d): no produto, o render pedido por STARTRENDER (pvr/pvr_render.h) e a passagem
-// nativa (native/render/kamui/render_pass) sobre o estado do quadro (pvr_reg, o FrameState do 3a) e a memoria das
+// nativa (runtime/kamui/render_pass) sobre o estado do quadro (pvr_reg, o FrameState do 3a) e a memoria das
 // texturas (texture_memory/vram_touch, a TextureHeap do 3b): tamanho, fundo, parametros do quadro, Region Array, as
 // listas do Kamui pelo ListSink para a IR, o desenho pela IR (o PvrListRenderer, transitional/render_core) e a gravacao
 // no framebuffer. O rasterizador de referencia (pvr/pvr_render.cpp, com o caminho do TA) fica na validacao.
@@ -9,7 +9,7 @@
 #include "pvr/pvr_regs.h"
 #include "pvr/ta.h"
 #include "pvr/vram.h"
-#include "render/kamui/render_pass.h"
+#include "kamui/render_pass.h"
 #include "render/soft/soft_raster.h"
 #include "system/graphics_ports.h"
 
@@ -21,7 +21,7 @@
 namespace bs {
 namespace {
 
-using native::render::kamui::RenderPass;
+using kamui::RenderPass;
 
 PvrListRenderer* g_renderer = nullptr;
 
@@ -66,7 +66,7 @@ RenderStats render_pass_run(Sh4Context* c) {
         note("Region Array com modo de ordenacao por tile diferente do global");
     std::vector<uint32_t> color(size_t(st.width) * st.height, 0xFF000000 | bg);
     // as listas do Kamui direto para a IR (ListSink); os parametros do quadro vem dos registradores
-    native::render::kamui::ListFrame lf;
+    kamui::ListFrame lf;
     ta_list_sink().build(pvr_frame_params(st.width, st.height), (pvr_reg(0x005F80E4) & 0x1F) * 32, lf);
     st.triangles = lf.triangles, st.sprites = lf.sprites, st.skipped = lf.skipped, st.unsupported = lf.unsupported;
     st.two_volume = lf.two_volume;

@@ -1,5 +1,5 @@
 // N8.7 (docs/N8-7-KAMUI.md, incremento 4b): no produto, o DMAC do SH-4 (memory/sh4_dmac.h) e a copia do canal 2 nativa
-// (native/render/kamui/channel_dma). A origem e lida da memoria guest pelo caminho de sempre e cada bloco vai para a
+// (runtime/kamui/channel_dma). A origem e lida da memoria guest pelo caminho de sempre e cada bloco vai para a
 // entrada da area 4 (pvr/ta.h), na mesma ordem. O fim (ISTNRM bit 19) continua com o system block, no banco de status.
 // O DMAC do legado (memory/sh4_dmac.cpp) fica na validacao como referencia, com os ganchos da sonda grafica
 // (debug/gfx_probe, que so existe na validacao; revisao Codex 20261029-134812).
@@ -8,13 +8,13 @@
 #include "cpu/sh4_mem.h"
 #include "cpu/sh4_runtime.h"
 #include "pvr/ta.h"
-#include "render/kamui/channel_dma.h"
+#include "kamui/channel_dma.h"
 #include "system/graphics_ports.h"
 
 namespace bs {
 namespace {
 
-using native::render::kamui::ChannelDma;
+using kamui::ChannelDma;
 
 ChannelDma g_dma;
 

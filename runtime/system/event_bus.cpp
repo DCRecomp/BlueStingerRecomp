@@ -1,5 +1,5 @@
 // N8.7 (docs/N8-7-KAMUI.md, D-K3 e incremento 4a): no produto, o controlador de interrupcoes do Holly (pvr/holly_intc.h)
-// e o banco minimo de status nativo (native/render/kamui/event_status), alimentado pelos eventos que o provedor de tempo
+// e o banco minimo de status nativo (runtime/kamui/event_status), alimentado pelos eventos que o provedor de tempo
 // entrega nos pontos de sempre (acesso, poll, nivel IRL). O tratador original do Kamui le e limpa o banco como antes. O
 // controlador do legado (pvr/holly_intc.cpp) fica na validacao como referencia.
 #include "pvr/holly_intc.h"
@@ -11,7 +11,7 @@
 #include "debug/intc_trace.h"
 #include "pvr/pvr_regs.h"
 #include "pvr/pvr_video.h"
-#include "render/kamui/event_status.h"
+#include "kamui/event_status.h"
 #include "system/maple_bus.h"
 #include "system/graphics_ports.h"
 
@@ -21,7 +21,7 @@
 namespace bs {
 namespace {
 
-using native::render::kamui::EventStatus;
+using kamui::EventStatus;
 
 EventStatus g_bank;
 uint64_t    g_last     = 0;

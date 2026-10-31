@@ -1,10 +1,10 @@
-// N8.7 (docs/N8-7-KAMUI.md, passo 5b): o system block do Holly que sobra no produto (native/render/kamui/system_block):
+// N8.7 (docs/N8-7-KAMUI.md, passo 5b): o system block do Holly que sobra no produto (runtime/kamui/system_block):
 // revisao, ultimo valor escrito com a primeira leitura, componentes removidos e as partidas pedidas pela escrita.
 #include "test.h"
 
-#include "render/kamui/system_block.h"
+#include "kamui/system_block.h"
 
-using bs::native::render::kamui::SystemBlock;
+using bs::kamui::SystemBlock;
 
 // SB_SBREV e so leitura: 0x0B, nunca a primeira leitura de um registrador sem modelo
 BS_TEST(system_block_revision_is_read_only) {

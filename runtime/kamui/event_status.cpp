@@ -1,6 +1,6 @@
-#include "render/kamui/event_status.h"
+#include "kamui/event_status.h"
 
-namespace bs::native::render::kamui {
+namespace bs::kamui {
 
 void EventStatus::reset() {
     regs_.fill(0);
@@ -40,4 +40,4 @@ uint32_t EventStatus::irl_level() const {
     return 0;
 }
 
-} // namespace bs::native::render::kamui
+} // namespace bs::kamui

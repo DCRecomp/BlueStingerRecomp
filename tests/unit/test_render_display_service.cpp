@@ -1,15 +1,15 @@
-// N8.7 (docs/N8-7-KAMUI.md, incremento 3c): o servico de exibicao nativo (native/render/kamui/display_service): a imagem
+// N8.7 (docs/N8-7-KAMUI.md, incremento 3c): o servico de exibicao nativo (runtime/kamui/display_service): a imagem
 // exibida lida da memoria das texturas pelos registradores de leitura do framebuffer.
 #include "test.h"
 
-#include "render/kamui/display_service.h"
-#include "render/kamui/texture_heap.h"
+#include "kamui/display_service.h"
+#include "kamui/texture_heap.h"
 
 #include <cstring>
 
-using bs::native::render::kamui::DisplayRegs;
-using bs::native::render::kamui::TextureHeap;
-using bs::native::render::kamui::scanout;
+using bs::kamui::DisplayRegs;
+using bs::kamui::TextureHeap;
+using bs::kamui::scanout;
 
 namespace {
 

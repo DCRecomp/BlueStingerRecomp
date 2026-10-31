@@ -1,8 +1,8 @@
-#include "render/kamui/area4_entry.h"
+#include "kamui/area4_entry.h"
 
-#include "render/kamui/texture_heap.h"
+#include "kamui/texture_heap.h"
 
-namespace bs::native::render::kamui {
+namespace bs::kamui {
 
 Area4Entry::Path Area4Entry::route(uint32_t target) {
     const uint32_t p = target & 0x1FFFFFFF;
@@ -21,4 +21,4 @@ void Area4Entry::texture_offsets(uint32_t target, uint32_t out[8]) {
     for (uint32_t i = 0; i < 8; ++i) out[i] = TextureHeap::offset64(off + 4 * i);
 }
 
-} // namespace bs::native::render::kamui
+} // namespace bs::kamui

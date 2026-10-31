@@ -9,7 +9,7 @@
 #include <array>
 #include <cstdint>
 
-namespace bs::native::render::kamui {
+namespace bs::kamui {
 
 // Os efeitos das escritas de comando, na ordem do modelo anterior: start_render, spg_sync, list_init, list_continue,
 // (o valor e guardado), spg_changed, yuv.
@@ -83,4 +83,4 @@ private:
     uint32_t field_lines() const;
 };
 
-} // namespace bs::native::render::kamui
+} // namespace bs::kamui

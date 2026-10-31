@@ -20,7 +20,7 @@ namespace bs {
 namespace {
 
 // ---- N8.7: o decodificador das listas do TA do legado (movido de pvr_render.cpp sem mudanca): a referencia do ListSink
-// nativo (native/render/kamui) e o produtor dos triangulos do rasterizador sobre o TA ----
+// nativo (runtime/kamui) e o produtor dos triangulos do rasterizador sobre o TA ----
 
 void note(const char* what) {
     static std::vector<const char*> seen;

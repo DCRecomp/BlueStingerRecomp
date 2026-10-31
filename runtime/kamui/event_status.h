@@ -9,7 +9,7 @@
 #include <array>
 #include <cstdint>
 
-namespace bs::native::render::kamui {
+namespace bs::kamui {
 
 class EventStatus {
 public:
@@ -49,4 +49,4 @@ private:
     uint64_t                        vblanks_ = 0, fused_ = 0, events_ = 0;
 };
 
-} // namespace bs::native::render::kamui
+} // namespace bs::kamui

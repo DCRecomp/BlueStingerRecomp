@@ -1,10 +1,10 @@
-// N8.7 (docs/N8-7-KAMUI.md, incremento 4c): a entrada da area 4 nativa (native/render/kamui/area4_entry): caminho de
+// N8.7 (docs/N8-7-KAMUI.md, incremento 4c): a entrada da area 4 nativa (runtime/kamui/area4_entry): caminho de
 // cada destino, bits do fim de lista e offsets do caminho de textura.
 #include "test.h"
 
-#include "render/kamui/area4_entry.h"
+#include "kamui/area4_entry.h"
 
-using bs::native::render::kamui::Area4Entry;
+using bs::kamui::Area4Entry;
 
 // area 4 em qualquer espelho; os bits 23-24 escolhem o caminho; fora da area 4, recusado
 BS_TEST(area4_entry_routes_by_region) {

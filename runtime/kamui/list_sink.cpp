@@ -1,4 +1,4 @@
-#include "render/kamui/list_sink.h"
+#include "kamui/list_sink.h"
 
 #include "render/soft/soft_device.h"
 
@@ -6,7 +6,7 @@
 #include <cstring>
 #include <utility>
 
-namespace bs::native::render::kamui {
+namespace bs::kamui {
 namespace {
 
 // PCW bits 31-29
@@ -442,4 +442,4 @@ bool texture_supported(uint32_t tcw) {
     return fmt <= 2 || fmt == 5 || fmt == 6;
 }
 
-} // namespace bs::native::render::kamui
+} // namespace bs::kamui

@@ -1,14 +1,14 @@
-// N8.7 (docs/N8-7-KAMUI.md): o ListSink nativo (native/render/kamui), sem o jogo e sem o hardware simulado: os blocos
+// N8.7 (docs/N8-7-KAMUI.md): o ListSink nativo (runtime/kamui), sem o jogo e sem o hardware simulado: os blocos
 // de 32 bytes da FIFO de poligonos, a juncao dos parametros de 64 bytes, o fim de lista e a IR decodificada.
 #include "test.h"
 
-#include "render/kamui/list_sink.h"
+#include "kamui/list_sink.h"
 
 #include <cstring>
 
 using namespace bs::native::render;
-using kamui::ListFrame;
-using kamui::ListSink;
+using bs::kamui::ListFrame;
+using bs::kamui::ListSink;
 
 namespace {
 
@@ -52,7 +52,7 @@ BS_TEST(kamui_list_sink_strip_is_one_draw_and_list_end_reports_the_list) {
     vertex(s, 0, 10, 0xFF0000FF, false);
     vertex(s, 10, 10, 0xFFFFFFFF, true);
     uint32_t end[8] = {pcw(0, 0, 0)};
-    const kamui::BlockResult r = s.feed(end);
+    const bs::kamui::BlockResult r = s.feed(end);
     BS_CHECK(r.list_end == 0 && !r.invalid);
     BS_CHECK(s.bytes() == 6 * 32 && s.params().size() == 6);
     ListFrame f;

@@ -1,12 +1,12 @@
-// N8.7 (docs/N8-7-KAMUI.md, D-K2 e incremento 3b): a memoria das texturas nativa (native/render/kamui/texture_heap):
+// N8.7 (docs/N8-7-KAMUI.md, D-K2 e incremento 3b): a memoria das texturas nativa (runtime/kamui/texture_heap):
 // as duas vistas (32 e 64 bits) sobre os mesmos bytes, escritas parciais e a geracao por pagina que o cache usa.
 #include "test.h"
 
-#include "render/kamui/texture_heap.h"
+#include "kamui/texture_heap.h"
 
 #include <cstring>
 
-using bs::native::render::kamui::TextureHeap;
+using bs::kamui::TextureHeap;
 
 BS_TEST(texture_heap_64_bit_path_interleaves_words_between_banks) {
     TextureHeap h;

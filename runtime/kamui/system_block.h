@@ -13,7 +13,7 @@
 #include <array>
 #include <cstdint>
 
-namespace bs::native::render::kamui {
+namespace bs::kamui {
 
 class SystemBlock {
 public:
@@ -48,4 +48,4 @@ private:
     std::array<bool, kSize / 4>     reported_{};
 };
 
-} // namespace bs::native::render::kamui
+} // namespace bs::kamui

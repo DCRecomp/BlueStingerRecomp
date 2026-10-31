@@ -9,7 +9,7 @@
 // real (DMA em andamento, Maple) aparece aqui antes de virar divergencia.
 //
 // N8.7 (docs/N8-7-KAMUI.md, passo 5b): so a validacao. E a referencia do system block nativo
-// (native/render/kamui/system_block, servido no produto por system/system_block_bus), que roda em sombra em cada acesso
+// (runtime/kamui/system_block, servido no produto por system/system_block_bus), que roda em sombra em cada acesso
 // ("[system-block]"): a decisao de componente removido, a faixa, o valor lido (com a marca da primeira leitura), o valor
 // guardado e a partida pedida pela escrita.
 #include "pvr/holly_sb.h"
@@ -18,7 +18,7 @@
 #include "system/maple_bus.h"
 #include "memory/sh4_dmac.h"
 #include "pvr/holly_intc.h"
-#include "render/kamui/system_block.h"
+#include "kamui/system_block.h"
 
 #include <array>
 #include <cstdio>
@@ -42,7 +42,7 @@ bool                            g_c2dstWritten = false;  // BS_SB_MUTACAO=c2dst_
 uint32_t canon(uint32_t a) { return a < 0xE0000000 ? (a & 0x1FFFFFFF) : 0; }
 
 // ---- N8.7 5b: o system block nativo em sombra ----
-using native::render::kamui::SystemBlock;
+using kamui::SystemBlock;
 SystemBlock g_shadow;
 uint64_t    g_cmpReads = 0, g_cmpWrites = 0, g_cmpCh2 = 0, g_cmpG2 = 0, g_cmpDiffer = 0;
 std::string g_cmpFirst;

@@ -258,9 +258,9 @@ private:
     std::array<uint64_t, 6>                 at_begin_{};  // N8.7: as estatisticas no inicio do render (check_list_sink)
     Renderer&                               r_;
 
-    // N8.7: o ListSink (native/render/kamui) decodifica as mesmas listas direto para a IR; tem de dar exatamente esta
+    // N8.7: o ListSink (runtime/kamui) decodifica as mesmas listas direto para a IR; tem de dar exatamente esta
     void check_list_sink(std::span<const PvrTri> drawn) {
-        namespace km = bs::native::render::kamui;
+        namespace km = bs::kamui;
         km::ListFrame lf;
         ta_list_sink().build(r_.frame.cl.frame, stride_, lf);
         // negativos (BS_LISTA_NATIVA_MUTACAO=<campo>): o comparador tem de acusar cada um. vertice: o primeiro vertice

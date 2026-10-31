@@ -14,7 +14,9 @@
 #include <cstdint>
 #include <vector>
 
-namespace bs::native::render::kamui {
+namespace bs::kamui {
+
+using namespace native::render;  // a IR e o rasterizador nativos (native/render), que o contrato do Kamui alimenta
 
 struct RenderPass {
     static constexpr uint32_t kMemSize = 8u << 20;
@@ -43,4 +45,4 @@ struct RenderPass {
                            Touch touch);
 };
 
-} // namespace bs::native::render::kamui
+} // namespace bs::kamui

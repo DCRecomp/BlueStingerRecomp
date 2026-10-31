@@ -68,16 +68,8 @@ add_library(bs_native_render STATIC render/texture_convert.cpp render/render_ir.
             render/frame_prep.cpp           # N7b: o que o rasterizador decide por triangulo, para a GPU
             render/post_shader.cpp          # N7c: pacotes e validacao dos shaders de pos-processamento
             render/soft/soft_raster.cpp     # N8.7: rasterizador de referencia em software (o recuo do Vulkan)
-            render/soft/soft_device.cpp     # N8.7: o renderizador em software sobre a IR
-            render/kamui/list_sink.cpp      # N8.7: as listas do Kamui direto para a IR (docs/N8-7-KAMUI.md)
-            render/kamui/frame_state.cpp    # N8.7 3a: o estado do quadro (registradores graficos)
-            render/kamui/texture_heap.cpp   # N8.7 3b: a memoria das texturas (D-K2)
-            render/kamui/display_service.cpp  # N8.7 3c: a imagem exibida (leitura do framebuffer)
-            render/kamui/event_status.cpp   # N8.7 4a: o banco minimo de status de interrupcao (D-K3)
-            render/kamui/channel_dma.cpp    # N8.7 4b: a copia do canal 2
-            render/kamui/area4_entry.cpp    # N8.7 4c: a entrada da area 4
-            render/kamui/render_pass.cpp    # N8.7 4d: o que o render le e grava fora das listas
-            render/kamui/system_block.cpp)  # N8.7 5b: o system block do Holly que sobra no produto
+            render/soft/soft_device.cpp)    # N8.7: o renderizador em software sobre a IR
+# (N8.8: o contrato do Kamui com os enderecos do guest saiu daqui para runtime/kamui, a biblioteca bs_kamui)
 target_link_libraries(bs_native_render PUBLIC bs_native_api PRIVATE tomlplusplus::tomlplusplus)
 
 # N7b: backend Vulkan (offscreen; o Vulkan e carregado em tempo de execucao, sem SDK; cabecalhos Khronos em

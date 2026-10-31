@@ -1,15 +1,15 @@
-// N8.7 (docs/N8-7-KAMUI.md, incremento 3a): o estado do quadro nativo (native/render/kamui/frame_state), sem o jogo e
+// N8.7 (docs/N8-7-KAMUI.md, incremento 3a): o estado do quadro nativo (runtime/kamui/frame_state), sem o jogo e
 // sem o banco de hardware: valores lidos, comandos que nao guardam o valor, ponteiros do TA no TA_LIST_INIT, ordem dos
 // efeitos, paleta e temporizacao do video.
 #include "test.h"
 
-#include "render/kamui/frame_state.h"
+#include "kamui/frame_state.h"
 
 #include <string>
 #include <vector>
 
-using bs::native::render::kamui::FrameEffects;
-using bs::native::render::kamui::FrameState;
+using bs::kamui::FrameEffects;
+using bs::kamui::FrameState;
 
 namespace {
 

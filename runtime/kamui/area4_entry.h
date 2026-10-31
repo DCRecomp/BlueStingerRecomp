@@ -9,7 +9,7 @@
 // explicito).
 #include <cstdint>
 
-namespace bs::native::render::kamui {
+namespace bs::kamui {
 
 struct Area4Entry {
     enum class Path { Outside, Polygon, Yuv, Texture };
@@ -24,4 +24,4 @@ struct Area4Entry {
     static void texture_offsets(uint32_t target, uint32_t out[8]);
 };
 
-} // namespace bs::native::render::kamui
+} // namespace bs::kamui

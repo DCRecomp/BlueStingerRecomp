@@ -75,7 +75,7 @@ add_executable(bs_render_tests unit/main.cpp unit/test_render_native.cpp unit/te
                unit/test_render_channel_dma.cpp unit/test_render_area4_entry.cpp
                unit/test_render_pass.cpp unit/test_render_system_block.cpp)
 target_include_directories(bs_render_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/unit)
-target_link_libraries(bs_render_tests PRIVATE bs_native_render bs_native_render_vk)
+target_link_libraries(bs_render_tests PRIVATE bs_native_render bs_native_render_vk bs_kamui)
 add_test(NAME render COMMAND bs_render_tests)
 add_test(NAME unit COMMAND bs_unit_tests)
 if(BS_VALIDACAO)

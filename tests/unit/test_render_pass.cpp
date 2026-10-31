@@ -1,15 +1,15 @@
-// N8.7 (docs/N8-7-KAMUI.md, incremento 4d): a passagem de render nativa (native/render/kamui/render_pass): tamanho,
+// N8.7 (docs/N8-7-KAMUI.md, incremento 4d): a passagem de render nativa (runtime/kamui/render_pass): tamanho,
 // fundo pela memoria de parametros, Region Array tipo 2 e a gravacao no framebuffer (formato, clip, faixas marcadas).
 #include "test.h"
 
-#include "render/kamui/render_pass.h"
+#include "kamui/render_pass.h"
 
 #include <cstring>
 #include <map>
 #include <utility>
 #include <vector>
 
-using bs::native::render::kamui::RenderPass;
+using bs::kamui::RenderPass;
 
 namespace {
 

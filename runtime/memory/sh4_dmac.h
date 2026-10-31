@@ -2,7 +2,7 @@
 // DMAC do SH-4 (canais 0-3, DMAOR). M4: o canal 2, que o Holly usa para enviar listas
 // e texturas ao TA (disparado por SB_C2DST).
 // N8.7 4b (docs/N8-7-KAMUI.md): no produto, a copia do canal 2 nativa (system/dma_bus, sobre
-// native/render/kamui/channel_dma); o DMAC do legado (sh4_dmac.cpp) so na validacao, como referencia.
+// runtime/kamui/channel_dma); o DMAC do legado (sh4_dmac.cpp) so na validacao, como referencia.
 #include "cpu/sh4_context.h"
 
 #include <string>

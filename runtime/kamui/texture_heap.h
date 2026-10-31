@@ -7,7 +7,7 @@
 #include <cstdint>
 #include <vector>
 
-namespace bs::native::render::kamui {
+namespace bs::kamui {
 
 class TextureHeap {
 public:
@@ -41,4 +41,4 @@ private:
     uint64_t              clock_ = 0;
 };
 
-} // namespace bs::native::render::kamui
+} // namespace bs::kamui

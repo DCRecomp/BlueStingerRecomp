@@ -1,5 +1,5 @@
 // N8.7 (docs/N8-7-KAMUI.md, incremento 4c): no produto, a entrada da area 4 (pvr/ta.h) e a nativa
-// (native/render/kamui/area4_entry): o caminho de cada bloco das store queues e da copia do canal 2, as listas do Kamui
+// (runtime/kamui/area4_entry): o caminho de cada bloco das store queues e da copia do canal 2, as listas do Kamui
 // para o ListSink (o fim de lista acende ISTNRM no banco de status, no mesmo bloco), o caminho de textura na memoria das
 // texturas (texture_memory/vram_touch, a TextureHeap do 3b) e o erro explicito do conversor YUV removido (N8.5). O TA
 // do legado (pvr/ta.cpp, com a FIFO de poligonos de referencia) fica na validacao.
@@ -8,7 +8,7 @@
 #include "cpu/sh4_runtime.h"
 #include "pvr/holly_intc.h"
 #include "pvr/vram.h"
-#include "render/kamui/area4_entry.h"
+#include "kamui/area4_entry.h"
 #include "system/graphics_ports.h"
 
 #include <cstdio>
@@ -17,9 +17,9 @@
 namespace bs {
 namespace {
 
-using native::render::kamui::Area4Entry;
+using kamui::Area4Entry;
 
-native::render::kamui::ListSink g_list;  // as listas do Kamui, decodificadas direto para a IR
+kamui::ListSink g_list;  // as listas do Kamui, decodificadas direto para a IR
 
 } // namespace
 
@@ -30,14 +30,14 @@ void ta_list_continue() { g_list.list_continue(); }
 uint32_t                         ta_bytes() { return g_list.bytes(); }
 const std::vector<TaParam>&      ta_params() { return g_list.params(); }
 uint64_t                         ta_list_end_mismatches() { return 0; }  // a comparacao com a FIFO do legado: validacao
-native::render::kamui::ListSink& ta_list_sink() { return g_list; }
+kamui::ListSink& ta_list_sink() { return g_list; }
 std::string                      ta_area4_summary() { return {}; }
 
 bool area4_write(Sh4Context* c, uint32_t target, const uint32_t* data) {
     switch (Area4Entry::route(target)) {
     case Area4Entry::Path::Outside: return false;
     case Area4Entry::Path::Polygon: {
-        const native::render::kamui::BlockResult r = g_list.feed(data);
+        const kamui::BlockResult r = g_list.feed(data);
         if (r.invalid) sh4_fatal(c, "parametro do TA com tipo invalido", c->pc, data[0]);
         if (r.list_end >= 0) event_status_raise(Area4Entry::list_end_bit(r.list_end));
         return true;

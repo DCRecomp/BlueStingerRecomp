@@ -1,5 +1,5 @@
 // N8.7 (docs/N8-7-KAMUI.md, passo 5b): no produto, o system block do Holly (pvr/holly_sb.h) e o bloco nativo
-// (native/render/kamui/system_block) depois do barramento sem dispositivos do N8.4 (o Maple, system/maple_bus): a
+// (runtime/kamui/system_block) depois do barramento sem dispositivos do N8.4 (o Maple, system/maple_bus): a
 // revisao do barramento, o ultimo valor escrito (SB_FFST e a configuracao dos DMAs), os componentes removidos (drive de
 // GD-ROM e DMA do G1 no N8.3, DMA do G2 no N8.6) como erro explicito e a partida da copia do canal 2 (4b), que acende
 // o fim do DMA do PVR (ISTNRM bit 19) no banco de status (4a). O modelo do legado (pvr/holly_sb.cpp) fica na validacao.
@@ -8,7 +8,7 @@
 #include "cpu/sh4_runtime.h"
 #include "memory/sh4_dmac.h"
 #include "pvr/holly_intc.h"
-#include "render/kamui/system_block.h"
+#include "kamui/system_block.h"
 #include "system/maple_bus.h"
 #include "system/graphics_ports.h"
 
@@ -19,7 +19,7 @@
 namespace bs {
 namespace {
 
-using native::render::kamui::SystemBlock;
+using kamui::SystemBlock;
 
 constexpr uint32_t kIstPvrDma = 1u << 19;
 

@@ -2,7 +2,7 @@
 // Tile Accelerator (TA) do PowerVR2: recebe as listas de exibicao (parametros de
 // 32/64 bytes) pela FIFO na area 4, separa por lista e sinaliza o fim de cada lista.
 #include "cpu/sh4_context.h"
-#include "render/kamui/list_sink.h"
+#include "kamui/list_sink.h"
 
 #include <string>
 #include <vector>
@@ -11,7 +11,7 @@ namespace bs {
 
 // Um parametro do TA (palavra de controle + dados), 8 ou 16 palavras, e a lista (0 opaca, 1 modificador opaco,
 // 2 translucida, 3 modificador transl., 4 punch-through). N8.7: o tipo do ListSink nativo.
-using TaParam = native::render::kamui::ListParam;
+using TaParam = kamui::ListParam;
 
 void                         ta_reset();
 void                         ta_list_init();      // TA_LIST_INIT: comeca listas novas
@@ -19,7 +19,7 @@ void                         ta_list_continue();  // TA_LIST_CONT: continua as l
 const std::vector<TaParam>&  ta_params();         // parametros recebidos desde o ultimo init
 uint32_t                     ta_bytes();          // bytes recebidos pela FIFO desde o ultimo init
 // N8.7 (docs/N8-7-KAMUI.md): o destino nativo das mesmas listas (recebe cada bloco da FIFO de poligonos)
-native::render::kamui::ListSink& ta_list_sink();
+kamui::ListSink& ta_list_sink();
 // N8.7, validacao: fins de lista em que o ListSink e a FIFO do legado (a referencia) discordaram (tem de ficar em 0)
 uint64_t ta_list_end_mismatches();
 // N8.7 4c, so a validacao: a entrada da area 4 nativa em sombra no TA do legado ("[area-4] ...\n"); vazio no produto
