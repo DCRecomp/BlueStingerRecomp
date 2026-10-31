@@ -152,7 +152,11 @@ Check "saida longa demais recusada" ($r.Code -eq 1 -and $r.Out -match "longo dem
 # 8. falha de compilacao (kit com erro de sintaxe): nada de sucesso, instalada intacta
 $bad = Join-Path $Work "kit quebrado"
 Copy-Item -Recurse -LiteralPath (Join-Path $app "kit") -Destination $bad
-Add-Content -LiteralPath (Join-Path $bad "runtime\pvr\pvr_video.cpp") -Value "`nesta linha nao compila;`n"
+# o erro vai num arquivo que o produto compila: desde o N8.7 3c o pvr_video.cpp e so da validacao, e o Builder (produto)
+# nao o compila mais (o caso passava a reinstalar com sucesso e derrubava os casos 9 e 10)
+$broken = Join-Path $bad "runtime\system\graphics_bus.cpp"
+if (-not (Test-Path -LiteralPath $broken)) { Write-Host "ERRO: $broken ausente do kit"; exit 2 }
+Add-Content -LiteralPath $broken -Value "`nesta linha nao compila;`n"
 $r = Run $cli @("--disc", $cdi, "--out", $out1, "--kit", $bad)
 Check "falha de compilacao: erro, instalada intacta" ($r.Code -eq 1 -and $r.Out -match 'falhou em "compilando"' -and (Hash $exe1) -eq $installed -and (NoStage $out1)) (FailLine $r)
 
