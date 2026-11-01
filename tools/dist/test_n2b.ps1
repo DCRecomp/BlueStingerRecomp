@@ -263,14 +263,24 @@ foreach ($v in "quadro", "agendado") {
     $tn = Run "tmu_$v" "nativo" $VBlanksNeg @{ BS_TMU_DIAG = $v }
     Write-Host "[info] B11 TMU parado ($v) com o audio nativo: $(if (B11 $negRef $tn) { 'iguais' } else { 'difere (pendencia D7 do N8.1)' })"
 }
-# B9: desempenho (trabalho medio por campo, 3 alternadas); negativo com "lento"
-function Work($r) { $m = [regex]::Match($r.Out, "media ([\d.]+) ms"); if ($m.Success) { [double]$m.Groups[1].Value } else { 1e9 } }
-$wl = @(); $wn = @()
-for ($i = 0; $i -lt 3; ++$i) { $wl += Work (Run "perf_l$i" "legado" $VBlanksNeg); $wn += Work (Run "perf_n$i" "nativo" $VBlanksNeg) }
+# B9: desempenho (trabalho medio por campo); legado, sombra e sombra com "lento" alternados em 5 rodadas.
+# Negativo pareado (decisao do mantenedor, 2026-11-01): a mesma execucao varia ~+-12% entre rodadas (23,5 a 29,3 ms,
+# n8-8\b9_isolado), mais que o efeito da mutacao (2 ms por VBlank, ~7%); uma execucao avulsa contra o limite de 5% nao
+# decide. Cada "lento" e comparado com a sombra da mesma rodada: tem de ser mais lento em todas as rodadas e a diferenca
+# media tem de passar do piso (metade dos 2 ms injetados). O positivo (sombra <= legado x 1,05) nao muda.
+function Work($r) { $m = [regex]::Match($r.Out, "trabalho por campo: media ([\d.]+) ms"); if ($m.Success -and $r.Code -is [int] -and $r.Code -eq 0) { [double]$m.Groups[1].Value } else { [double]::NaN } }  # NaN: toda comparacao reprova
+$wl = @(); $wn = @(); $ws = @()
+for ($i = 0; $i -lt 5; ++$i) {
+    $wl += Work (Run "perf_l$i" "legado" $VBlanksNeg); $wn += Work (Run "perf_n$i" "nativo" $VBlanksNeg)
+    $ws += Work (Run "perf_lento$i" "nativo" $VBlanksNeg @{ BS_TEMPO_MUTACAO = "lento" })
+}
 $ml = ($wl | Measure-Object -Average).Average; $mn = ($wn | Measure-Object -Average).Average
 Check "B9 desempenho: sombra <= legado x 1,05" ($mn -le $ml * 1.05) ("legado {0:N2} ms, sombra {1:N2} ms" -f $ml, $mn)
-$slow = Work (Run "perf_lento" "nativo" $VBlanksNeg @{ BS_TEMPO_MUTACAO = "lento" })
-Check "negativo: lentidao (B9) detectada" ($slow -gt $ml * 1.05) ("lento {0:N2} ms" -f $slow)
+$difs = @(for ($i = 0; $i -lt 5; ++$i) { $ws[$i] - $wn[$i] })
+$todas = @($difs | Where-Object { $_ -gt 0 }).Count -eq $difs.Count
+$md = ($difs | Measure-Object -Average).Average
+Check "negativo: lentidao (B9) detectada, pareada por rodada (todas mais lentas, media >= 1 ms)" ($todas -and $md -ge 1.0) `
+    ("lento - sombra por rodada: {0}; media {1:N2} ms" -f (($difs | ForEach-Object { "{0:N2}" -f $_ }) -join " "), $md)
 
 # S4: chamadas da thread 3 por VBlank (build com mods: o rastreio envolve a passada pelos slots)
 if (Test-Path -LiteralPath $ExeMods) {
