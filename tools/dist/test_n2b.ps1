@@ -226,7 +226,18 @@ function Neg($nome, $envs, $kinds, [scriptblock]$extra = $null) {
 Neg "vblank extra na ordem logica (B1)" @{ BS_TEMPO_MUTACAO = "vblank_extra" } @("TN")
 Neg "irq ausente (B2)" @{ BS_TEMPO_MUTACAO = "perder_vblank_in" } @("IRQF")
 Neg "irq extra (B2)" @{ BS_TEMPO_MUTACAO = "vblank_extra" } @("IRQF")
-Neg "leitura corrompida (B3)" @{ BS_ARQUIVOS_MUTACAO = "corromper_bloco" } @("CL")
+# B3 (decisao do mantenedor, 2026-10-31): com o bloco corrompido, o jogo segue um caminho de erro que le os registradores
+# do GD-ROM (PC 8C1896A4); desde o N8.3 isso e um componente removido e a execucao termina com o erro explicito. So este
+# negativo aceita esse fim, e so com as tres provas juntas: a diferenca nas leituras de arquivo (os dois artefatos
+# presentes e diferentes), a mensagem exata do componente removido e o codigo 1 do erro explicito (tempo-limite, crash ou
+# abort tem outro codigo). Os demais negativos continuam exigindo rc 0
+$b3   = Run "neg_leitura corrompida (B3)" "nativo" $VBlanksNeg @{ BS_ARQUIVOS_MUTACAO = "corromper_bloco" }
+$b3Cl = Differ (Art $negRef "CL") (Art $b3 "CL")
+$b3Msg = "erro: leitura de 1 bytes em 005F7000 (registradores do GD-ROM): componente removido do produto no N8.3 (sem " +
+         "drive de GD-ROM nem DMA do G1; os dados vem das syscalls) em PC=8C1896A4 (valor 00000000)"
+$b3Fim = @($b3.Out -split "\r?\n" | Where-Object { $_ -ceq $b3Msg }).Count -eq 1
+Check "negativo: leitura corrompida (B3) detectado em CL, com o fim explicito do GD-ROM removido" `
+    ($b3.Code -is [int] -and $b3.Code -eq 1 -and $b3Cl -and $b3Fim) "rc=$($b3.Code); CL difere: $b3Cl; mensagem exata: $b3Fim"
 Neg "relogio em degraus (B3b)" @{ BS_TEMPO_MUTACAO = "relogio_degraus" } @("CK")
 # fusao provocada: a ordem por campo muda e o contador (Holly ou colapso no adaptador) acusa
 Neg "vblank fundido (B4)" @{ BS_TEMPO_MUTACAO = "fundir_vblank" } @("IRQF") {
