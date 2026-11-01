@@ -9,6 +9,7 @@
 #include "render/vulkan/vk_internal.h"
 #include "render/vulkan/spirv/present_frag.h"
 #include "render/vulkan/spirv/present_vert.h"
+#include "platform/stall_trace.h"
 
 #include <chrono>
 #include <cstdio>
@@ -18,6 +19,8 @@
 
 namespace bs::native::render {
 namespace {
+
+namespace dg = bs::native::diag;  // BS_TRAVAS (N8.8, H9): desligado, so a leitura de um bool
 
 struct QuadPush {  // o layout de `Quad` em present.vert/present.frag
     float    dst[4];
@@ -77,12 +80,16 @@ public:
 
     Result<void> present(const PresentRequest& r) override {
         const auto t0 = std::chrono::steady_clock::now();
+        dg::name_thread("janela");
         if (!surface_) return Error::NotFound;
         // o quadro anterior terminou: o slot que ele usava volta para o renderizador
         double waited = 0;
         {
-            const auto tw = std::chrono::steady_clock::now();
-            if (VkResult w = f_.vkWaitForFences(b_.dev_, 1, &fence_, VK_TRUE, UINT64_MAX); w != VK_SUCCESS) return fail("cerca", w);
+            const auto     tw = std::chrono::steady_clock::now();
+            const uint64_t tf = dg::start();
+            const VkResult w  = f_.vkWaitForFences(b_.dev_, 1, &fence_, VK_TRUE, UINT64_MAX);
+            dg::finish(dg::Stall::PresentFence, tf);
+            if (w != VK_SUCCESS) return fail("cerca", w);
             waited += ms(tw);
         }
         releasePinned();
@@ -90,8 +97,10 @@ public:
         if (!swap_ || r.out_w != sw_ || r.out_h != sh_ || r.vsync != vsync_ || recreate_)
             if (!createSwapchain(r.out_w, r.out_h, r.vsync)) return fail("swapchain", VK_SUCCESS);
         uint32_t   idx = 0;
-        const auto ta  = std::chrono::steady_clock::now();
-        VkResult   ar  = f_.vkAcquireNextImageKHR(b_.dev_, swap_, UINT64_MAX, imgAvail_, VK_NULL_HANDLE, &idx);
+        const auto     ta  = std::chrono::steady_clock::now();
+        const uint64_t tq  = dg::start();
+        VkResult       ar  = f_.vkAcquireNextImageKHR(b_.dev_, swap_, UINT64_MAX, imgAvail_, VK_NULL_HANDLE, &idx);
+        dg::finish(dg::Stall::PresentAcquire, tq);
         waited += ms(ta);
         if (ar == VK_ERROR_OUT_OF_DATE_KHR) {  // a janela mudou: refaz no proximo quadro
             recreate_ = true;
@@ -208,18 +217,30 @@ public:
         pi.waitSemaphoreCount = 1, pi.pWaitSemaphores = &done_[idx], pi.swapchainCount = 1, pi.pSwapchains = &swap_;
         pi.pImageIndices = &idx;
         VkResult pr = VK_SUCCESS;
+        // dentro da trava so os instantes (mark); o registro (between) depois de solta-la (revisao Codex 2026-11-01)
+        const uint64_t s0 = dg::start();
+        uint64_t       s1 = 0, s2 = 0, s3 = 0;
         {
             std::lock_guard<std::mutex> lock(b_.presentLock());
+            s1 = dg::mark(s0);
             f_.vkResetFences(b_.dev_, 1, &fence_);  // logo antes do envio (uma falha dele refaz a cerca: resync)
+            s2 = dg::mark(s0);
             pr = f_.vkQueueSubmit(b_.presentQueue_, 1, &si, fence_);
+            s3 = dg::mark(s0);
         }
+        dg::between(dg::Stall::PresentLock, s0, s1), dg::between(dg::Stall::PresentSubmit, s2, s3);
         if (pr != VK_SUCCESS) return pr == VK_ERROR_DEVICE_LOST ? fail("vkQueueSubmit", pr) : resync("vkQueueSubmit");
+        const uint64_t p0 = dg::start();
+        uint64_t       p1 = 0, p2 = 0;
         {
             std::lock_guard<std::mutex> lock(b_.presentLock());
+            p1            = dg::mark(p0);
             const auto tp = std::chrono::steady_clock::now();
             pr = f_.vkQueuePresentKHR(b_.presentQueue_, &pi);  // com V-Sync pode esperar o monitor
+            p2 = dg::mark(p0);
             waited += ms(tp);
         }
+        dg::between(dg::Stall::PresentLock, p0, p1), dg::between(dg::Stall::PresentCall, p1, p2);
         if (pr == VK_ERROR_OUT_OF_DATE_KHR || pr == VK_SUBOPTIMAL_KHR) recreate_ = true;
         else if (pr != VK_SUCCESS) return fail("vkQueuePresentKHR", pr);
         if (capture) {

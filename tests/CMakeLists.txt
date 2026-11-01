@@ -60,6 +60,12 @@ target_include_directories(bs_audio_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/un
 target_link_libraries(bs_audio_tests PRIVATE bs_native_audio_core)
 add_test(NAME audio COMMAND bs_audio_tests)
 
+# N8.8: diagnostico BS_TRAVAS (configuracao e caminho desligado)
+add_executable(bs_diag_tests unit/main.cpp unit/test_stall_trace.cpp)
+target_include_directories(bs_diag_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/unit)
+target_link_libraries(bs_diag_tests PRIVATE bs_native)
+add_test(NAME diag COMMAND bs_diag_tests)
+
 # Localizacao: contratos (idiomas, pacotes de mods, textos, legendas novas, layout), so com dados sinteticos
 add_executable(bs_localization_tests unit/main.cpp unit/test_localization.cpp)
 target_include_directories(bs_localization_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/unit)

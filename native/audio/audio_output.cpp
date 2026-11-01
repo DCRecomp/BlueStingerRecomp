@@ -2,6 +2,7 @@
 // de blocos proprios (o XAudio2 le da memoria de quem enviou ate o fim do bloco); nula para o headless.
 #include "audio/audio.h"
 #include "core/com_scope.h"
+#include "platform/stall_trace.h"
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -110,6 +111,18 @@ public:
         if (!voice_ || lost_) return ++stats_.writeErrors, Error::Io;
         if (pcm.empty()) return {};
         reclaim();
+        // BS_TRAVAS (N8.8, H9): intervalo entre blocos produzidos e a fila antes do bloco novo (ms x 10). Desligado, so a
+        // leitura de um bool
+        namespace dg = bs::native::diag;
+        const bool tr     = dg::enabled();  // uma consulta; desligado, nenhuma conta nem relogio (revisao Codex 2026-11-01)
+        int64_t    fila10 = 0;
+        if (tr) {
+            fila10            = rate_ ? int64_t(queuedFrames_ * 10000 / rate_) : 0;
+            const uint64_t tw = dg::now_ns();
+            if (lastWriteNs_) dg::span(dg::Stall::AudioWriteGap, lastWriteNs_, tw - lastWriteNs_, fila10);
+            lastWriteNs_ = tw;
+            if (primed_ && !paused_ && fila10 < 200) dg::event(dg::Stall::AudioLowQueue, fila10);
+        }
         // fila do XAudio2 no limite (o jogo recupera campos atrasados de uma vez): descarta o bloco, o dispositivo segue.
         // O teto e o latency_ms do contrato, contando o bloco novo (e a reserva, se for entrar): a fila nunca passa dele
         // (revisao Codex 2026-10-21; antes, 4x)
@@ -117,10 +130,14 @@ public:
         if (follow_ && (blocks_.size() >= XAUDIO2_MAX_QUEUED_BUFFERS - 2 ||
                         queuedFrames_ + novo > uint64_t(rate_) * latencyMs_ / 1000)) {
             ++stats_.dropped;
+            if (tr) dg::event(dg::Stall::AudioDrop, fila10);
             return {};
         }
         // fila vazia depois do primeiro bloco (fora de pausa e de descarte): o dispositivo ficou sem dados
-        if (primed_ && blocks_.empty() && !paused_) ++stats_.underruns;
+        if (primed_ && blocks_.empty() && !paused_) {
+            ++stats_.underruns;
+            if (tr) dg::event(dg::Stall::AudioUnderrun, fila10);
+        }
         // audio do jogo: com a fila vazia, a reserva de silencio antes do bloco (a folga para os campos atrasados)
         if (follow_ && blocks_.empty()) {
             blocks_.emplace_back(size_t(uint64_t(rate_) * kCushionMs / 1000) * channels_, int16_t(0));
@@ -135,6 +152,7 @@ public:
             }
             queuedFrames_ += blocks_.back().size() / channels_;
             ++stats_.cushions;
+            if (tr) dg::event(dg::Stall::AudioCushion, fila10);
         }
         blocks_.emplace_back(pcm.begin(), pcm.end());
         XAUDIO2_BUFFER b{};
@@ -260,6 +278,7 @@ private:
     mutable uint64_t                 lastPlayed_ = 0;
     std::wstring                     deviceId_;
     uint64_t                         lastCheck_ = 0;
+    uint64_t                         lastWriteNs_ = 0;  // BS_TRAVAS: instante do bloco anterior (0 = desligado)
     Stats                            stats_;
     std::atomic<bool>                lost_{false};
 };

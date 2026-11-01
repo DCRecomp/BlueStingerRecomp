@@ -18,6 +18,7 @@
 #include "render/vulkan/spirv/downsample_comp.h"
 
 #include "render/vulkan/vk_internal.h"
+#include "platform/stall_trace.h"
 
 #ifdef _WIN32
 #  define WIN32_LEAN_AND_MEAN
@@ -337,11 +338,16 @@ public:
             VkSubmitInfo si{VK_STRUCTURE_TYPE_SUBMIT_INFO};
             si.commandBufferCount = 1, si.pCommandBuffers = &cmd_;
             f_.vkResetFences(dev_, 1, &fence_);
+            const uint64_t trb = bs::native::diag::start();  // BS_TRAVAS (N8.8, H9): trava + envio + cerca
+            uint64_t       trl = 0;
             {
                 std::lock_guard<std::mutex> lock(queueMutex_);
+                trl = bs::native::diag::mark(trb);  // so o instante dentro da trava
                 ok = f_.vkQueueSubmit(queue_, 1, &si, fence_) == VK_SUCCESS;
             }
+            bs::native::diag::between(bs::native::diag::Stall::GameQueueLock, trb, trl);
             ok = ok && f_.vkWaitForFences(dev_, 1, &fence_, VK_TRUE, UINT64_MAX) == VK_SUCCESS;
+            bs::native::diag::finish(bs::native::diag::Stall::GameReadback, trb);
         }
         if (ok) {
             const uint8_t* p = static_cast<const uint8_t*>(buf.map);
@@ -444,11 +450,16 @@ public:
             VkSubmitInfo si{VK_STRUCTURE_TYPE_SUBMIT_INFO};
             si.commandBufferCount = 1, si.pCommandBuffers = &cmd_;
             f_.vkResetFences(dev_, 1, &fence_);
+            const uint64_t trb = bs::native::diag::start();  // BS_TRAVAS (N8.8, H9): trava + envio + cerca
+            uint64_t       trl = 0;
             {
                 std::lock_guard<std::mutex> lock(queueMutex_);
+                trl = bs::native::diag::mark(trb);  // so o instante dentro da trava
                 ok = f_.vkQueueSubmit(queue_, 1, &si, fence_) == VK_SUCCESS;
             }
+            bs::native::diag::between(bs::native::diag::Stall::GameQueueLock, trb, trl);
             ok = ok && f_.vkWaitForFences(dev_, 1, &fence_, VK_TRUE, UINT64_MAX) == VK_SUCCESS;
+            bs::native::diag::finish(bs::native::diag::Stall::GameReadback, trb);
             if (ok) {
                 out.resize(size_t(w) * h);
                 const uint8_t* p = static_cast<const uint8_t*>(rd.map);
@@ -1478,17 +1489,39 @@ private:
         }();
         if (idleMs > 0) std::this_thread::sleep_for(std::chrono::milliseconds(idleMs));
         const auto t0 = std::chrono::steady_clock::now();
+        namespace dg = bs::native::diag;  // BS_TRAVAS (N8.8, H9): desligado, so a leitura de um bool
+        dg::set_render(st_.frames);
+        // dentro da trava so os instantes (mark); o registro (between) depois de solta-la (revisao Codex 2026-11-01)
+        VkResult       r  = VK_SUCCESS;
+        const uint64_t a0 = dg::start();
+        uint64_t       a1 = 0, a2 = 0;
         {  // a fila e compartilhada com a apresentacao (thread da janela)
             std::lock_guard<std::mutex> lock(queueMutex_);
-            if (VkResult r = f_.vkQueueSubmit(queue_, 1, &si, fence_); r != VK_SUCCESS) return fail("vkQueueSubmit", r);
+            a1 = dg::mark(a0);
+            r  = f_.vkQueueSubmit(queue_, 1, &si, fence_);
+            a2 = dg::mark(a0);
+            if (r != VK_SUCCESS) return fail("vkQueueSubmit", r);  // como antes: com a trava na mao
         }
-        if (VkResult r = f_.vkWaitForFences(dev_, 1, &fence_, VK_TRUE, UINT64_MAX); r != VK_SUCCESS)
-            return fail("vkWaitForFences", r);
+        dg::between(dg::Stall::GameQueueLock, a0, a1), dg::between(dg::Stall::GameSubmit, a1, a2);
+        {
+            const uint64_t tf = dg::start();
+            r                 = f_.vkWaitForFences(dev_, 1, &fence_, VK_TRUE, UINT64_MAX);
+            dg::finish(dg::Stall::GameFence, tf);
+            if (r != VK_SUCCESS) return fail("vkWaitForFences", r);
+        }
         // a perda do dispositivo pode sinalizar a cerca sem o trabalho feito (AMD integrada, 2026-10-22: o quadro saia
         // com a imagem anterior e so o envio seguinte acusava): a fila ociosa confirma que o quadro terminou de fato
         {
-            std::lock_guard<std::mutex> lock(queueMutex_);
-            if (VkResult r = f_.vkQueueWaitIdle(queue_); r != VK_SUCCESS) return fail("vkQueueWaitIdle", r);
+            const uint64_t b0 = dg::start();
+            uint64_t       b1 = 0, b2 = 0;
+            {
+                std::lock_guard<std::mutex> lock(queueMutex_);
+                b1 = dg::mark(b0);
+                r  = f_.vkQueueWaitIdle(queue_);
+                b2 = dg::mark(b0);
+                if (r != VK_SUCCESS) return fail("vkQueueWaitIdle", r);  // como antes: com a trava na mao
+            }
+            dg::between(dg::Stall::GameQueueLock, b0, b1), dg::between(dg::Stall::GameWaitIdle, b1, b2);
         }
         const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
         st_.gpu_ms_total += ms, st_.gpu_ms_max = std::max(st_.gpu_ms_max, ms);

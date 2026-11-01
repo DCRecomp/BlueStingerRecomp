@@ -1,4 +1,5 @@
 #include "game_host.h"
+#include "platform/stall_trace.h"
 
 #include "boot/native_boot.h"
 #include "disc/disc_image.h"
@@ -498,6 +499,12 @@ void GameHost::vblank() {
     const auto     now = std::chrono::steady_clock::now();
     {
         const double work = std::chrono::duration<double, std::milli>(now - workStart_).count();
+        if (bs::native::diag::enabled()) {  // BS_TRAVAS (N8.8, H9): o mesmo intervalo do "trabalho por campo", exato
+            const uint64_t a = bs::native::diag::ns_of(workStart_), z = bs::native::diag::ns_of(now);
+            bs::native::diag::name_thread("jogo");
+            bs::native::diag::span(bs::native::diag::Stall::Field, a, z > a ? z - a : 0, int64_t(n));
+            bs::native::diag::set_vblank(n);
+        }
         std::lock_guard<std::mutex> lock(mutex_);
         workSumMs_ += work;
         stats_.vblanks   = n;
