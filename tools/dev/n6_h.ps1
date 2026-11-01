@@ -148,9 +148,10 @@ if ($Casos -contains "H4") {
                 BS_MUSICA_VOZES = "$Saida\h4_${n}_$m.vozes.tsv"; BS_EFEITOS_LOG = "$Saida\h4_${n}_$m.log.tsv" }
             Check "H4" "$n $m termina sem erro" ($rc -eq 0) "rc=$rc"
         }
-        # estado logico por PASSO (hash, vida, posicao), nos passos comuns; o VBlank de cada passo fica de fora (o audio
-        # nativo nao espera as cargas para a RAM de som: o mesmo passo chega 1 a 2 VBlanks antes, a diferenca de tempo do N2,
-        # N2-PLANO 11.1) e e informado a parte, como o deslocamento de VBlank
+        # estado logico por PASSO (hash, vida, posicao), nos passos comuns; o VBlank de cada passo fica de fora e e informado
+        # a parte, como o deslocamento de VBlank. Desde o e13a123 (N2 11.1) o download nativo da musica espera o DMA: o
+        # mesmo passo chega 5 a 10 VBlanks DEPOIS do legado (LOAD 5, 9 e 10; heliporto 5; docs/N8-6-AUDIO.md 5.1), entao no
+        # mesmo numero de VBlanks o nativo tem ate 10 passos a menos (decisao do mantenedor, 2026-11-01)
         $sem = { param($l) $c = $l.Split("`t"); (@($c[0]) + $c[2..($c.Count - 1)]) -join "`t" }
         $a = @([IO.File]::ReadAllLines("$Saida\h4_${n}_legado.st.tsv") | Select-Object -Skip 1)
         $b = @([IO.File]::ReadAllLines("$Saida\h4_${n}_nativo.st.tsv") | Select-Object -Skip 1)
@@ -167,7 +168,8 @@ if ($Casos -contains "H4") {
             $l = Select-String -Path "$Saida\h4_${n}_nativo.log.tsv" -Pattern "`tfala-estado`t.*\(3\)" | Select-Object -First 1
             if ($l) { $fimFala = [int64]$l.Line.Split("`t")[0] }
         }
-        $igual = -not $dif -and [Math]::Abs($a.Count - $b.Count) -le 2  # no mesmo numero de VBlanks, +-1 passo pelo deslocamento
+        # todos os passos comuns iguais; no fim, o nativo com ate 10 passos a menos (o deslocamento acima) ou 2 a mais
+        $igual = -not $dif -and ($a.Count - $b.Count) -le 10 -and ($b.Count - $a.Count) -le 2
         Check "H4" "$n estado por passo x legado (igual, ou igual ate o 1o fim natural de fala)" ($comuns -gt 3000 -and ($igual -or ($fimFala -and $dif -gt $fimFala))) $(if ($igual) { "$comuns passos comuns iguais ($($a.Count) legado, $($b.Count) nativo)" } else { "1a diferenca no passo $dif; 1o fim natural de fala no passo $fimFala" })
         $nome = "h4_${n}_nativo"
         $mix = Linha $nome "\[audio\] mistura:"
@@ -179,7 +181,7 @@ if ($Casos -contains "H4") {
         Check "H4" "$n mistura: nenhuma fonte acima de 16 bits (clipping so de soma), audivel" ($fonte -eq 0 -and (Num $mix "pico") -gt 1000) "fonte acima de 16 bits $fonte; saturadas (soma) $(Num $mix 'saturadas'); MIXS acima de 20 bits $(Num $mix '20 bits')"
         $ef = Linha $nome "\[audio\] efeitos nativos:"; $mu = Linha $nome "\[audio\] musica nativa:"; $fa = Linha $nome "\[audio\] falas nativas:"
         Check "H4" "$n efeitos: tocados, nenhum ausente, recusado ou com falha" ((Num $ef "ausentes") -eq 0 -and (Num $ef "recusadas") -eq 0 -and (Num $ef "decodificacao") -eq 0 -and (Num $ef "tocar") -gt 0) "$ef"
-        Check "H4" "$n musica: notas, sem erro do driver, carga recusada, voz sem camada ou recusada" ((Num $mu "notas") -gt 1000 -and $mu -match "\(erros 0\)" -and $mu -match "recusadas 0, outros" -and (Num $mu "camada") -eq 0 -and $mu -match "recusadas 0$") "$mu"
+        Check "H4" "$n musica: notas, sem erro do driver, carga recusada, voz sem camada ou recusada" ((Num $mu "notas") -gt 1000 -and $mu -match "\(erros 0\)" -and $mu -match "recusadas 0, outros" -and (Num $mu "camada") -eq 0 -and $mu -match "recusadas 0(;|$)") "$mu"  # o resumo termina com 'espera do DMA' desde o e13a123
         Check "H4" "$n falas: sem falha, ausente, chamada inesperada ou outro handle" ((Num $fa "inesperadas") -eq 0 -and $fa -match "falhas 0\)" -and (Num $fa "handles") -eq 0 -and (Num $fa "ausentes") -eq 0 -and (Num $fa "leitura") -eq 0) "$fa"
         Check "H4" "$n legado: nenhum provedor nativo" (-not (Select-String -Path "$Saida\h4_${n}_legado.out" -Pattern "\[audio\] nativo:" -Quiet)) ""
         if ($n -eq "load") {
