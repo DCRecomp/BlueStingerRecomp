@@ -98,7 +98,7 @@ O código compartilhado não ganha `#ifdef`. Cada dependência fica num `.cpp` d
 
 | # | Decisão | Recomendação | Motivo |
 |---|---|---|---|
-| D-L1 | Onde validar | Uma máquina Ubuntu 24.04 nativa com GPU real e um Steam Deck, operados por você com um roteiro meu | Sem isso, os critérios C5 e C6 não têm como ser cumpridos. Máquina virtual com GPU dedicada serve para Ubuntu, mas não substitui o Deck |
+| D-L1 | Onde validar | Uma máquina Ubuntu 24.04 nativa com GPU real e um Steam Deck, operados por você com um roteiro meu | Sem isso, os critérios A5 e A6 não têm como ser cumpridos. Máquina virtual com GPU dedicada serve para Ubuntu, mas não substitui o Deck |
 | D-L2 | Compilador no Linux | Clang e LLD portáteis dentro do pacote, com um sysroot de glibc antiga e o SDL3 pré-compilado | Funciona no SteamOS sem tocar no sistema, e todos compilam com o mesmo compilador, o que torna a prova de fidelidade válida para todos. O pacote fica maior; tamanho a medir na L5 |
 | D-L3 | Filmes no Linux | Tocar os SFD do disco em tempo real com `pl_mpeg` e o ADX que já temos, sem reconverter. `.mp4` de mods por `libav` do sistema carregada em tempo de execução, se existir; sem ela, toca o filme do disco e registra aviso | Sem codec patenteado no pacote, e a imagem é a original, sem perda. Os mods continuam substituíveis no Linux, mas MP4 depende de uma biblioteca do sistema. Alternativa: exigir um formato aberto nos mods, com `dav1d` |
 | D-L4 | Ferramentas no WSL | Autorizar `cmake`, `ninja`, `clang` e bibliotecas de desenvolvimento do X11, Wayland, ALSA e PipeWire no Ubuntu do WSL | A regra do projeto proíbe instalar sem autorização. Sem isso, a L1 não anda |
@@ -112,21 +112,21 @@ Todos são obrigatórios para a publicação. Nenhum se cumpre só por compilar.
 
 | # | Critério | Prova |
 |---|---|---|
-| C1 | Instalação limpa | Pacote num Ubuntu 24.04 limpo e num SteamOS: do CDI ao jogo aberto, sem Wine, sem Proton, sem instalar pacotes do sistema |
-| C2 | Dados | `--verify-data` rc=0; dados gerados no Linux iguais aos do Windows por SHA-256 |
-| C3 | **Fidelidade** | As 16 referências do N8.0 (179 exceções, nenhuma nova) e as 16 do N8.7 no executável Linux: estado por passo, VBlanks, LOAD/SAVE, saves e quadros do modo fiel. Divergência é defeito a corrigir |
-| C4 | Portão de campanha | C8 reproduzindo no Linux a sessão gravada no Windows, nas duas edições |
-| C5 | Execução real em Ubuntu | Boot, NEW GAME até a primeira área, LOAD, SAVE, filme, legenda, menu, sessão de 30 min sem queda, em GPU real |
-| C6 | Execução real em SteamOS | O mesmo do C5 no Deck, com os controles embutidos, em modo jogo e pelo atalho |
-| C7 | Vulkan | RADV e pelo menos mais um driver, sem erro de validação; recuo para software funcionando |
-| C8 | Áudio | Efeitos, falas, música e filme em PipeWire, sem cortes na sessão; troca de dispositivo sem queda |
-| C9 | Controles | Teclado, controle Xbox e Deck; remapeamento por `controles.toml`; câmera Livre na Remastered |
-| C10 | Saves | Atomicidade com falha simulada; `.vms` do Windows abre no Linux e o contrário |
-| C11 | Mods | Vídeo, dublagem, música e legendas substituídos no Linux, com nomes em maiúsculas diferentes |
-| C12 | Desempenho | Sem queda de quadros sustentada no Deck, com o número registrado |
-| C13 | Windows sem regressão | `ctest`, referências 16/16 e 16/16, C8, `test_preview`, `test_gameplay`, `test_builder`, `test_projeto`, `test_saves`, `test_edicao`, e comparação função a função mostrando que só mudou o que a portabilidade exige |
-| C14 | Pacotes | Windows e Linux separados, com instruções; `varre_publicacao` limpo; nenhuma mídia proprietária, dado pessoal ou arquivo particular; `SHA256SUMS.txt` conferido |
-| C15 | Revisão | Codex em cada subetapa relevante, com achados registrados no `STATUS.md` |
+| A1 | Instalação limpa | Pacote num Ubuntu 24.04 limpo e num SteamOS: do CDI ao jogo aberto, sem Wine, sem Proton, sem instalar pacotes do sistema |
+| A2 | Dados | `--verify-data` rc=0; dados gerados no Linux iguais aos do Windows por SHA-256 |
+| A3 | **Fidelidade** | As 16 referências do N8.0 (179 exceções, nenhuma nova) e as 16 do N8.7 no executável Linux: estado por passo, VBlanks, LOAD/SAVE, saves e quadros do modo fiel. Divergência é defeito a corrigir |
+| A4 | Portão de campanha | C8 do `test_campanha` reproduzindo no Linux a sessão gravada no Windows, nas duas edições |
+| A5 | Execução real em Ubuntu | Boot, NEW GAME até a primeira área, LOAD, SAVE, filme, legenda, menu, sessão de 30 min sem queda, em GPU real |
+| A6 | Execução real em SteamOS | O mesmo do A5 no Deck, com os controles embutidos, em modo jogo e pelo atalho |
+| A7 | Vulkan | RADV e pelo menos mais um driver, sem erro de validação; recuo para software funcionando |
+| A8 | Áudio | Efeitos, falas, música e filme em PipeWire, sem cortes na sessão; troca de dispositivo sem queda |
+| A9 | Controles | Teclado, controle Xbox e Deck; remapeamento por `controles.toml`; câmera Livre na Remastered |
+| A10 | Saves | Atomicidade com falha simulada; `.vms` do Windows abre no Linux e o contrário |
+| A11 | Mods | Vídeo, dublagem, música e legendas substituídos no Linux, com nomes em maiúsculas diferentes |
+| A12 | Desempenho | Sem queda de quadros sustentada no Deck, com o número registrado |
+| A13 | Windows sem regressão | `ctest`, referências 16/16 e 16/16, C8 do `test_campanha`, `test_preview`, `test_gameplay`, `test_builder`, `test_projeto`, `test_saves`, `test_edicao`, e comparação função a função mostrando que só mudou o que a portabilidade exige |
+| A14 | Pacotes | Windows e Linux separados, com instruções; `varre_publicacao` limpo; nenhuma mídia proprietária, dado pessoal ou arquivo particular; `SHA256SUMS.txt` conferido |
+| A15 | Revisão | Codex em cada subetapa relevante, com achados registrados no `STATUS.md` |
 
 ## 6. Plano incremental
 
@@ -137,13 +137,13 @@ programa de referência durante todo o N9-L.
 |---|---|---|
 | **L0** Base | Presets e CMake por plataforma, opções da seção 3, `known_versions.h` contornado na compilação limpa | Windows idêntico; `ctest` |
 | **L1** Núcleo sem janela | B1, B2, escrita atômica, plataforma POSIX. Executável `--headless` no WSL, com dados preparados no Windows | Boot até o gameplay por roteiro |
-| **L2** **Prova de fidelidade** | Referências rodando no Linux | **C3.** Se falhar sem causa corrigível, paro aqui e apresento o problema, antes de investir no resto |
-| **L3** Janela | SDL3, Vulkan, `IAudioOutput` com SDL, entrada | Sessão jogável em Ubuntu nativo; C7, C8, C9 parciais |
-| **L4** Filmes e texto | B3, B5, caminhos e mods | Filmes, legendas e menu; C11 |
-| **L5** Builder | `bs-builder` Linux, compilador da D-L2, dados, testes portados para Python | C1 e C2 em Ubuntu |
-| **L6** SteamOS | Ajustes de RADV, gamescope, controles, atalho | C5, C6, C10, C12 |
-| **L7** Regressão Windows | Bateria do C13, revisão Codex final | C13, C15 |
-| **L8** Publicação | v0.8.0 com os dois pacotes, Preview/pré-lançamento, limitações e hashes | C14, depois da conferência de todos os critérios |
+| **L2** **Prova de fidelidade** | Referências rodando no Linux | **A3.** Se falhar sem causa corrigível, paro aqui e apresento o problema, antes de investir no resto |
+| **L3** Janela | SDL3, Vulkan, `IAudioOutput` com SDL, entrada | Sessão jogável em Ubuntu nativo; A7, A8, A9 parciais |
+| **L4** Filmes e texto | B3, B5, caminhos e mods | Filmes, legendas e menu; A11 |
+| **L5** Builder | `bs-builder` Linux, compilador da D-L2, dados, testes portados para Python | A1 e A2 em Ubuntu |
+| **L6** SteamOS | Ajustes de RADV, gamescope, controles, atalho | A5, A6, A10, A12 |
+| **L7** Regressão Windows | Bateria do A13, revisão Codex final | A13, A15 |
+| **L8** Publicação | v0.8.0 com os dois pacotes, Preview/pré-lançamento, limitações e hashes | A14, depois da conferência de todos os critérios |
 
 Paralelismo do raster por pool de threads próprio (sem TBB) entra na L3, com prova de que o quadro não muda.
 
