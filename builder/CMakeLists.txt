@@ -1,7 +1,8 @@
 # Builder: do CDI do usuario ao BlueStinger.exe nativo (extracao, analise, geracao,
 # compilacao com o compilador do usuario, verificacao e instalacao). Nao contem nada do jogo.
 # N5: leitura dos filmes do disco (demux do SFD e ADX) para a conversao em MP4
-add_library(bs_video_convert STATIC video/sfd_media.cpp video/sfd_convert.cpp video/movie_build.cpp video/pl_mpeg_impl.c)
+add_library(bs_video_convert STATIC ${CMAKE_SOURCE_DIR}/native/video/sfd_media.cpp video/sfd_convert.cpp video/movie_build.cpp
+            ${CMAKE_SOURCE_DIR}/native/video/pl_mpeg_impl.c)
 target_include_directories(bs_video_convert PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} PRIVATE ${CMAKE_SOURCE_DIR}/third_party/pl_mpeg)
 target_link_libraries(bs_video_convert PUBLIC bs_native_video PRIVATE bs_disc tomlplusplus::tomlplusplus)
 target_compile_features(bs_video_convert PUBLIC cxx_std_20)

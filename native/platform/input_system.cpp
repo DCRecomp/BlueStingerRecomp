@@ -1,16 +1,12 @@
 // Nucleo de entrada (N3-1): dispositivos do host -> jogador 1, amostra no ponto de amostragem.
 #include "platform/input.h"
+#include "platform/xinput_pad.h"
 
 #include <algorithm>
 #include <cctype>
 #include <cmath>
 #include <map>
 #include <set>
-
-#define WIN32_LEAN_AND_MEAN
-#define NOMINMAX
-#include <windows.h>
-#include <xinput.h>
 
 namespace bs::native::input {
 
@@ -121,15 +117,8 @@ ControllerState merge(const std::vector<ControllerState>& in) {
     return out;
 }
 
+constexpr int      kXInputSlots = 4;
 constexpr uint32_t kXInputBase = 0xFFFF0000u;  // ids dos controles XInput (fora da faixa do SDL)
-
-bool readXInput(DWORD slot, InputSystem::XInputPad& out) {
-    XINPUT_STATE x{};
-    if (XInputGetState(slot, &x) != ERROR_SUCCESS) return false;
-    out = {x.Gamepad.wButtons, x.Gamepad.bLeftTrigger, x.Gamepad.bRightTrigger, x.Gamepad.sThumbLX,
-           x.Gamepad.sThumbLY,  x.Gamepad.sThumbRX,     x.Gamepad.sThumbRY};
-    return true;
-}
 
 } // namespace
 
@@ -188,28 +177,28 @@ struct InputSystem::Impl {
         return best;
     }
     void pollXInput(const ActionMap& m) {
-        for (DWORD slot = 0; slot < XUSER_MAX_COUNT; ++slot) {
+        for (int slot = 0; slot < kXInputSlots; ++slot) {
             InputSystem::XInputPad x;
-            const bool             ok = xreader ? xreader(int(slot), x) : readXInput(slot, x);
-            const uint32_t         id = kXInputBase + slot;
+            const bool             ok = xreader ? xreader(slot, x) : read_system_xinput(slot, x);
+            const uint32_t         id = kXInputBase + uint32_t(slot);
             Pad*                   p  = find(id);
             if (!ok) {
                 if (p) removed(id);
                 continue;
             }
             if (!p) p = &pads[size_t(added(id, "XInput " + std::to_string(slot + 1), "xinput", m))];
-            const WORD b = x.buttons;
+            const uint16_t b = x.buttons;
             struct M {
-                WORD        bit;
+                uint16_t    bit;
                 const char* name;
-            } static const kMap[] = {{XINPUT_GAMEPAD_A, "a"},           {XINPUT_GAMEPAD_B, "b"},
-                                     {XINPUT_GAMEPAD_X, "x"},           {XINPUT_GAMEPAD_Y, "y"},
-                                     {XINPUT_GAMEPAD_START, "start"},   {XINPUT_GAMEPAD_BACK, "back"},
-                                     {XINPUT_GAMEPAD_DPAD_UP, "dpup"},  {XINPUT_GAMEPAD_DPAD_DOWN, "dpdown"},
-                                     {XINPUT_GAMEPAD_DPAD_LEFT, "dpleft"}, {XINPUT_GAMEPAD_DPAD_RIGHT, "dpright"},
-                                     {XINPUT_GAMEPAD_LEFT_SHOULDER, "leftshoulder"},
-                                     {XINPUT_GAMEPAD_RIGHT_SHOULDER, "rightshoulder"},
-                                     {XINPUT_GAMEPAD_LEFT_THUMB, "leftstick"}, {XINPUT_GAMEPAD_RIGHT_THUMB, "rightstick"}};
+            } static const kMap[] = {{0x1000, "a"},           {0x2000, "b"},
+                                     {0x4000, "x"},           {0x8000, "y"},
+                                     {0x0010, "start"},   {0x0020, "back"},
+                                     {0x0001, "dpup"},  {0x0002, "dpdown"},
+                                     {0x0004, "dpleft"}, {0x0008, "dpright"},
+                                     {0x0100, "leftshoulder"},
+                                     {0x0200, "rightshoulder"},
+                                     {0x0040, "leftstick"}, {0x0080, "rightstick"}};
             std::set<std::string> down;
             for (const M& k : kMap)
                 if (b & k.bit) down.insert(k.name);

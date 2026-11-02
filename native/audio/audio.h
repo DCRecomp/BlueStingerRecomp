@@ -104,6 +104,8 @@ struct XAudio2Hooks {
     std::function<bool()>         force_lost;  // true = o dispositivo caiu agora
 };
 std::unique_ptr<IAudioOutput> make_xaudio2_output(uint32_t latency_ms, bool follow_default, XAudio2Hooks hooks);
+// A saida do sistema: XAudio2 no Windows, SDL3 no Linux.
+std::unique_ptr<IAudioOutput> make_system_output(uint32_t latency_ms = 200, bool follow_default = false);
 // Saida nula (headless e dispositivo ausente): aceita e descarta, conta os quadros como tocados.
 std::unique_ptr<IAudioOutput> make_null_output();
 

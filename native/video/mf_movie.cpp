@@ -83,6 +83,7 @@ struct MfMovieReader::Impl {
 };
 
 std::unique_ptr<IMovieDecoder> make_movie_decoder() { return std::make_unique<MfMovieReader>(); }
+bool                           plays_disc_movies() { return false; }
 
 MfMovieReader::MfMovieReader() = default;
 MfMovieReader::~MfMovieReader() { close(); }

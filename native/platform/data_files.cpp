@@ -24,6 +24,14 @@ std::FILE* openRead(const fs::path& p) {
 #endif
 }
 
+int seekTo(std::FILE* f, uint64_t offset) {
+#ifdef _WIN32
+    return _fseeki64(f, int64_t(offset), SEEK_SET);
+#else
+    return fseeko(f, off_t(offset), SEEK_SET);
+#endif
+}
+
 // Percorre `dir` e devolve (nome logico canonico -> arquivo).
 std::map<std::string, std::pair<fs::path, uint64_t>> walk(const fs::path& dir, std::vector<std::string>* problems) {
     std::map<std::string, std::pair<fs::path, uint64_t>> out;
@@ -145,7 +153,7 @@ Result<size_t> DataFileSystem::read(FileHandle f, uint64_t offset, std::span<std
     if (offset > size) return Error::OutOfRange;
     const size_t n = size_t(std::min<uint64_t>(out.size(), size - offset));
     if (!n) return size_t(0);
-    if (_fseeki64(it->second.f, int64_t(offset), SEEK_SET) != 0) return Error::Io;
+    if (seekTo(it->second.f, offset) != 0) return Error::Io;
     if (std::fread(out.data(), 1, n, it->second.f) != n) return Error::Io;
     return n;
 }

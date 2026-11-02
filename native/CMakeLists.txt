@@ -14,11 +14,20 @@ add_library(bs_native STATIC platform/data_files.cpp platform/clock.cpp platform
             platform/user_settings.cpp       # N7c: audio.toml e legendas.toml (menu interno)
             platform/camera_settings.cpp     # N7c: camera livre ([camera] em controles.toml)
             platform/edition.cpp             # N9.0: perfil de edicao (Original, Remastered)
-            platform/stall_trace.cpp)        # N8.8: diagnostico BS_TRAVAS (travas, esperas, fila de audio)
+            platform/stall_trace.cpp         # N8.8: diagnostico BS_TRAVAS (travas, esperas, fila de audio)
+            platform/saves_io_${BS_PLAT}.cpp platform/xinput_pad_${BS_PLAT}.cpp)  # N9-L: backends de plataforma
 target_link_libraries(bs_native PUBLIC bs_native_api PRIVATE tomlplusplus::tomlplusplus $<$<PLATFORM_ID:Windows>:xinput>)
 
 # N5: filmes nativos (catalogo por ID com mods, leitura e gravacao MP4 por Media Foundation)
-add_library(bs_native_video STATIC video/movie_catalog.cpp video/mf_movie.cpp video/movie_playback.cpp video/subtitles.cpp video/movie_color.cpp)
+add_library(bs_native_video STATIC video/movie_catalog.cpp video/movie_playback.cpp video/subtitles.cpp video/movie_color.cpp)
+if(WIN32)
+  target_sources(bs_native_video PRIVATE video/mf_movie.cpp video/subtitles_dwrite.cpp)
+else()
+  # N9-L: os SFD do disco, decodificados na hora (pl_mpeg + ADX)
+  target_sources(bs_native_video PRIVATE video/sfd_movie.cpp video/sfd_media.cpp video/pl_mpeg_impl.c video/subtitles_text_posix.cpp)
+  target_include_directories(bs_native_video PRIVATE ${PROJECT_SOURCE_DIR}/third_party/pl_mpeg)
+  set_source_files_properties(video/pl_mpeg_impl.c PROPERTIES COMPILE_OPTIONS -w)
+endif()
 target_link_libraries(bs_native_video PUBLIC bs_native_api PRIVATE tomlplusplus::tomlplusplus
                       $<$<PLATFORM_ID:Windows>:mfplat;mfreadwrite;mfuuid;ole32;d2d1;dwrite;windowscodecs>)
 # N5 (D2): saida de audio (XAudio2 e nula) atras de IAudioOutput; o N6 reaproveita
@@ -83,6 +92,11 @@ target_include_directories(bs_native_render_vk PRIVATE ${PROJECT_SOURCE_DIR}/thi
 target_link_libraries(bs_native_render_vk PUBLIC bs_native_render PRIVATE bs_native ${CMAKE_DL_LIBS})
 
 add_library(bs_native_audio STATIC audio/audio_output.cpp)
+if(WIN32)
+  target_sources(bs_native_audio PRIVATE audio/audio_output_xaudio2.cpp)
+else()
+  target_sources(bs_native_audio PRIVATE audio/audio_output_posix.cpp)
+endif()
 target_link_libraries(bs_native_audio PUBLIC bs_native_api PRIVATE bs_native $<$<PLATFORM_ID:Windows>:xaudio2;ole32>)
 
 if(BS_BUILD_TESTS AND BS_BUILD_TOOLS)

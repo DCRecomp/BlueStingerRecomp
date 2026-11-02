@@ -1,7 +1,7 @@
 # Interoperabilidade da fase hibrida (docs/PLANO-PORT-NATIVO.md secao 2): handles de 32 bits,
 # adaptadores Sh4Context <-> native/, registro de fronteiras com provedor legado/nativo.
 # Some quando os chamadores forem elevados.
-add_library(bs_transitional STATIC boundary_registry.cpp bu_adapter.cpp bu_machine.cpp cri_idle.cpp gdfs_adapter.cpp input_bridge.cpp
+add_library(bs_transitional STATIC boundary_registry.cpp bu_adapter.cpp bu_machine.cpp cri_idle.cpp cri_watch_${BS_PLAT}.cpp gdfs_adapter.cpp input_bridge.cpp
             pad_adapter.cpp pad_contract.cpp pad_probe.cpp time_adapter.cpp
             render_core.cpp      # N8.7 5a: o renderizador sobre a IR (Vulkan e software), nos dois builds
             free_camera.cpp)     # N7c: camera livre (slots da montagem da camera de gameplay)

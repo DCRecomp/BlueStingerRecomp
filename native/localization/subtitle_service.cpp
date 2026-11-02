@@ -1,5 +1,7 @@
 #include "localization/subtitle_service.h"
 
+#include "core/utf8.h"
+
 #include "localization/locale.h"
 #include "video/subtitles.h"
 
@@ -11,24 +13,7 @@
 namespace bs::native::localization {
 
 namespace {
-std::wstring widen_utf8(const std::string& s) {
-    std::wstring out;
-    for (size_t i = 0; i < s.size();) {
-        const unsigned char c = static_cast<unsigned char>(s[i]);
-        uint32_t            cp;
-        size_t              n = c < 0x80 ? 0 : (c & 0xE0) == 0xC0 ? 1 : (c & 0xF0) == 0xE0 ? 2 : 3;
-        cp = n == 0 ? c : n == 1 ? (c & 0x1F) : n == 2 ? (c & 0x0F) : (c & 0x07);
-        for (size_t k = 1; k <= n && i + k < s.size(); ++k) cp = (cp << 6) | (static_cast<unsigned char>(s[i + k]) & 0x3F);
-        i += n + 1;
-        if (cp >= 0x10000) {  // UTF-16 (wchar_t do Windows)
-            cp -= 0x10000;
-            out += wchar_t(0xD800 + (cp >> 10)), out += wchar_t(0xDC00 + (cp & 0x3FF));
-        } else {
-            out += wchar_t(cp);
-        }
-    }
-    return out;
-}
+std::wstring widen_utf8(const std::string& s) { return utf8_to_wide(s); }
 int64_t seconds(double s) { return int64_t(std::llround(s * 1e7)); }
 } // namespace
 

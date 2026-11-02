@@ -13,7 +13,7 @@
 // Uma passada ociosa bloqueia a thread 3 ate o proximo evento (o tempo logico anda); o evento
 // acorda a proxima.
 //
-// A RAM e observada pelo rastreamento de escrita do sistema (Windows: MEM_WRITE_WATCH), sem
+// A RAM e observada pelo rastreamento de escrita do sistema (cri_watch_win.cpp: MEM_WRITE_WATCH; Linux: cri_watch_posix.cpp), sem
 // custo nas escritas da CPU: a cada visita, so as paginas escritas desde a anterior sao
 // comparadas com uma copia. A diferenca para o detector de investigacao (que ve so as escritas
 // da CPU) e conservadora: o sistema ve tambem as escritas do runtime e do host.
@@ -29,6 +29,9 @@ namespace bs::transitional::cri {
 // oferece (o modo experimental nao tem alternativa silenciosa).
 uint8_t* alloc_watched_ram(size_t bytes);
 void     free_watched_ram(uint8_t* ram);
+// As paginas de `ram` possivelmente diferentes de `shadow` desde a ultima chamada (toda pagina diferente esta entre elas).
+size_t watch_pages(uint8_t* ram, const uint8_t* shadow, size_t bytes, std::vector<void*>& pages, size_t* page_bytes);
+void   watch_reset(uint8_t* ram, size_t bytes);
 
 struct IdleStats {
     uint64_t visits = 0, idle = 0, eventDuring = 0, effectRam = 0, effectOther = 0, dirtyPages = 0;

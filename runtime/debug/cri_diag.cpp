@@ -511,15 +511,15 @@ void cri_diag_install() {
     g_snapWorkNoEvent = g_snapWorkNoEventUnchanged = 0;  // sessao nova: nada herdado (revisao Codex)
     g_snapVb      = std::getenv("BS_CRI_SNAP_VB") ? std::strtoull(std::getenv("BS_CRI_SNAP_VB"), nullptr, 10) : 0;
     if (const char* f = std::getenv("BS_CRI_FLUXO_LOG"); f && *f)
-        if (fopen_s(&g_flowLog, f, "w") != 0 || !g_flowLog)
+        if (!(g_flowLog = std::fopen(f, "w")))
             throw std::runtime_error(std::string("BS_CRI_FLUXO_LOG: nao foi possivel criar ") + f);
     if (m && *m) {
-        if (fopen_s(&g_meters, m, "w") != 0 || !g_meters)
+        if (!(g_meters = std::fopen(m, "w")))
             throw std::runtime_error(std::string("BS_CRI_MEDIDORES: nao foi possivel criar ") + m);
         if (!v || !*v) v = "contar";  // os medidores sao lidos pela passada envolvida
     }
     if (const char* f = std::getenv("BS_CRI_CESSAO_LOG"); f && *f) {
-        if (fopen_s(&g_lockLog, f, "w") != 0 || !g_lockLog)
+        if (!(g_lockLog = std::fopen(f, "w")))
             throw std::runtime_error(std::string("BS_CRI_CESSAO_LOG: nao foi possivel criar ") + f);
         if (!v || !*v) v = "contar";
     }

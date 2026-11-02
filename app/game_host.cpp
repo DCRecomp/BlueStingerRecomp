@@ -729,6 +729,7 @@ void GameHost::threadMain() {
         if (opt_.video == VideoProvider::Native) {
             transitional::video::MwCoreOptions vo;
             vo.catalog      = {opt_.data / L"video", opt_.modVideo};
+            if (native::video::plays_disc_movies()) vo.catalog.discDir = opt_.data / L"disc" / L"BSDATA";
             vo.subtitleLang = opt_.subtitles;
             // cor do sprite confirmada pelo O1b (NEWGAME e E001 no Flycast, tools/dev/n5_cor.py): RGB do Sofdec
             // na faixa de TV, modulado pela cor base; offset aditivo (offset color do PVR)
@@ -738,7 +739,7 @@ void GameHost::threadMain() {
                 std::fprintf(stderr, "%s (passo %llu)\n", m.c_str(), static_cast<unsigned long long>(transitional::time::game_steps()));
             };
             // som do filme no dispositivo so em tempo real; no headless, saida nula (mesmo relogio logico)
-            if (opt_.realtime) vo.makeAudio = [] { return native::audio::make_xaudio2_output(); };
+            if (opt_.realtime) vo.makeAudio = [] { return native::audio::make_system_output(); };
             movie_ = {};
             transitional::video::install(transitional::boundary_registry(), std::move(vo),
                                          [this](const native::video::VideoFrame& f) {
@@ -764,7 +765,7 @@ void GameHost::threadMain() {
             so.modsAudio = opt_.modAudio;
             so.language  = opt_.dubbing;
             // o audio do jogo segue a saida padrao do Windows e sobrevive a fila cheia (N6-H; os filmes ficam como no N5)
-            if (opt_.realtime) so.makeOutput = [] { return native::audio::make_xaudio2_output(200, true); };
+            if (opt_.realtime) so.makeOutput = [] { return native::audio::make_system_output(200, true); };
             voicesNative_ = so.voices;
             if (so.voices) {  // legendas das falas (mods\<pacote>\legendas\falas.<idioma>.toml); "" = desligadas
                 // a versao do jogo que o Builder valida (o jogo = ... dos pacotes; revisao Codex 2026-10-21)

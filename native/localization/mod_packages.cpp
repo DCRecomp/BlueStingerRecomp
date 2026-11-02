@@ -20,7 +20,7 @@ std::optional<fs::path> safe_join(const fs::path& root, std::string_view relativ
     const fs::path p = fs::weakly_canonical(base / fs::path(std::u8string(relative.begin(), relative.end())), ec);
     if (ec) return std::nullopt;
     const auto rel = p.lexically_relative(base);  // juncao/link que sai da pasta: o canonico fica fora
-    if (rel.empty() || rel.native().rfind(L"..", 0) == 0) return std::nullopt;
+    if (rel.empty() || rel.generic_u8string().rfind(u8"..", 0) == 0) return std::nullopt;
     return p;
 }
 

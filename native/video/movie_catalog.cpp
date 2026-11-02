@@ -65,7 +65,10 @@ void readManifest(const fs::path& path, bool mod, std::map<uint32_t, MovieEntry>
     if (!isFile(path)) return;
     toml::table t;
     try {
-        t = toml::parse_file(path.wstring());
+        std::ifstream      in(path, std::ios::binary);
+        std::ostringstream text;
+        text << in.rdbuf();
+        t = toml::parse(text.str());
     } catch (const toml::parse_error& e) {
         problems.push_back(path.filename().string() + ": " + std::string(e.description()));
         return;
@@ -132,6 +135,9 @@ void readManifest(const fs::path& path, bool mod, std::map<uint32_t, MovieEntry>
 MovieCatalog MovieCatalog::load(const CatalogOptions& o) {
     MovieCatalog c;
     readManifest(o.dataDir / "manifest.toml", false, c.byId_, c.problems_);
+    if (!o.discDir.empty())
+        for (auto& [id, e] : c.byId_)
+            if (!e.absent && !e.original.empty()) e.file = o.discDir / e.original, e.audioDelaySamples = 0;
     if (o.modsDir.empty()) return c;
     readManifest(o.modsDir / "manifest.toml", true, c.byId_, c.problems_);
     // mod pelo nome do original (sem manifesto): mods\video\<NOME>.mp4 e <NOME>.<idioma>.srt/.vtt

@@ -4,7 +4,7 @@
 // toca (MoviePlayback) decide QUAL quadro mostrar pela posicao do relogio logico do jogo. O quadro fica
 // em memoria (ARGB), sem textura ou superficie de API grafica: o renderer (hoje o host, no N7 o Vulkan)
 // o recebe como esta.
-//   Windows: Media Foundation (video/mf_movie.h). Outra plataforma: outra implementacao desta interface.
+//   Windows: Media Foundation (video/mf_movie.h). Linux: SFD do disco (video/sfd_movie.cpp).
 #include <cstdint>
 #include <filesystem>
 #include <memory>
@@ -40,7 +40,9 @@ public:
     virtual void close() = 0;
 };
 
-// O decodificador da plataforma (Windows: Media Foundation).
+// O decodificador da plataforma (Windows: Media Foundation; Linux: sfd_movie.cpp).
 std::unique_ptr<IMovieDecoder> make_movie_decoder();
+// O decodificador toca os SFD do disco direto, sem a conversao do Builder (Linux).
+bool plays_disc_movies();
 
 } // namespace bs::native::video

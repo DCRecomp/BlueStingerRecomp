@@ -15,10 +15,6 @@
 #include <sstream>
 #include <stdexcept>
 
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
-#include <xinput.h>
-
 namespace bs {
 namespace {
 
@@ -90,13 +86,13 @@ uint32_t actionFromName(const std::string& n) {
 int keyFromName(const std::string& n) {
     if (n.size() == 1 && (std::isalnum(static_cast<unsigned char>(n[0])))) return n[0];  // VK de A-Z, 0-9
     static const std::map<std::string, int> keys = {
-        {"ENTER", VK_RETURN}, {"SPACE", VK_SPACE}, {"ESC", VK_ESCAPE}, {"TAB", VK_TAB},     {"SHIFT", VK_SHIFT},
-        {"CTRL", VK_CONTROL}, {"UP", VK_UP},       {"DOWN", VK_DOWN},  {"LEFT", VK_LEFT},   {"RIGHT", VK_RIGHT},
-        {"BACKSPACE", VK_BACK}};
+        {"ENTER", 0x0D}, {"SPACE", 0x20}, {"ESC", 0x1B},  {"TAB", 0x09},   {"SHIFT", 0x10},
+        {"CTRL", 0x11},  {"UP", 0x26},    {"DOWN", 0x28}, {"LEFT", 0x25},  {"RIGHT", 0x27},
+        {"BACKSPACE", 0x08}};  // codigos de tecla virtual do Windows (input_host_win.cpp)
     if (const auto it = keys.find(n); it != keys.end()) return it->second;
     if (n.size() >= 2 && n[0] == 'F') {
         const int f = std::atoi(n.c_str() + 1);
-        if (f >= 1 && f <= 12) return VK_F1 + f - 1;
+        if (f >= 1 && f <= 12) return 0x70 + f - 1;  // VK_F1
     }
     return 0;
 }
@@ -148,7 +144,7 @@ public:
         if (port != 0) return {};
         uint32_t act = 0;
         for (const auto& [vk, a] : map)
-            if (GetAsyncKeyState(vk) & 0x8000) act |= a;
+            if (host_key_down(vk)) act |= a;
         return stateFromActions(act);
     }
 };
@@ -179,46 +175,6 @@ public:
 private:
     std::mutex            mutex_;
     std::set<std::string> pressed_;
-};
-
-// --- XInput ---
-
-class XInput : public InputSource {
-public:
-    PadState read(int port, uint64_t) override {
-        PadState s;
-        if (port != 0) return s;
-        for (DWORD i = 0; i < XUSER_MAX_COUNT; ++i) {
-            XINPUT_STATE x{};
-            if (XInputGetState(i, &x) != ERROR_SUCCESS) continue;
-            const WORD b = x.Gamepad.wButtons;
-            struct M {
-                WORD     x;
-                uint16_t dc;
-            } static const kMap[] = {{XINPUT_GAMEPAD_A, kPadA},         {XINPUT_GAMEPAD_B, kPadB},
-                                     {XINPUT_GAMEPAD_X, kPadX},         {XINPUT_GAMEPAD_Y, kPadY},
-                                     {XINPUT_GAMEPAD_START, kPadStart}, {XINPUT_GAMEPAD_DPAD_UP, kPadUp},
-                                     {XINPUT_GAMEPAD_DPAD_DOWN, kPadDown}, {XINPUT_GAMEPAD_DPAD_LEFT, kPadLeft},
-                                     {XINPUT_GAMEPAD_DPAD_RIGHT, kPadRight}};
-            for (const M& m : kMap)
-                if (b & m.x) s.buttons |= m.dc;
-            s.ltrig = x.Gamepad.bLeftTrigger;
-            s.rtrig = x.Gamepad.bRightTrigger;
-            // XInput: -32768..32767, y para cima; Dreamcast: 0..255, y para baixo
-            auto axis = [](SHORT v, bool invert) {
-                int t = (int(v) + 32768) >> 8;
-                if (invert) t = 255 - t;
-                return uint8_t(std::clamp(t, 0, 255));
-            };
-            const SHORT dz = XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE;
-            const SHORT lx = std::abs(x.Gamepad.sThumbLX) < dz ? 0 : x.Gamepad.sThumbLX;
-            const SHORT ly = std::abs(x.Gamepad.sThumbLY) < dz ? 0 : x.Gamepad.sThumbLY;
-            s.joyx = lx ? axis(lx, false) : 0x80;
-            s.joyy = ly ? axis(ly, true) : 0x80;
-            break;
-        }
-        return s;
-    }
 };
 
 class Combined : public InputSource {
@@ -392,8 +348,6 @@ std::unique_ptr<KeyEventInput> make_key_event_input(const std::string& mapping) 
     k->map = parseKeyMap(mapping);
     return k;
 }
-
-std::unique_ptr<InputSource> make_xinput_input() { return std::make_unique<XInput>(); }
 
 std::unique_ptr<InputSource> make_combined_input(std::vector<std::unique_ptr<InputSource>> sources) {
     auto c  = std::make_unique<Combined>();

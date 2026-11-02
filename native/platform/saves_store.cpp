@@ -1,11 +1,10 @@
-// N4: saves em disco, escrita atomica no Windows (docs/N4-PREPARACAO.md, "Escrita atomica").
+// N4: saves em disco, escrita atomica (docs/N4-PREPARACAO.md, "Escrita atomica"; arquivos em saves_io_*.cpp).
 //   1. envelope inteiro em <NOME>.bsv.tmp na mesma pasta (CreateFileW, WriteFile, FlushFileBuffers);
 //   2. releitura e conferencia do temporario;
 //   3. troca: MoveFileExW (WRITE_THROUGH) sem destino; ReplaceFileW com .bak com destino;
 //   4. so entao None para o chamador (o adaptador so conclui para o jogo depois disso).
 #include "platform/saves.h"
-
-#include <windows.h>
+#include "platform/saves_io.h"
 
 #include <chrono>
 #include <fstream>
@@ -31,11 +30,8 @@ bool readAll(const fs::path& p, std::vector<std::byte>& out) {
 }
 
 std::string narrowPath(const fs::path& p) {
-    const std::wstring w = p.wstring();
-    const int n = WideCharToMultiByte(CP_UTF8, 0, w.data(), int(w.size()), nullptr, 0, nullptr, nullptr);
-    std::string s(size_t(n), '\0');
-    WideCharToMultiByte(CP_UTF8, 0, w.data(), int(w.size()), s.data(), n, nullptr, nullptr);
-    return s;
+    const std::u8string u = p.u8string();
+    return std::string(u.begin(), u.end());
 }
 
 class FileStore final : public ISaveStore {
@@ -101,7 +97,7 @@ public:
         std::error_code ec;
         if (fs::exists(dst, ec) && status(dst) == SaveError::FutureVersion) return SaveError::FutureVersion;  // nunca por cima
         // save marcado como somente leitura pelo usuario: protegido (o ReplaceFileW o trocaria assim mesmo)
-        if (const DWORD at = GetFileAttributesW(dst.c_str()); at != INVALID_FILE_ATTRIBUTES && (at & FILE_ATTRIBUTE_READONLY))
+        if (io::is_read_only(dst))
             return SaveError::ReadOnly;
         const auto env = envelope_encode(image, o_.now());
         const SaveError w = writeDurable(tmp, env);
@@ -226,28 +222,17 @@ private:
 
     SaveError writeDurable(const fs::path& p, const std::vector<std::byte>& data) const {
         if (fault(FaultPoint::CreateTemp)) return SaveError::Io;
-        HANDLE h = CreateFileW(p.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-        if (h == INVALID_HANDLE_VALUE) return GetLastError() == ERROR_ACCESS_DENIED ? SaveError::ReadOnly : SaveError::Io;
-        bool         ok   = true;
         const size_t half = data.size() / 2;
         // falha de escrita injetada: metade do arquivo no disco (temporario truncado)
         const size_t n = fault(FaultPoint::Write) ? half : data.size();
-        DWORD        wrote = 0;
-        ok = WriteFile(h, data.data(), DWORD(n), &wrote, nullptr) && wrote == n && n == data.size();
-        if (ok && (fault(FaultPoint::Flush) || !FlushFileBuffers(h))) ok = false;
-        CloseHandle(h);
-        return ok ? SaveError::None : SaveError::Io;
+        return io::write_durable(p, data, n, fault(FaultPoint::Flush));
     }
 
     bool swap(const fs::path& dst, const fs::path& tmp, const fs::path& bak) const {
         std::error_code ec;
-        if (!fs::exists(dst, ec)) return MoveFileExW(tmp.c_str(), dst.c_str(), MOVEFILE_WRITE_THROUGH) != 0;
+        if (!fs::exists(dst, ec)) return io::move_new(tmp, dst);
         fs::remove(bak, ec);  // a copia anterior da anterior: o destino atual e valido e vira o novo .bak
-        if (ReplaceFileW(dst.c_str(), tmp.c_str(), bak.c_str(), REPLACEFILE_IGNORE_MERGE_ERRORS, nullptr, nullptr)) return true;
-        // ERROR_UNABLE_TO_MOVE_REPLACEMENT_2: o destino ja virou .bak e o temporario nao entrou
-        if (!fs::exists(dst, ec) && fs::exists(bak, ec))
-            return MoveFileExW(tmp.c_str(), dst.c_str(), MOVEFILE_WRITE_THROUGH) != 0;
-        return false;
+        return io::replace_keep_backup(dst, tmp, bak);
     }
 
     fs::path              root_;
@@ -272,7 +257,7 @@ SaveError export_vms(ISaveStore& s, int unit, std::string_view name, const fs::p
         if (!f.flush()) return SaveError::Io;
     }
     // troca so com o arquivo inteiro: um destino existente nunca fica pela metade
-    if (!MoveFileExW(tmp.c_str(), out.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
+    if (!io::move_replace(tmp, out)) {
         std::error_code ec;
         fs::remove(tmp, ec);
         return SaveError::Io;

@@ -1,8 +1,13 @@
 # Nucleo do executavel (sem janela): execucao do jogo numa thread, ritmo e quadros.
 add_library(bs_app_core STATIC game_host.cpp assist.cpp
             subtitle_overlay.cpp   # N7c: legendas das falas por cima do gameplay
-            settings_menu.cpp      # N7c: modelo do menu interno de configuracoes
-            menu_overlay.cpp)      # N7c: desenho do menu (Direct2D/DirectWrite)
+            settings_menu.cpp)     # N7c: modelo do menu interno de configuracoes
+# N7c: desenho do menu (Direct2D/DirectWrite no Windows)
+if(WIN32)
+  target_sources(bs_app_core PRIVATE menu_overlay.cpp)
+else()
+  target_sources(bs_app_core PRIVATE menu_overlay_posix.cpp)
+endif()
 target_include_directories(bs_app_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(bs_app_core PUBLIC bs_runtime bs_transitional bs_video_adapter bs_sound_adapter bs_native_localization
                       bs_native_video PRIVATE $<$<PLATFORM_ID:Windows>:d2d1;dwrite;windowscodecs;ole32>)
@@ -44,7 +49,7 @@ if(BS_BUILD_GAME AND TARGET bs_generated)
   configure_file(bs_version.h.in ${CMAKE_CURRENT_BINARY_DIR}/bs_version.h @ONLY)
 
   # Subsistema grafico (sem janela de console); a entrada continua sendo main().
-  add_executable(bluestinger WIN32 main_sdl.cpp window_present.cpp)  # N7c: apresentacao Vulkan direta ou SDL
+  add_executable(bluestinger WIN32 main_sdl.cpp window_present.cpp platform_${BS_PLAT}.cpp)  # N7c: apresentacao Vulkan direta ou SDL
   if(WIN32)
     # Icone do executavel: o original do projeto (app/res, desenho de tools/dev/gerar_icone.py) ou, se existir,
     # icone-local/bluestinger.ico, feito da capa do proprio usuario (gerar_icone.py --capa). Esse fica fora do git e

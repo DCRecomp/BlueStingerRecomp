@@ -1,15 +1,15 @@
 #pragma once
-// N5 (docs/N5-PLANO.md): leitura dos filmes do disco para a conversao do Builder. O SFD (Sofdec) e
+// N5 (docs/N5-PLANO.md): leitura dos filmes do disco. O SFD (Sofdec) e
 // um MPEG-1 Program Stream com o video MPEG-1 no stream 0xE0 e o audio ADX no stream 0xC0. Aqui
 // so o demux e o decodificador ADX (formato publico: blocos de 18 bytes, preditor de 2 coeficientes);
-// a decodificacao MPEG-1 de referencia e a codificacao em MP4 ficam em outras unidades. Nada disso
-// vai para o executavel do jogo: o runtime so le os MP4 convertidos (native/video).
+// a decodificacao MPEG-1 e a codificacao em MP4 ficam em outras unidades. No Windows isto so serve ao
+// Builder, e o jogo le os MP4 convertidos. No Linux (N9-L) o jogo toca os SFD (sfd_movie.cpp).
 #include <cstdint>
 #include <span>
 #include <string>
 #include <vector>
 
-namespace bs::builder::video {
+namespace bs::native::video {
 
 struct SfdStreams {
     std::vector<uint8_t> video;  // elementary stream MPEG-1 (0xE0), em ordem
@@ -39,4 +39,8 @@ void adx_coefficients(uint32_t highpass, uint32_t sampleRate, int32_t& coef1, in
 // Codificador simples (so testes e amostras sinteticas): versao 3, blocos de 18 bytes, corte 500 Hz.
 std::vector<uint8_t> adx_encode(std::span<const int16_t> pcm, uint8_t channels, uint32_t sampleRate);
 
+} // namespace bs::native::video
+
+namespace bs::builder::video {
+using namespace native::video;
 } // namespace bs::builder::video

@@ -1,5 +1,6 @@
 #include "cpu/sh4_threads.h"
 
+#include "cpu/host_fiber.h"
 #include "cpu/sh4_runtime.h"
 #include "cpu/time_hooks.h"
 #include "debug/event_trace.h"
@@ -11,9 +12,6 @@
 #include <exception>
 #include <utility>
 #include <vector>
-
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
 
 namespace bs {
 namespace {
@@ -51,20 +49,9 @@ bool debugOn() {
 void ensureMain(Sh4Context* c) {
     if (!g_threads.empty()) return;
     Thread t;
-    // FLOAT_SWITCH: XMM6-XMM15 sao preservados entre chamadas na ABI x64 e podem estar
-    // vivos numa fibra suspensa (revisao Codex 2026-10-14)
-    // a thread do host ja pode ser fibra (de quem a criou); senao, e convertida aqui. Falha
-    // na conversao e erro (sem fibra nao ha troca de threads), nunca "ja era fibra"
-    // (revisao Codex 2026-10-14)
-    if (IsThreadAFiber()) {
-        t.fiber     = GetCurrentFiber();
-        g_converted = false;
-    } else {
-        t.fiber = ConvertThreadToFiberEx(nullptr, FIBER_FLAG_FLOAT_SWITCH);
-        if (!t.fiber)
-            sh4_fatal(c, "nao foi possivel converter a thread do host em fibra", 0, uint32_t(GetLastError()));
-        g_converted = true;
-    }
+    uint32_t error = 0;
+    t.fiber = host::fiber_adopt(&g_converted, &error);
+    if (!t.fiber) sh4_fatal(c, "nao foi possivel converter a thread do host em fibra", 0, error);
     g_threads.push_back(t);
 }
 
@@ -87,7 +74,7 @@ void switchTo(Sh4Context* c, size_t next) {
     c->ret_expect     = n.retExpect;
     c->ret_sp         = n.retSp;
     c->cur_fn         = n.curFn;
-    SwitchToFiber(n.fiber);
+    host::fiber_switch(n.fiber);
     // retomada: alguem fez rte para resumePc/resumeSp desta thread (ou uma fibra que
     // terminou com erro devolveu o controle a thread 0)
     g_current                 = self;
@@ -102,7 +89,7 @@ void switchTo(Sh4Context* c, size_t next) {
     if (g_pending) std::rethrow_exception(std::exchange(g_pending, nullptr));
 }
 
-void WINAPI fiberMain(void* arg) {
+void fiberMain(void* arg) {
     const size_t self = size_t(reinterpret_cast<uintptr_t>(arg));
     Sh4Context*  c    = g_ctx;
     sh4_apply_host_fp_mode(c->fpscr);
@@ -116,7 +103,7 @@ void WINAPI fiberMain(void* arg) {
         g_pending = std::current_exception();
     }
     g_current = 0;
-    SwitchToFiber(g_threads[0].fiber);  // a thread 0 relanca; esta fibra nao volta
+    host::fiber_switch(g_threads[0].fiber);  // a thread 0 relanca; esta fibra nao volta
 }
 
 
@@ -128,8 +115,7 @@ void startThread(Sh4Context* c, uint32_t pc, uint32_t target) {
     t.retExpect = 0xFFFFFFFF;  // a funcao de entrada nunca retorna
     t.retSp     = sp;
     const size_t id = g_threads.size();
-    t.fiber = CreateFiberEx(64 << 10, 8u << 20, FIBER_FLAG_FLOAT_SWITCH, fiberMain,
-                            reinterpret_cast<void*>(uintptr_t(id)));
+    t.fiber = host::fiber_create(8u << 20, fiberMain, reinterpret_cast<void*>(uintptr_t(id)));
     if (!t.fiber) sh4_fatal(c, "nao foi possivel criar fibra para thread do guest", pc, target);
     ++g_liveFibers;
     g_threads.push_back(t);
@@ -152,11 +138,11 @@ bool sh4_threads_shutdown() {
     // as fibras suspensas so tem quadros do codigo recompilado (sem destrutores pendentes)
     for (size_t i = 1; i < g_threads.size(); ++i)
         if (g_threads[i].fiber) {
-            DeleteFiber(g_threads[i].fiber);
+            host::fiber_delete(g_threads[i].fiber);
             --g_liveFibers;
         }
-    // desfaz a conversao (libera o que ConvertThreadToFiberEx alocou); falha e relatada
-    const bool converted = !g_converted || ConvertFiberToThread();
+    // desfaz a conversao; falha e relatada
+    const bool converted = !g_converted || host::fiber_release_thread();
     g_threads.clear();
     g_converted = false;
     g_pending   = nullptr;

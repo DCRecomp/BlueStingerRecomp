@@ -108,6 +108,8 @@ std::unique_ptr<KeyEventInput> make_key_event_input(const std::string& mapping =
 
 // Primeiro controle XInput conectado (porta 0); sem controle, estado neutro.
 std::unique_ptr<InputSource> make_xinput_input();
+// Tecla apertada agora, pelo codigo de tecla virtual do Windows (input_host_*.cpp; no Linux, sempre falso).
+bool host_key_down(int vk);
 
 // Combina fontes: botoes por OU; analogico e gatilhos da primeira fonte fora do neutro.
 std::unique_ptr<InputSource> make_combined_input(std::vector<std::unique_ptr<InputSource>> sources);

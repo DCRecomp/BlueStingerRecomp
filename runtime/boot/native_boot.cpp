@@ -134,9 +134,14 @@ uint32_t boot_rtc_now() {
     constexpr int64_t kEpochDelta = 7305ll * 86400;
     std::time_t       t           = std::time(nullptr);
     std::tm           local{};
-    localtime_s(&local, &t);
     // o RTC do Dreamcast guarda a hora local (configurada pelo usuario no BIOS)
-    const int64_t localSecs = int64_t(t) + int64_t(_mkgmtime(&local) - t);
+#ifdef _WIN32
+    localtime_s(&local, &t);
+    const int64_t localSecs = int64_t(_mkgmtime(&local));
+#else
+    localtime_r(&t, &local);
+    const int64_t localSecs = int64_t(timegm(&local));
+#endif
     return uint32_t(localSecs + kEpochDelta);
 }
 

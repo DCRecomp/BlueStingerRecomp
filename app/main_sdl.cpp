@@ -14,6 +14,7 @@
 #include "runtime_data.h"
 #include "assist.h"
 #include "bs_version.h"
+#include "platform.h"
 #include "disc/disc_image.h"
 #include "funcs.h"
 #include "game_host.h"
@@ -54,12 +55,6 @@
 #include <string>
 #include <vector>
 
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
-#include <shellapi.h>
-#include <shlobj.h>
-#pragma comment(lib, "shell32.lib")  // SHGetKnownFolderPath (pasta dos saves)
-#pragma comment(lib, "ole32.lib")    // CoTaskMemFree
 
 namespace fs = std::filesystem;
 namespace ni = bs::native::input;
@@ -120,21 +115,10 @@ struct Args {
 
 std::string utf8(const fs::path& p) { return bs::disc::pathText(p); }
 
-std::string narrow(const std::wstring& w) {
-    if (w.empty()) return {};
-    const int n = WideCharToMultiByte(CP_UTF8, 0, w.data(), int(w.size()), nullptr, 0, nullptr, nullptr);
-    std::string s(size_t(n), '\0');
-    WideCharToMultiByte(CP_UTF8, 0, w.data(), int(w.size()), s.data(), n, nullptr, nullptr);
-    return s;
-}
+std::string narrow(const std::wstring& w) { return bs::platform::to_utf8(w); }
 
-// Argumentos em UTF-16 (o argv de main usa a pagina de codigo ANSI e perde caracteres).
 bool parseArgs(Args& a) {
-    int       argc  = 0;
-    LPWSTR*   wargv = CommandLineToArgvW(GetCommandLineW(), &argc);
-    if (!wargv) return false;
-    std::vector<std::wstring> args(wargv + 1, wargv + argc);
-    LocalFree(wargv);
+    const std::vector<std::wstring> args = bs::platform::command_line();
     for (size_t i = 0; i < args.size(); ++i) {
         const std::wstring& s    = args[i];
         auto                next = [&]() -> const std::wstring* { return i + 1 < args.size() ? &args[++i] : nullptr; };
@@ -145,7 +129,7 @@ bool parseArgs(Args& a) {
         else if (s == L"--capture" && (v = next())) a.capture = *v;
         else if (s == L"--dump-every" && (v = next())) a.dumpEvery = std::wcstoull(v->c_str(), nullptr, 10);
         else if (s == L"--headless" && (v = next())) a.headless = std::wcstoull(v->c_str(), nullptr, 10);
-        else if (s == L"--scale" && (v = next())) a.scale = _wtoi(v->c_str());
+        else if (s == L"--scale" && (v = next())) a.scale = int(std::wcstol(v->c_str(), nullptr, 10));
         else if (s == L"--data" && (v = next())) a.gameData = *v;
         else if (s == L"--arquivos" && (v = next())) {
             if (*v == L"nativo") a.files = bs::FilesProvider::Native;
@@ -262,23 +246,9 @@ bool parseArgs(Args& a) {
     return a.scale >= 1 && a.scale <= 8;
 }
 
-std::wstring widen(const std::string& s) {
-    if (s.empty()) return {};
-    const int    n = MultiByteToWideChar(CP_UTF8, 0, s.data(), int(s.size()), nullptr, 0);
-    std::wstring w(size_t(n), L'\0');
-    MultiByteToWideChar(CP_UTF8, 0, s.data(), int(s.size()), w.data(), n);
-    return w;
-}
+void nativeBox(const std::string& msg, bs::platform::BoxKind kind) { bs::platform::message_box(kTitle, msg, kind); }
 
-// Caixa de mensagem nativa (antes do SDL ou se ele falhar), em UTF-16.
-void nativeBox(const std::string& msg, UINT icon) { MessageBoxW(nullptr, widen(msg).c_str(), widen(kTitle).c_str(), icon); }
-
-fs::path exeDir() {
-    std::wstring buf(32768, L'\0');
-    const DWORD  n = GetModuleFileNameW(nullptr, buf.data(), DWORD(buf.size()));
-    buf.resize(n);
-    return fs::path(buf).parent_path();
-}
+fs::path exeDir() { return bs::platform::exe_dir(); }
 
 // Pasta dos arquivos do usuario (log): ao lado do executavel se der para gravar la; senao
 // %LOCALAPPDATA%\BlueStingerRecomp. (Os dados do jogo ficam em data/, so leitura.)
@@ -306,48 +276,15 @@ fs::path userDir() {
             return here;
         }
     }
-    const wchar_t* local = _wgetenv(L"LOCALAPPDATA");
-    fs::path       d     = local ? fs::path(local) / L"BlueStingerRecomp" : here;
+    const fs::path d = bs::platform::user_data_dir();
     fs::create_directories(d, ec);
     return d;
-}
-
-// Sem console (subsistema grafico) e sem redirecionamento pelo processo pai: stdout e
-// stderr vao para bluestinger.log.
-void setupLog(const fs::path& dir) {
-    const HANDLE h = GetStdHandle(STD_ERROR_HANDLE);
-    if (h && h != INVALID_HANDLE_VALUE) return;  // saida redirecionada (testes, scripts)
-    // o arquivo e zerado uma vez e as duas streams abrem em modo de acrescimo: cada escrita
-    // vai para o fim do arquivo, entao stdout e stderr nao se sobrescrevem (no subsistema
-    // grafico as streams comecam sem descritor; as duas precisam ser reabertas)
-    // Compartilhado (_SH_DENYNO): as variantes _s (_wfreopen_s) abrem sem compartilhar, entao
-    // a segunda abertura (stdout) falhava, deixava a stream invalida e o primeiro printf
-    // abortava o processo por parametro invalido. Tambem permite ler o log com o jogo aberto.
-    const fs::path log = dir / L"bluestinger.log";
-    FILE*          t   = _wfsopen(log.c_str(), L"w", _SH_DENYNO);  // zera o arquivo
-    if (!t) return;
-    std::fclose(t);
-    // _wfreopen (sem _s) reassocia as proprias streams e abre compartilhado, como fopen; no
-    // subsistema grafico stdout/stderr comecam sem descritor, entao reabrir e o caminho
-#pragma warning(suppress : 4996)
-    const bool errOk = _wfreopen(log.c_str(), L"a", stderr) != nullptr;
-#pragma warning(suppress : 4996)
-    const bool outOk = _wfreopen(log.c_str(), L"a", stdout) != nullptr;
-    if (errOk) std::setvbuf(stderr, nullptr, _IONBF, 0);
-    if (outOk) std::setvbuf(stdout, nullptr, _IONBF, 0);
 }
 
 // Falhas que encerram o processo sem mensagem (parametro invalido do CRT, std::terminate)
 // ficam registradas no log antes de abortar.
 void setupCrashLog() {
-    _set_invalid_parameter_handler([](const wchar_t* expr, const wchar_t* func, const wchar_t* file, unsigned line,
-                                      uintptr_t) {
-        std::fprintf(stderr, "ERRO FATAL: parametro invalido no CRT: %s em %s (%s:%u)\n",
-                     narrow(expr ? expr : L"?").c_str(), narrow(func ? func : L"?").c_str(),
-                     narrow(file ? file : L"?").c_str(), line);
-        std::fflush(stderr);
-        std::abort();
-    });
+    bs::platform::log_runtime_failures();
     std::set_terminate([] {
         std::fprintf(stderr, "ERRO FATAL: std::terminate (excecao nao tratada)\n");
         std::fflush(stderr);
@@ -1384,16 +1321,12 @@ fs::path savesRoot(const Args& a) {
     }
     if (a.headless && a.savesImport.empty() && a.savesExport.empty()) {
         if (g_tempSaves.dir.empty())
-            g_tempSaves.dir = fs::temp_directory_path() / (L"bs-saves-headless-" + std::to_wstring(GetCurrentProcessId()));
+            g_tempSaves.dir = fs::temp_directory_path() / (L"bs-saves-headless-" + std::to_wstring(bs::platform::process_id()));
         std::error_code ec;
         fs::remove_all(g_tempSaves.dir, ec);
         return g_tempSaves.dir;
     }
-    PWSTR docs = nullptr;
-    fs::path root;
-    if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_Documents, KF_FLAG_CREATE, nullptr, &docs)) && docs)
-        root = fs::path(docs) / L"DC-Recomp" / L"Blue Stinger" / L"saves";
-    CoTaskMemFree(docs);
+    fs::path root = bs::platform::default_saves_dir();
     if (root.empty()) {
         root = userDir() / L"saves";
         std::fprintf(stderr, "[saves] pasta Documentos indisponivel: usando %s\n", utf8(root).c_str());
@@ -1484,10 +1417,10 @@ int mainHeadless(Args& a) {
     std::unique_ptr<bs::Assist>      assist;
     std::unique_ptr<ni::InputSystem> input;
     std::string                      warning;  // sem janela: nao ha mapa de usuario a avisar
-    if (const wchar_t* dir = _wgetenv(L"BS_ASSISTIDO"); dir && *dir) {
+    if (const auto dir = bs::platform::env(L"BS_ASSISTIDO"); dir && !dir->empty()) {
         if (std::getenv("BS_INPUT_SCRIPT")) throw std::runtime_error("BS_ASSISTIDO e BS_INPUT_SCRIPT sao exclusivos");
         std::shared_ptr<bs::LiveScriptInput> live = bs::make_live_script_input();
-        assist = std::make_unique<bs::Assist>(fs::path(dir), live.get());
+        assist = std::make_unique<bs::Assist>(fs::path(*dir), live.get());
         input  = setupInput(a, false, warning, live);
     }
     else input = setupInput(a, false, warning);
@@ -1555,7 +1488,7 @@ int mainVerifyData(const Args& a) {
 }
 
 int mainWindow(Args& a) {
-    if (const wchar_t* dir = _wgetenv(L"BS_ASSISTIDO"); dir && *dir) {
+    if (const auto dir = bs::platform::env(L"BS_ASSISTIDO"); dir && !dir->empty()) {
         std::fprintf(stderr, "erro: BS_ASSISTIDO exige --headless\n");
         return 2;
     }
@@ -1563,13 +1496,13 @@ int mainWindow(Args& a) {
     std::string err;
     if (!validateData(a.gameData, a.files, err)) {
         std::fprintf(stderr, "erro: %s\n", err.c_str());
-        nativeBox("Os dados do jogo nao puderam ser carregados.\n\n" + err, MB_ICONERROR);
+        nativeBox("Os dados do jogo nao puderam ser carregados.\n\n" + err, bs::platform::BoxKind::Error);
         return 1;
     }
     if (!SDL_Init(SDL_INIT_VIDEO)) {
         const std::string msg = std::string("nao foi possivel iniciar o video: ") + SDL_GetError();
         std::fprintf(stderr, "erro: %s\n", msg.c_str());
-        nativeBox(msg, MB_ICONERROR);
+        nativeBox(msg, bs::platform::BoxKind::Error);
         return 1;
     }
     const std::string title = std::string(kTitle) + " " + BS_VERSION;
@@ -1631,9 +1564,9 @@ int mainWindow(Args& a) {
     }
     if (!warning.empty()) {
         std::fprintf(stderr, "aviso: %s\n", warning.c_str());
-        nativeBox(warning, MB_ICONWARNING);
+        nativeBox(warning, bs::platform::BoxKind::Warning);
     }
-    if (const wchar_t* rec = _wgetenv(L"BS_GRAVAR"); rec && *rec) {
+    if (const auto rec = bs::platform::env(L"BS_GRAVAR"); rec && !rec->empty()) {
         const char* why = g_spectator.on ? "BS_GRAVAR e BS_INPUT_SCRIPT sao exclusivos"
                           : a.time == bs::TimeProviderKind::Legacy ? "BS_GRAVAR exige --tempo nativo ou experimental (roteiro por passo)"
                                                                    : nullptr;
@@ -1643,10 +1576,10 @@ int mainWindow(Args& a) {
             return 2;
         }
         g_recorder      = std::make_unique<Recorder>();
-        g_recorder->dir = fs::path(rec).parent_path();
-        g_recorder->f   = _wfopen(rec, L"w");
+        g_recorder->dir = fs::path(*rec).parent_path();
+        g_recorder->f   = bs::platform::open_for_write(*rec);
         if (!g_recorder->f) {
-            std::fprintf(stderr, "erro: BS_GRAVAR: nao abre %s\n", utf8(rec).c_str());
+            std::fprintf(stderr, "erro: BS_GRAVAR: nao abre %s\n", utf8(fs::path(*rec)).c_str());
             cleanup();
             return 2;
         }
@@ -1669,7 +1602,7 @@ int mainWindow(Args& a) {
             return 2;
         }
         input->set_filter([](const ni::SampleContext&, const ni::ControllerState& s) { return g_recorder->rec->filter(s); });
-        std::printf("[gravacao] gravando em %s\n", utf8(rec).c_str());
+        std::printf("[gravacao] gravando em %s\n", utf8(fs::path(*rec)).c_str());
     }
     // N7c: preferencias do menu interno (pasta do usuario). Precedencia: linha de comando > estes arquivos >
     // instalacao.toml > padroes (software; legendas en-US ligadas; volumes 100).
@@ -1796,7 +1729,7 @@ int main(int, char**) {
     // N8.0). Este e o primeiro atexit do main, logo o ultimo deles a rodar: pega o que os relatorios registrados depois
     // escreverem. Quem escreve em destrutor estatico fica fora dele.
     const int exitFlush = std::atexit([] { std::fflush(nullptr); });
-    setupLog(userDir());
+    bs::platform::redirect_output(userDir() / L"bluestinger.log");
     setupCrashLog();
     if (exitFlush != 0) {
         std::fprintf(stderr, "erro: nao foi possivel registrar o esvaziamento da saida no encerramento\n");
@@ -1805,7 +1738,7 @@ int main(int, char**) {
     Args a;
     if (!parseArgs(a)) {
         std::fprintf(stderr, "%s", kUsage);
-        nativeBox(kUsage, MB_ICONINFORMATION);
+        nativeBox(kUsage, bs::platform::BoxKind::Info);
         return 2;
     }
     if (a.cameraMode == int(st::CameraMode::Original) && editionProfile().free_camera_required) {  // o resto le o perfil ao usar
@@ -1886,7 +1819,7 @@ int main(int, char**) {
     }
     if (!a.positional.empty()) {  // antes era a imagem CDI: explica em vez de ignorar
         std::fprintf(stderr, "erro: argumento %s nao e usado.\n%s\n", utf8(a.positional).c_str(), kNoCdi);
-        if (!a.headless && !a.verifyData) nativeBox(kNoCdi, MB_ICONINFORMATION);
+        if (!a.headless && !a.verifyData) nativeBox(kNoCdi, bs::platform::BoxKind::Info);
         return 2;
     }
     if (a.gameData.empty()) a.gameData = exeDir() / L"data";
@@ -1901,7 +1834,7 @@ int main(int, char**) {
         return a.headless ? mainHeadless(a) : mainWindow(a);
     } catch (const std::exception& e) {
         std::fprintf(stderr, "erro: %s\n", e.what());
-        if (!a.headless) nativeBox(e.what(), MB_ICONERROR);
+        if (!a.headless) nativeBox(e.what(), bs::platform::BoxKind::Error);
         return 1;
     }
 }

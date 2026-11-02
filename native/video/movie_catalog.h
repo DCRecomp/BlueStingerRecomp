@@ -32,6 +32,7 @@ struct MovieEntry {
 struct CatalogOptions {
     std::filesystem::path dataDir;  // data\video (manifesto do Builder)
     std::filesystem::path modsDir;  // mods\video (opcional)
+    std::filesystem::path discDir;  // pasta dos SFD do disco, para quem os toca direto (opcional; so o nome original conta)
 };
 
 class MovieCatalog {

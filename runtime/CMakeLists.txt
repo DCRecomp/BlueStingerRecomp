@@ -19,6 +19,7 @@ add_library(bs_rt_aot OBJECT
   cpu/sh4_context.cpp
   cpu/sh4_runtime.cpp
   cpu/sh4_threads.cpp
+  cpu/host_fiber_${BS_PLAT}.cpp
   memory/memory.cpp
   mods/mod_api.cpp
 )
@@ -52,7 +53,7 @@ list(APPEND BS_RT_PAPEIS nativo)
 add_library(bs_rt_simulacao OBJECT
   memory/sh4_sq.cpp
   pvr/pvr_texture.cpp
-  input/input.cpp
+  input/input.cpp input/input_host_${BS_PLAT}.cpp
   boot/native_boot.cpp
 )
 list(APPEND BS_RT_PAPEIS simulacao)

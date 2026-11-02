@@ -6,7 +6,7 @@
 #include <numbers>
 #include <string_view>
 
-namespace bs::builder::video {
+namespace bs::native::video {
 
 namespace {
 
@@ -187,4 +187,4 @@ std::vector<uint8_t> adx_encode(std::span<const int16_t> pcm, uint8_t channels, 
     return out;
 }
 
-} // namespace bs::builder::video
+} // namespace bs::native::video

@@ -13,12 +13,6 @@
 #include <cstring>
 #include <stdexcept>
 
-#ifdef _WIN32
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#include <windows.h>
-#endif
 
 namespace bs::transitional::cri {
 namespace {
@@ -42,37 +36,16 @@ uint64_t epoch() {
 
 } // namespace
 
-#ifdef _WIN32
-uint8_t* alloc_watched_ram(size_t bytes) {
-    void* p = VirtualAlloc(nullptr, bytes, MEM_RESERVE | MEM_COMMIT | MEM_WRITE_WATCH, PAGE_READWRITE);
-    if (!p)
-        throw std::runtime_error("tempo experimental: o sistema nao ofereceu memoria com rastreamento de escrita "
-                                 "(MEM_WRITE_WATCH); use --tempo nativo");
-    return static_cast<uint8_t*>(p);
-}
-void free_watched_ram(uint8_t* ram) {
-    if (ram) VirtualFree(ram, 0, MEM_RELEASE);
-}
-#else
-uint8_t* alloc_watched_ram(size_t) {
-    throw std::runtime_error("tempo experimental: rastreamento de escrita so no Windows; use --tempo nativo");
-}
-void free_watched_ram(uint8_t*) {}
-#endif
-
 IdleDetector::IdleDetector(uint8_t* ram, size_t bytes, bool ignoreRam)
     : ram_(ram), bytes_(bytes), ignoreRam_(ignoreRam), shadow_(bytes), pages_(bytes / 4096 + 1) {}
 
 // Compara as paginas escritas desde a ultima visita com a copia (palavra a palavra, fora das
 // exclusoes) e atualiza a copia. Devolve true se algum valor mudou.
 bool IdleDetector::ramChanged(uint32_t spLo, uint32_t spHi) {
-#ifdef _WIN32
-    ULONG_PTR count = pages_.size();
-    ULONG     gran  = 0;
-    if (GetWriteWatch(WRITE_WATCH_FLAG_RESET, ram_, bytes_, pages_.data(), &count, &gran) != 0)
-        throw std::runtime_error("tempo experimental: GetWriteWatch falhou");
+    size_t       gran  = 0;
+    const size_t count = watch_pages(ram_, shadow_.data(), bytes_, pages_, &gran);
     bool changed = false;
-    for (ULONG_PTR i = 0; i < count; ++i) {
+    for (size_t i = 0; i < count; ++i) {
         const size_t off = static_cast<uint8_t*>(pages_[i]) - ram_;
         const size_t len = std::min<size_t>(gran, bytes_ - off);
         ++stats_.dirtyPages;
@@ -89,10 +62,6 @@ bool IdleDetector::ramChanged(uint32_t spLo, uint32_t spHi) {
         std::memcpy(shadow_.data() + off, ram_ + off, len);
     }
     return changed;
-#else
-    (void)spLo, (void)spHi;
-    return true;
-#endif
 }
 
 bool IdleDetector::idle(const Sh4Context* c) {
@@ -101,9 +70,7 @@ bool IdleDetector::idle(const Sh4Context* c) {
     const EffectCounters fx = g_effects;
     if (!primed_) {
         std::memcpy(shadow_.data(), ram_, bytes_);
-#ifdef _WIN32
-        ResetWriteWatch(ram_, bytes_);
-#endif
+        watch_reset(ram_, bytes_);
         primed_ = true;
         epoch_ = e, hw_ = fx.hwWrites, sq_ = fx.sqFlushes, host_ = fx.hostWrites, gd_ = gd, tmu_ = tmu;
         return false;
