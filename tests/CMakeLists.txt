@@ -1,4 +1,3 @@
-enable_language(ASM_MASM)
 add_executable(bs_unit_tests
   unit/main.cpp
   unit/test_skeleton.cpp
@@ -24,12 +23,10 @@ add_executable(bs_unit_tests
   unit/test_tmu.cpp
   unit/test_input.cpp
   unit/test_app.cpp
-  unit/test_builder.cpp
   unit/test_runtime_data.cpp
   unit/test_mods.cpp
   unit/test_n0.cpp
   unit/test_transitional.cpp
-  unit/test_n1.cpp
   unit/test_n2.cpp
   unit/test_pad_contract.cpp
   unit/test_input_native.cpp
@@ -43,15 +40,22 @@ add_executable(bs_unit_tests
   unit/test_n84_perifericos.cpp   # N8.4: barramento de perifericos sem dispositivos
   unit/test_n85_filmes.cpp   # N8.5: filme legado e conversor YUV fora do produto
   unit/test_n86_som.cpp   # N8.6: area de som sem AICA
-  unit/xmm_probe.asm   # XMM6-XMM15 atraves de trocas de fibra (MASM)
 )
-target_link_libraries(bs_unit_tests PRIVATE bs_translator bs_runtime bs_disc bs_app_core bs_builder_core bs_hwscan bs_transitional)
+target_link_libraries(bs_unit_tests PRIVATE bs_translator bs_runtime bs_disc bs_app_core bs_hwscan bs_transitional)
+if(WIN32)
+  enable_language(ASM_MASM)
+  target_sources(bs_unit_tests PRIVATE unit/test_builder.cpp unit/test_n1.cpp
+                 unit/xmm_probe.asm)   # XMM6-XMM15 atraves de trocas de fibra (MASM)
+  target_link_libraries(bs_unit_tests PRIVATE bs_builder_core)
+endif()
 
 # N5: unitarios dos filmes (so native/video e a conversao; build leve, sem o runtime)
+if(WIN32)
 add_executable(bs_video_tests unit/main.cpp unit/test_video_native.cpp unit/test_video_audio.cpp unit/test_video_subs.cpp unit/test_video_mw.cpp unit/test_video_fixes.cpp unit/test_video_adapter.cpp unit/test_video_build.cpp unit/test_video_mods.cpp unit/test_video_slot.cpp unit/test_video_decoder.cpp)
 target_include_directories(bs_video_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/unit)
 target_link_libraries(bs_video_tests PRIVATE bs_native_video bs_native_audio bs_video_convert bs_video_mw bs_video_adapter)
 add_test(NAME video COMMAND bs_video_tests)
+endif()
 
 # N6: audio de gameplay portavel, sem o jogo nem dispositivo de audio
 add_executable(bs_audio_tests unit/main.cpp unit/test_audio_native.cpp unit/test_audio_sd.cpp unit/test_audio_sosb.cpp
@@ -124,10 +128,12 @@ if(BS_VALIDACAO)
 endif()
 
 # Interface do recompilador (catalogo de textos, configuracao da instalacao, troca da instalacao)
+if(WIN32)
 add_executable(bs_ui_tests unit/main.cpp unit/test_ui.cpp unit/test_builder.cpp unit/test_dev_inspect.cpp)
 target_include_directories(bs_ui_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/unit)
 target_link_libraries(bs_ui_tests PRIVATE bs_builder_core bs_builder_ui bs_native tomlplusplus::tomlplusplus)
 add_test(NAME ui COMMAND bs_ui_tests)
+endif()
 
 # Usa a imagem do usuario se BS_DISC_IMAGE estiver definido; senao, SKIP.
 add_executable(bs_real_disc_test data/test_real_disc.cpp)
@@ -210,20 +216,30 @@ endif()
 
 # Sem janelas modais (assert do CRT de Debug, abort, falha de acesso): o teste falha no stderr em vez de
 # esperar um clique e prender o ctest/regressao (tests/sem_dialogos.cpp).
-foreach(t bs_unit_tests bs_video_tests bs_ui_tests bs_audio_tests bs_localization_tests bs_real_disc_test bs_runtime_data_test bs_analysis_real_test
+set(_bs_dialogos bs_unit_tests bs_audio_tests bs_localization_tests bs_real_disc_test bs_runtime_data_test bs_analysis_real_test
           bs_fixture_gen bs_codegen_exec_0 bs_codegen_exec_1 bs_render_tests)
+if(WIN32)
+  list(APPEND _bs_dialogos bs_video_tests bs_ui_tests)
+endif()
+foreach(t ${_bs_dialogos})
   target_sources(${t} PRIVATE sem_dialogos.cpp)
 endforeach()
 # A prova: falha de proposito (assert do vetor no Debug, abort no Release); passa so se a mensagem chegar a saida
 # dentro do limite (com a janela modal, estouraria o tempo)
+if(WIN32)
 add_executable(bs_sem_dialogos_prova sem_dialogos_prova.cpp sem_dialogos.cpp)
 add_test(NAME sem_dialogos COMMAND bs_sem_dialogos_prova)
 set_tests_properties(sem_dialogos PROPERTIES TIMEOUT 60
                      PASS_REGULAR_EXPRESSION "vector subscript out of range|sem_dialogos: abort \\(Release\\)")
+endif()
 
 # Limite de tempo por teste (s), pela duracao medida em 2026-10-20 (com disco; entre parenteses) com folga larga:
 # so pega travamento. O preset do ctest da 900 s aos testes sem limite proprio.
-set_tests_properties(unit video ui PROPERTIES TIMEOUT 300)                   # (6,7 s / 2,7 s / 5,2 s)
+set_tests_properties(unit PROPERTIES TIMEOUT 300)
+if(WIN32)
+  set_tests_properties(video ui PROPERTIES TIMEOUT 300)
+endif()
+#                   # (6,7 s / 2,7 s / 5,2 s)
 set_tests_properties(audio localization PROPERTIES TIMEOUT 300)                         # (< 1 s)
 set_tests_properties(render PROPERTIES TIMEOUT 300)                          # (4,4 s no Debug, 2026-10-25)
 set_tests_properties(real_disc codegen_exec_0 codegen_exec_1 n0_native_api n0_native_limpo PROPERTIES TIMEOUT 120)  # (< 0,2 s)

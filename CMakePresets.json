@@ -16,7 +16,7 @@
     { "name": "clang-debug",   "inherits": "base", "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug",   "CMAKE_C_COMPILER": "clang-cl", "CMAKE_CXX_COMPILER": "clang-cl", "BS_VALIDACAO": "ON" } },
     { "name": "clang-release", "inherits": "base", "cacheVariables": { "CMAKE_BUILD_TYPE": "Release", "CMAKE_C_COMPILER": "clang-cl", "CMAKE_CXX_COMPILER": "clang-cl" } },
     { "name": "linux-base", "hidden": true, "inherits": "base", "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Linux" },
-      "cacheVariables": { "CMAKE_C_COMPILER": "clang", "CMAKE_CXX_COMPILER": "clang++", "CMAKE_EXE_LINKER_FLAGS": "-fuse-ld=lld", "BS_BUILD_TESTS": "OFF" } },
+      "cacheVariables": { "CMAKE_C_COMPILER": "clang", "CMAKE_CXX_COMPILER": "clang++", "CMAKE_EXE_LINKER_FLAGS": "-fuse-ld=lld" } },
     { "name": "linux-debug",    "inherits": "linux-base", "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug", "BS_VALIDACAO": "ON" } },
     { "name": "linux-release",  "inherits": "linux-base", "cacheVariables": { "CMAKE_BUILD_TYPE": "Release", "BS_BUILD_GAME": "ON" } },
     { "name": "linux-validacao", "inherits": "linux-base", "cacheVariables": { "CMAKE_BUILD_TYPE": "Release", "BS_VALIDACAO": "ON", "BS_BUILD_GAME": "ON" } }

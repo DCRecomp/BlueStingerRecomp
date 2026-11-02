@@ -294,7 +294,7 @@ foreach(l ${linhas})
 endforeach()
 # contagem exata (revisao Codex N8.3): um objeto novo de simulacao ou de validacao nao passa sem atualizar a catraca
 if(VALIDACAO)
-  set(n_esperado 47)  # N8.7: + pvr_render_ta, pvr_texel, ta_yuv, gfx_probe (fase 0)
+  set(n_esperado 49)  # N8.7: + pvr_render_ta, pvr_texel, ta_yuv, gfx_probe (fase 0)
 else()
   set(n_esperado 35)
 endif()

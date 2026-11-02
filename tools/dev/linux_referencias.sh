@@ -19,7 +19,7 @@ cp "$src/build/linux-release/app/bluestinger" "$inst/BlueStinger"
 cd "$repo"; export PYTHONDONTWRITEBYTECODE=1
 rodar() {
     local nome=$1; shift
-    python3 -u tools/dev/n8_referencias.py conferir --exe "$inst/BlueStinger" --data "$base/data" "$@" > "$refs/$nome.txt" 2>&1
+    python3 -u tools/dev/n8_referencias.py conferir --exe "$inst/BlueStinger" --data "$base/data" --filmes-outra-fonte "$@" > "$refs/$nome.txt" 2>&1
     local rc=$?
     echo "$nome rc=$rc: $(tail -1 "$refs/$nome.txt" | cut -c1-120)"
     return $rc

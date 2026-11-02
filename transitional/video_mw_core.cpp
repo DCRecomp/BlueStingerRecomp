@@ -187,13 +187,13 @@ bool MwPlayerCore::frame(nv::VideoFrame& out) {
         colorDirty_ = false;
     }
     color_.apply(out.argb);
-    if (!subs_.empty() && subRenderer_ && subRenderer_->ok() && !pref_or(o_.subtitleLang).empty()) {
+    if (!subs_.empty() && subRenderer_ && !pref_or(o_.subtitleLang).empty()) {
         // a legenda segue o audio que esta saindo do dispositivo, como as falas do gameplay (2026-10-23): a posicao logica
         // menos o que ainda esta na fila da saida e em pending_. Sem isso a linha entrava ate ~200 ms antes da voz (a fila
         // do XAudio2). A saida nula (headless) nao tem fila: nada muda nos testes deterministicos.
         const int64_t audible = audiblePos();
         const std::wstring t = nv::subtitle_at(subs_, audible);
-        if (!t.empty()) subRenderer_->draw(out.argb, out.width, out.height, t);
+        if (!t.empty() && subRenderer_->ok()) subRenderer_->draw(out.argb, out.width, out.height, t);
         // Diagnostico BS_VIDEO_LEGENDA_LOG=<arquivo>: cada troca de legenda do filme com a posicao logica e a audivel (ms)
         static FILE* subLog = [] {
             const char* v = std::getenv("BS_VIDEO_LEGENDA_LOG");

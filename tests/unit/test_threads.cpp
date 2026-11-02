@@ -16,7 +16,15 @@
 
 using namespace bs;
 
+#ifdef _WIN32
 extern "C" void xmm_probe(const double* in, double* out, void (*cb)(void*), void* arg);
+#else
+// Na ABI System V nenhum XMM sobrevive a uma chamada: nao ha o que sondar. O arredondamento atravessa as fibras do mesmo jeito.
+static void xmm_probe(const double* in, double* out, void (*cb)(void*), void* arg) {
+    cb(arg);
+    for (int i = 0; i < 10; ++i) out[i] = in[i];
+}
+#endif
 
 namespace {
 

@@ -514,10 +514,34 @@ def comparar_eventos(nome, r, x, excecoes):
     return [], usadas
 
 
-def comparar(ref, nova, nome, caso, esperado, excecoes=()):
+def filmes_do_caso(pasta):
+    """O que o jogo registrou de cada filme: (original, passo) ao comecar e (ms logicos, quadros, pulados, passo) no fim."""
+    try:
+        with open(os.path.join(pasta, "jogo.txt"), encoding="utf-8", errors="replace") as f:
+            txt = f.read()
+    except OSError:
+        return [], []
+    return (re.findall(r"^\[video\] (\S+) -> \S+ \(passo (\d+)\)", txt, re.M),
+            re.findall(r"^\[video\] fim natural: (\d+) ms logicos, (\d+) quadros \((\d+) pulados\) \(passo (\d+)\)", txt, re.M))
+
+
+def tira_passos(linhas_q, passos):
+    return None if linhas_q is None else [l for l in linhas_q if l.split("	")[0] not in passos]
+
+
+def comparar(ref, nova, nome, caso, esperado, excecoes=(), filmes_outra_fonte=False):
     """(diferencas, excecoes usadas) entre duas pastas do mesmo caso. Artefato obrigatorio ausente ou vazio nos dois
-    lados e diferenca (nao passa por [] == [])."""
+    lados e diferenca (nao passa por [] == []).
+    filmes_outra_fonte (N9-L): o programa novo toca o SFD original e a referencia, o MP4 convertido, entao a imagem do filme nao
+    pode ser igual. Sai da comparacao de quadros so o passo em que um filme toca, e so se os filmes forem os mesmos, nos mesmos
+    passos, com o mesmo fim logico e a mesma contagem de quadros. Todo o resto continua estrito."""
     dif = []
+    passos_filme = set()
+    if filmes_outra_fonte:
+        fr, fx = filmes_do_caso(ref), filmes_do_caso(nova)
+        if fr != fx:
+            dif.append("filmes diferentes: %s x %s" % (fr, fx))
+        passos_filme = {p for _, p in fr[0]}
     ri, xi = ler_json(os.path.join(ref, "execucao.json")), ler_json(os.path.join(nova, "execucao.json"))
     if xi.get("rc") != 0:
         dif.append("rc=%s" % xi.get("rc"))
@@ -530,6 +554,8 @@ def comparar(ref, nova, nome, caso, esperado, excecoes=()):
     usadas = []
     for art in LOGS:
         r, x = norm(art, ref, fim), norm(art, nova, fim)
+        if art == "quadros" and passos_filme and not dif:
+            r, x = tira_passos(r, passos_filme), tira_passos(x, passos_filme)
         if esperado.get(art, _V) == _O:
             for lado, v in (("referencia", r), ("nova", x)):
                 if v is None:
@@ -649,7 +675,7 @@ def conferir(a):
             infos[n] = f.result()
             esp = ESPERADO[base_do_caso(n)]
             dif = ["validacao: " + x for x in validar_caso(os.path.join(base, n), todos[n], esp, _oraculo(todos[n]))]
-            d, usadas = comparar(os.path.join(a.ref, n), os.path.join(base, n), n, todos[n], esp, excecoes)
+            d, usadas = comparar(os.path.join(a.ref, n), os.path.join(base, n), n, todos[n], esp, excecoes, a.filmes_outra_fonte)
             dif += d
             falhas += bool(dif)
             print("[%s] %s%s" % ("igual" if not dif else "DIFERENTE", n, (": " + "; ".join(dif)) if dif else ""), flush=True)
@@ -673,6 +699,7 @@ def main():
     c.add_argument("--paralelo", type=int, default=4)
     k = sub.add_parser("conferir")
     k.add_argument("--exe", required=True)
+    k.add_argument("--filmes-outra-fonte", action="store_true", help="N9-L: programa que toca o SFD; ver comparar()")
     k.add_argument("--ref", required=True)
     k.add_argument("--data", default="")
     k.add_argument("--casos", default="")

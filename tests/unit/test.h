@@ -6,6 +6,11 @@
 #include <utility>
 #include <vector>
 
+#ifndef _WIN32
+// a mesma chamada dos testes do Windows: valor vazio apaga a variavel
+inline int _putenv_s(const char* name, const char* value) { return value && *value ? setenv(name, value, 1) : unsetenv(name); }
+#endif
+
 namespace bs::test {
 
 struct Case {

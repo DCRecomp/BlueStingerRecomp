@@ -2,7 +2,9 @@
 // antigas do jogador nao o desviam, e o arquivo do jogador nao muda por causa dele.
 #include "test.h"
 
-#include "builder_core.h"
+#ifdef _WIN32
+#include "builder_core.h"  // o Builder do Linux entra na L5 do N9-L
+#endif
 #include "platform/edition.h"
 #include "platform/install_config.h"
 #include "settings_menu.h"
@@ -130,6 +132,7 @@ BS_TEST(edition_menu_has_no_way_out_of_free_camera) {
     BS_CHECK(r.prefs().camera.mode == st::CameraMode::Free && r.prefs().camera.movement == st::MoveMode::Camera);
 }
 
+#ifdef _WIN32
 BS_TEST(edition_install_request_preserves_what_it_does_not_choose) {
     Dir d(L"bs-edition-request");
     ni::InstallConfig old;
@@ -149,3 +152,4 @@ BS_TEST(edition_install_request_preserves_what_it_does_not_choose) {
     Dir fresh(L"bs-edition-fresh");
     BS_CHECK(bs::builder::install_config_for(update, fresh.p).edition == ed::Edition::Original);
 }
+#endif

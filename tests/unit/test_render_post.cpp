@@ -222,6 +222,13 @@ BS_TEST(post_tonemap_gpu) {
 
 // Custo de GPU de cada passe interno em 4K interno (2880 x 2160), pelos timestamps da cadeia: medido e impresso (o
 // criterio do plano e o custo medido por efeito; aqui so se exige que exista e fique abaixo de 4 ms por passe).
+// O orcamento de 4 ms em 4K vale para GPU. Vulkan em CPU (llvmpipe, sem GPU real) mede a CPU: o custo e impresso, sem veredito.
+template <class D> bool cpu_gpu(const D& d) {
+    const bool cpu = d.stats().device.find("llvmpipe") != std::string::npos;
+    if (cpu) std::fputs("  (Vulkan em CPU: orcamento de GPU nao avaliado)\n", stderr);
+    return cpu;
+}
+
 BS_TEST(post_cost_4k) {
     std::string err;
     {
@@ -250,7 +257,7 @@ BS_TEST(post_cost_4k) {
             const double ms = x.ms_total / double(x.passes);
             std::fprintf(stderr, "  %-24s %.3f ms de GPU por passe (4K, %llu passes)\n", b < int(nr::PostBuiltin::Count) ? names[b] : "?", ms,
                          (unsigned long long)x.passes);
-            BS_CHECK(ms < 4.0);
+            if (!cpu_gpu(*d)) BS_CHECK(ms < 4.0);
         }
     }
     BS_CHECK(nr::vulkan_live_objects() == 0);
@@ -374,7 +381,7 @@ BS_TEST(post_all_effects_4k) {
         double total = 0;
         for (const auto& t : d->post_timings()) total += t.ms_total;
         std::fprintf(stderr, "  todos os efeitos em 4K: %.3f ms de GPU por quadro (%d quadros)\n", total / runs, runs);
-        if (d->stats().timestamps) BS_CHECK(total / runs < 4.0);
+        if (d->stats().timestamps && !cpu_gpu(*d)) BS_CHECK(total / runs < 4.0);
         const double l = mean_luma(out);
         std::fprintf(stderr, "  luma media %.1f (entrada %.1f)\n", l, mean_luma(img));
         BS_CHECK(l > 10 && l < 245);
