@@ -8,9 +8,9 @@ sempre provadas contra o jogo original rodando no emulador Flycast. Não usa BIO
 > **Este repositório não contém o jogo** nem nenhum dado dele. Você precisa fornecer a sua própria cópia do disco
 > (CDI, NTSC-U T13001N V1.000). Ver [LEGAL.md](LEGAL.md).
 
-## Status (2026-10-24)
+## Status (2026-11-02)
 
-**Progresso geral: ~72 %** do roteiro do port nativo (N0–N10, onze etapas de peso igual; uma etapa parcial conta pela
+**Progresso geral: ~81 %** do roteiro do port nativo (N0–N10, onze etapas de peso igual; uma etapa parcial conta pela
 fração concluída; em 2026-10-22 o roteiro ganhou a N9, Remasterização, e os mods passaram para a N10). O jogo roda no Windows a partir do disco do usuário, com arquivos, controles (teclado e controle
 Xbox), saves, filmes e **áudio nativos por padrão** (efeitos, falas, música Manatee e o DSP da AICA), e legendas em inglês
 em português do Brasil por padrão, com inglês como alternativa (pacotes gerados localmente a partir do disco do usuário e instalados pelo Builder; transcrição, tradução e revisão por IA, provisórias; o texto não vai para o repositório). O desenho
@@ -25,14 +25,14 @@ em português do Brasil por padrão, com inglês como alternativa (pacotes gerad
 | N3 | Controles nativos (SDL3/XInput, remapeamento, perfis) | concluída | 100 |
 | N4 | Saves nativos (VMS/arquivos, importar/exportar) | concluída | 100 |
 | N5 | Filmes nativos (Media Foundation, legendas por mod) | concluída | 100 |
-| N6 | Áudio nativo (efeitos, falas, música Manatee, DSP da AICA) | concluída (2026-10-23): nativo é o padrão (`--audio legado` é o fallback até o N8); validação contra o original (Flycast) e gravações reais de gameplay; H1–H9 aprovados, o H9 (tempo real sem faltas de dados) com o Vulkan padrão | 100 |
-| N7 | Renderização Vulkan | **funcional, em fechamento técnico**: **o Vulkan é o renderizador padrão**, com recuo automático para o software (sem GPU compatível, ou se o dispositivo falhar no jogo); desenha o jogo **bit a bit igual** ao renderizador de referência, 3× mais rápido; **resolução interna de 720p a 4K**; **efeitos de imagem** (correção de cor, tonemapping, nitidez, bloom, CRT, shaders de mod); **menu de configurações dentro do jogo** (Esc ou Back do controle); **legendas** no gameplay e nos filmes; **câmera livre no analógico direito**. Bloqueios: a AMD integrada ainda apresenta `VK_ERROR_DEVICE_LOST` intermitente, agora confirmado como leitura inválida na GPU mas ainda sem o recurso culpado; a rota real usa fog por tabela e volumes modificadores a partir do render 1127, porém ambos continuam sem implementação fiel nem quadro pareado contra o Flycast. O fallback é mitigação, não correção. SSAO, 16:9 real e MSAA permanecem no N9 | 95 |
-| N8 | Remoção da camada legada (simulação do console) | **planejamento técnico concluído; não iniciada**. N2c será a primeira subetapa; o inventário preserva ferramentas, saves, Builder/Recompiler e o fallback software. A remoção gráfica depende das evidências pendentes de fog/modifier volumes do N7 | 0 |
+| N6 | Áudio nativo (efeitos, falas, música Manatee, DSP da AICA) | concluída (2026-10-23): nativo é o único áudio do produto (o legado saiu no N8.6); validação contra o original (Flycast) e gravações reais de gameplay. O H9 (tempo real sem faltas de dados) foi aprovado em 2026-10-23, mas voltou a falhar de forma intermitente no N8.8: **falha aberta, não corrigida** | 100 |
+| N7 | Renderização Vulkan | **funcional, em fechamento técnico**: **o Vulkan é o renderizador padrão**, com recuo automático para o software (sem GPU compatível, ou se o dispositivo falhar no jogo); desenha o jogo **bit a bit igual** ao renderizador de referência, 3× mais rápido; **resolução interna de 720p a 4K**; **efeitos de imagem** (correção de cor, tonemapping, nitidez, bloom, CRT, shaders de mod); **menu de configurações dentro do jogo** (Esc ou Back do controle); **legendas** no gameplay e nos filmes; **câmera livre no analógico direito**. A falha da AMD integrada foi corrigida no N8.7, e fog por tabela e volumes modificadores estão nos dois renderizadores. Falta o quadro de fog pareado contra o Flycast e o encerramento formal. SSAO, 16:9 real e MSAA permanecem no N9 | 95 |
+| N8 | Remoção da camada legada (simulação do console) | **fechamento técnico em 2026-11-02, com ressalvas** ([detalhes](docs/N8-8-FECHAMENTO.md)): BIOS, GD-ROM, Maple, AICA, TA, VRAM e rasterizador de referência fora do produto; Vulkan e software sobre a mesma IR. O código recompilado segue usando os endereços do hardware, atendidos por serviços nativos. Abertos: campanha completa (obrigatória, depois do N9) e a falha intermitente do H9 | 95 |
 | N9 | Remasterização: duas edições instaláveis do mesmo núcleo, **Original** (fiel ao Dreamcast) e **Remastered** (câmera Livre obrigatória, menus e saves de PC, legendas ligadas, widescreen, iluminação, água, texturas HD, filmes e áudio remasterizáveis, acessibilidade); instalador gráfico. Planejamento em `docs/N9-PLANO.md` | não iniciada (planejada) | 0 |
 | N10 | Sistema de mods (ferramentas, manifestos, pacotes de idioma, texturas, áudio, vídeo e shaders) e elevação dos sistemas do jogo para C++ editável; revisão final e distribuição | não iniciada (a arquitetura de extensão vem sendo preparada nas etapas anteriores) | 0 |
 
 Desempenho: com o Vulkan (padrão) o gameplay leva ~7 ms por campo numa máquina de desenvolvimento (o tempo real é 16,7 ms) e o
-áudio toca sem faltas; no recuo para o software (~17 ms por campo) o jogo pode ficar um pouco lento e o som pode picotar.
+áudio costuma tocar sem faltas, mas o H9 registra uma falha intermitente em aberto; no recuo para o software (~17 ms por campo) o jogo pode ficar um pouco lento e o som pode picotar.
 
 Detalhes e evidências de cada verificação: [STATUS.md](STATUS.md). Arquitetura: [ARCHITECTURE.md](ARCHITECTURE.md).
 Planos por etapa em [docs/](docs/).

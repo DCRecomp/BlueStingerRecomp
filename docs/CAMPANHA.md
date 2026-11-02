@@ -125,4 +125,6 @@ continuidade com SAVE/LOAD reais, reprodução repetida, corrupção, divergênc
 instância, detecção dos créditos e, nos casos C8 e C9, a mesma gravação em gameplay real em outro programa e com a câmera Livre
 movida. O jogador é simulado por `BS_GRAVAR_BASE` e pelo controle virtual, no mesmo caminho da
 gravação real. Campanha de teste é marcada como tal e não aprova o D-N8-4; uma campanha real recusa roteiros de teste e não
-pode começar de um save.
+pode começar de um save. O roteiro de teste fica copiado e selado na sessão, e a verificação de uma campanha real reprova
+por esse arquivo, mesmo que os campos do manifesto sejam editados. O caso C10 confere isso sem o jogo. O selo fica no próprio
+manifesto: quem refizer os dois de propósito não é detectado.

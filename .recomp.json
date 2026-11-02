@@ -29,8 +29,7 @@
     }
   ],
   "help": [
-    "Vulkan renderer (stage N7)",
-    "Linux x86_64 port",
+        "Linux x86_64 port",
     "Testing full playthroughs on different PCs and controllers"
   ],
   "tags": [
@@ -39,5 +38,5 @@
     "static-recompilation",
     "survival-horror"
   ],
-  "notes": "Runs on Windows from the user's own disc (CDI image of NTSC-U T13001N V1.000; the executable inside is checked by SHA-256). Native file system, controls (keyboard, Xbox controller), saves, movies and audio (effects, voices, Manatee music, AICA DSP) are done and on by default; English subtitles by default (mod package). Timing is partially native and gameplay is still slightly below real time on a development PC. Rendering still goes through the emulated PowerVR2; next: Vulkan renderer, then removal of the emulated console layer and Linux. No game data is included."
+  "notes": "Runs on Windows from the user's own disc (CDI image of NTSC-U T13001N V1.000; the executable inside is checked by SHA-256). Native file system, controls (keyboard, Xbox controller), saves, movies and audio (effects, voices, Manatee music, AICA DSP) are done and on by default; English subtitles by default (mod package). Rendering uses Vulkan by default, with a software fallback on the same native command list. The simulated console layer (BIOS, GD-ROM, Maple, AICA, TA, VRAM) is out of the product; the recompiled code still targets the original hardware addresses, served by native services. A full playthrough proof is still pending. Next: Remastered edition, then mods and Linux. No game data is included."
 }

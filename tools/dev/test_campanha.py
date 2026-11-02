@@ -13,6 +13,7 @@ g1, SAVE no slot 1; LOAD e SAVE no slot 2) e o NEW GAME (passo_newgame_area1). C
   C7 creditos: o detector so aceita o filme ENDING/ENDING2
   C8 uma gravacao, duas edicoes: reproduz com Livre + Vulkan e em outro programa; negativo; nao mexe no veredito
   C9 gravada com a camera Livre movida: reproduz no programa fixado e na camera Original
+  C10 sem o jogo: controle virtual marcado por arquivo selado, mesmo com os booleanos do manifesto editados
   python tools/dev/test_campanha.py [--casos C1,C7] [--reusar] [--outra <instalacao>]
 """
 import argparse
@@ -211,6 +212,8 @@ def c5():
     check("C5 queda do monitor: sessao recuperada dos arquivos e encerrada normalmente", s["estado"] == "encerrada" and s["rodape"],
           "estado %s" % s["estado"])
     check("C5 recuperada reproduz", cp.verificar(cid, log=silencioso) == 0)
+    s = cp.manifesto(cid)["sessoes"][0]
+    check("C5 controle virtual copiado e selado", bool((s.get("selo") or {}).get(cp.CONTROLE_TESTE)))
     limpa(cid)
     try:
         real = cp.nova(cid="campanha-teste-recusa", log=silencioso)
@@ -229,6 +232,31 @@ def c5():
     finally:
         limpa("campanha-teste-recusa2")
     check("C6 campanha real recusa comecar de um save", recusou)
+
+
+def c10():
+    """Revisao Codex 20261102-041748: os booleanos do manifesto sao editaveis; o que decide e o arquivo selado."""
+    base = {"origem": {"tipo": "newgame"}, "camera": "original", "args": cp.ARGS + " --camera original", "relogio": cp.gv.RELOGIO,
+            "estado_sem_camera": False}
+    cid = "teste-c10"
+    limpa(cid)
+    d = os.path.join(cp.pasta(cid), "sessao_001")
+    os.makedirs(d)
+    try:
+        s = {"n": 1, "teste": {"base": False, "controle": False}}
+        m = dict(base, id=cid, sessoes=[s])
+        check("C10 sessao limpa nao tem impedimento", cp.impedimentos_reais(m) == [], cp.impedimentos_reais(m))
+        with open(os.path.join(d, cp.CONTROLE_TESTE), "w", encoding="utf-8") as f:
+            f.write("0 conectar\n")
+        check("C10 arquivo do controle: impedido", any("controle" in x for x in cp.impedimentos_reais(m)))
+        s["selo"] = cp.selo(d)
+        check("C10 o selo cobre o arquivo do controle", bool(s["selo"].get(cp.CONTROLE_TESTE)))
+        os.remove(os.path.join(d, cp.CONTROLE_TESTE))
+        check("C10 arquivo apagado, selo mantido: impedido", any("controle" in x for x in cp.impedimentos_reais(m)))
+        check("C10 arquivo apagado: selo acusa",
+              any(cp.CONTROLE_TESTE in dif for _, dif in cp.conferir_selos(dict(m, sessoes=[dict(s, estado="encerrada")]))))
+    finally:
+        limpa(cid)
 
 
 def c7():
@@ -343,18 +371,20 @@ def c9():
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--casos", default="C1,C2,C3,C4,C5,C7,C8,C9")
+    ap.add_argument("--casos", default="C1,C2,C3,C4,C5,C7,C8,C9,C10")
     ap.add_argument("--reusar", action="store_true", help="C2/C3 sobre a campanha teste-c1 ja gravada, sem refazer o C1")
     ap.add_argument("--outra", default=os.path.join(cp.REPO, "dist", "BlueStinger-Preview.anterior"), help="instalacao de outro programa, para o C8")
     a = ap.parse_args()
     casos = a.casos.split(",")
-    for f in (G1, S1, S2):
-        if not os.path.isfile(f):
-            print("SKIP: base ausente: %s" % f)
-            return 0
     cid = None
     if "C7" in casos:
         c7()
+    if "C10" in casos:
+        c10()
+    ausentes = [f for f in (G1, S1, S2) if not os.path.isfile(f)]
+    if ausentes and set(casos) - {"C7", "C10"}:  # um caso pedido sem poder rodar nao e aprovacao (revisao Codex 20261102-041748)
+        print("FALHA: base ausente: %s" % ", ".join(ausentes))
+        return 1
     if "C1" in casos:
         cid = c1()
     elif a.reusar and os.path.isdir(cp.pasta("teste-c1")):

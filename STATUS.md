@@ -16,7 +16,7 @@ Cada item registra **o que** foi verificado, **como** e **quando**.
 | M7 controle e saves | — |
 | M8 zerável | — |
 | M9 melhorias | — |
-| **Port nativo** (`docs/PLANO-PORT-NATIVO.md` v2, aprovado 2026-10-15) | N0 e N1 concluídos. **N2 (tempo e eventos) concluído funcionalmente em 2026-10-24:** U1–U8 comprovados, espera de hardware correta no tempo lógico, experimental padrão na janela, `--tempo nativo` como recuo e headless estável por compatibilidade; N2c abre o N8. N3, N4, N5 e N6 concluídos; H9 do N6 aprovado. **N7 funcional, 95%, em fechamento técnico:** Vulkan padrão com recuo seguro; ainda bloqueiam o encerramento a causa não eliminada do DEVICE_LOST na AMD e a prova de fog/volumes contra o Flycast. O fallback é mitigação, não correção. **N8 iniciado em 2026-10-24: N8.0 (portão e referências) concluído em 2026-10-25; N8.1 (N2c) concluído em 2026-10-26 (tempo lógico sem ciclos nem TMU/INTC/CCN/porta; estável preservado); N8.2 (separação produto × validação) e N8.3 (boot, BIOS, flash e GD-ROM fora do produto) concluídos em 2026-10-26; N8.4 (controles, saves e Maple fora do produto), N8.5 (filme legado e conversor YUV fora do produto) e N8.6 (áudio legado e AICA fora do produto) concluídos em 2026-10-27; N8.7 bloqueado, autorizado em 2026-10-28 e concluído em 2026-10-30 (caminho gráfico do legado fora do produto, `docs/N8-7-KAMUI.md` seção 23); N8.8 é o próximo.** Ver as seções de cada marco e o "Roadmap N0–N10". |
+| **Port nativo** (`docs/PLANO-PORT-NATIVO.md` v2, aprovado 2026-10-15) | N0 e N1 concluídos. **N2 (tempo e eventos) concluído funcionalmente em 2026-10-24:** U1–U8 comprovados, espera de hardware correta no tempo lógico, experimental padrão na janela, `--tempo nativo` como recuo e headless estável por compatibilidade; N2c abre o N8. N3, N4, N5 e N6 concluídos; H9 do N6 aprovado em 2026-10-23 e **reaberto no N8.8: falha intermitente, não corrigida e não aprovada**. **N7 funcional, 95%, em fechamento técnico:** Vulkan padrão com recuo seguro; AMD corrigida no N8.7; falta o quadro de fog pareado e o encerramento formal. **N8 iniciado em 2026-10-24: N8.0 (portão e referências) concluído em 2026-10-25; N8.1 (N2c) concluído em 2026-10-26 (tempo lógico sem ciclos nem TMU/INTC/CCN/porta; estável preservado); N8.2 (separação produto × validação) e N8.3 (boot, BIOS, flash e GD-ROM fora do produto) concluídos em 2026-10-26; N8.4 (controles, saves e Maple fora do produto), N8.5 (filme legado e conversor YUV fora do produto) e N8.6 (áudio legado e AICA fora do produto) concluídos em 2026-10-27; N8.7 bloqueado, autorizado em 2026-10-28 e concluído em 2026-10-30 (caminho gráfico do legado fora do produto, `docs/N8-7-KAMUI.md` seção 23); N8.8: fechamento técnico em 2026-11-02, com ressalvas, e N8 fora dos 100 % (`docs/N8-8-FECHAMENTO.md`).** Ver as seções de cada marco e o "Roadmap N0–N10". |
 
 ## Versão suportada
 
@@ -3524,7 +3524,7 @@ viraram a **N10**. N0–N8 mantêm os objetivos e a ordem. Ordem de execução:
 1. N7 permanece **funcional, 95%**, com AMD e fidelidade de fog/volumes abertas; isso não bloqueia N8.0–N8.6, mas
    fog/volumes bloqueiam o corte gráfico N8.7 e o fallback software não pode ser retirado;
 2. retorno ao N2 — **concluído funcionalmente em 2026-10-24**;
-3. N8 — iniciado em 2026-10-24 (D-N8-1 a D-N8-4); N8.0 concluído em 2026-10-25; N8.1 (N2c), N8.2 e N8.3 concluídos em 2026-10-26; N8.4, N8.5 e N8.6 em 2026-10-27; N8.7 concluído em 2026-10-30 (autorizado em 2026-10-28); N8.8 é o próximo;
+3. N8 — iniciado em 2026-10-24 (D-N8-1 a D-N8-4); N8.0 concluído em 2026-10-25; N8.1 (N2c), N8.2 e N8.3 concluídos em 2026-10-26; N8.4, N8.5 e N8.6 em 2026-10-27; N8.7 concluído em 2026-10-30 (autorizado em 2026-10-28); N8.8 com fechamento técnico em 2026-11-02, com ressalvas (`docs/N8-8-FECHAMENTO.md`);
 4. N9;
 5. N10.
 
@@ -3538,13 +3538,13 @@ Plano: `docs/PLANO-PORT-NATIVO.md`, seções 4 e 4.2.
 | N3 Controles | concluída | 100 |
 | N4 Saves | concluída (pendência formal: SAVE num save point real) | 100 |
 | N5 Filmes | concluída | 100 |
-| N6 Áudio | **concluída** (2026-10-23): H9 aprovado 3/3 com o Vulkan padrão (0 faltas); legado como fallback até o N8 | 100 |
+| N6 Áudio | **concluída** (2026-10-23): H9 aprovado 3/3 com o Vulkan padrão (0 faltas); legado fora do produto no N8.6. H9 reaberto no N8.8: intermitente, não corrigido, não aprovado | 100 |
 | N7 Vulkan | **funcional, em fechamento técnico**: Vulkan padrão da janela com recuo seguro para o software; N7a, N7b e N7c validadas. Os dois bloqueios ganharam evidência no N8.7 (2026-10-28). **AMD:** a causa do `Invalid Read` foi demonstrada e corrigida (descritor não reescrito no realloc de `tris_`; 0/90 depois). **Fog e volumes:** implementados no software e no Vulkan, iguais em 32 bits, com a sombra conferida com o Flycast; falta um quadro de fog pareado. O N7 fica em 95% até o mantenedor encerrar formalmente esses bloqueios. SSAO, 16:9 real e MSAA permanecem no N9 (`docs/N7-PLANO.md` seção 25) | 95 |
-| N8 Sem legado | **iniciada** em 2026-10-24 (D-N8-1 a D-N8-4). N8.0 **concluído** em 2026-10-25 (regressão nível 3, correções, 16 referências validadas e reproduzidas, fixação do áudio nas suítes históricas); N8.1 **concluído** em 2026-10-26 (cadência B, TMU, CCN, cabo e ponte de interrupções no tempo lógico); N8.2 **concluído** em 2026-10-26 (produto × validação: papéis, `BS_VALIDACAO`, catraca do mapa); N8.3 **concluído** em 2026-10-26 (serviço nativo das syscalls; BIOS, drive e flash simulados fora do produto); N8.4 **concluído** em 2026-10-27 (barramento sem dispositivos; Maple, `--controles/--saves legado` fora do produto); N8.5 **concluído** em 2026-10-27 (filme legado e conversor YUV fora do produto); N8.6 **concluído** em 2026-10-27 (área de som nativa; AICA, áudio legado e DMA do G2 fora do produto); N8.7 **concluído** em 2026-10-30: AMD corrigida, fog e volumes nos dois renderizadores, o caminho gráfico do legado (TA, PVR, VRAM, vídeo, interrupções, DMAC, system block, rasterizador de referência) fora do produto e em sombra na validação; a fronteira guest fica no contrato do jogo (D-K1 a); N8.8 é o próximo (regressão nível 3 suspensa em 2026-10-28) | 0 |
+| N8 Sem legado | **iniciada** em 2026-10-24 (D-N8-1 a D-N8-4). N8.0 **concluído** em 2026-10-25 (regressão nível 3, correções, 16 referências validadas e reproduzidas, fixação do áudio nas suítes históricas); N8.1 **concluído** em 2026-10-26 (cadência B, TMU, CCN, cabo e ponte de interrupções no tempo lógico); N8.2 **concluído** em 2026-10-26 (produto × validação: papéis, `BS_VALIDACAO`, catraca do mapa); N8.3 **concluído** em 2026-10-26 (serviço nativo das syscalls; BIOS, drive e flash simulados fora do produto); N8.4 **concluído** em 2026-10-27 (barramento sem dispositivos; Maple, `--controles/--saves legado` fora do produto); N8.5 **concluído** em 2026-10-27 (filme legado e conversor YUV fora do produto); N8.6 **concluído** em 2026-10-27 (área de som nativa; AICA, áudio legado e DMA do G2 fora do produto); N8.7 **concluído** em 2026-10-30: AMD corrigida, fog e volumes nos dois renderizadores, o caminho gráfico do legado (TA, PVR, VRAM, vídeo, interrupções, DMAC, system block, rasterizador de referência) fora do produto e em sombra na validação; a fronteira guest fica no contrato do jogo (D-K1 a); N8.8 com **fechamento técnico em 2026-11-02, com ressalvas**: regressão nível 3 por composição, H9 e campanha completa abertos (`docs/N8-8-FECHAMENTO.md`) | 95 |
 | N9 Remasterização | **não iniciada**; planejamento oficial aprovado em 2026-10-23 (`docs/N9-PLANO.md`): duas edições, Original e Remastered, do mesmo núcleo; começa depois do N8 | 0 |
 | N10 Mods e elevação | não iniciada (extensões preparadas: mídia do N5/N6, texturas HD por conteúdo e shaders validados do N7) | 0 |
 
-Progresso geral: ~72 % (onze etapas de peso igual).
+Progresso geral: ~81 % (onze etapas de peso igual; N8 em 95 % é estimativa, com campanha e H9 abertos).
 
 ### N7c: câmera livre e segundo analógico (2026-10-22; worktree n7-vulkan)
 
@@ -4301,7 +4301,54 @@ Detalhes em `docs/LEGENDAS-EN-PLANO.md`.
   ficam ativas nos tempos certos (no log; o desenho das falas é do N7). Os filmes já são desenhados pelo player do N5.
 - **Testes:** `test_legendas.py` 11/11; `bs_audio_tests` 41/41; `bs_localization_tests` 8/8; `bs_video_tests` 42/42.
 
+### N8.8: fechamento técnico (2026-11-02)
+
+Matriz completa em `docs/N8-8-FECHAMENTO.md`. **A regressão nível 3 pós-corte foi comprovada por composição de execuções, e
+não por uma única bateria contínua** (decisão do mantenedor, 2026-11-02).
+
+- **Suspensão controlada:** a integral sobre o `47d476c` parou às 02:29:33, depois de `test_ordem`. Foi encerrada só a árvore
+  identificada por PID e linha de comando; `known_versions.h` particular restaurado e conferido.
+- **Na versão final** (`47d476c`, Preview `BD2E9C84…`, validação `028DE4CB…`): unitários 349; `ctest` 27 com 4 ignorados; com
+  disco; Builder e Preview; `test_preview` 12/0; referências 16/16 (179 exceções) e N8.7 16/16; `test_gameplay` 4/0;
+  `test_builder` 23/0; `test_projeto` 18/0; `test_arquivos` 6/0; `test_ordem` 8/0; `n6_h4` 17/0; `test_efeito` 17/0 no Watch
+  `2BD88843…` (negativo E7 não exercitado na rota); Monitor C1 a C10 47/0 com o `campanha.py` corrigido (15/0, 25/0 e 7/0). A rodada
+  anterior à correção do selo, 21/0, fica como histórico.
+- **Reaproveitados por equivalência:** `test_n2b` 52/0 (01/11); `n6_h` H2, H3, H5–H8 (01/11); `test_n8_nativo`, rotas,
+  `test_saves`, `n5_e001` (31/10); `test_pd_nativo`, `test_tempo`, `test_cri`, `test_n2b2`, `test_assistido`,
+  `test_controles` (30/10).
+- **Comparação função a função:** Preview 01/11 × final difere só em `main`; 30/10 e 31/10 × final diferem só em diagnóstico
+  `BS_TRAVAS`, contador de validação, `main` e 1 byte em `texture_heap::touch`. SPIR-V iguais.
+- **Sem aprovação:** `n6_h9` e campanha completa. As falhas históricas de 30/10 e 31/10 seguem registradas como falhas.
+- **Auditoria:** `varre_publicacao` 0 achados em 12 commits; Builder sem mídia do jogo; 8 rollbacks e a Preview final com
+  `--verify-data` rc=0. Imports e strings do produto conferidos; `bs-hwscan` rc=0, com 0 referências de hardware no código
+  do jogo e os rótulos de provedor de `fronteiras_us.toml` defasados desde o N2a.
+- **Pendências:** H9; D-N8-4 no gate pós-N9; ressalva do 7.1 e D-K1(a); limite de 3 h de `n6_h` no executor, defeito a
+  corrigir antes de uma futura integral, sem enfraquecer os testes. N9 e N10 não iniciados.
+
 ## Revisões independentes (Codex)
+
+### 2026-11-02: fechamento do N8.8. Relatório `reviews/codex-20261102-041748.md` (6 achados)
+
+Todos aceitos; decisões e ações em `docs/N8-8-FECHAMENTO.md` seção 7: identidade conferida antes de pular etapa aprovada,
+roteiro de controle virtual selado (caso C10), `test_efeito` repetido no Watch final, revisão independente separada na
+matriz, frase do README corrigida e `test_campanha` sem rc=0 falso.
+
+### 2026-11-02: fechamento do N8.8, segunda passada. Relatório `reviews/codex-20261102-044801.md` (1 achado)
+
+[MÉDIA] aceito: C1, C2, C3, C8 e C9 estavam aprovados com o `campanha.py` anterior, com justificativa que não provava
+equivalência. Justificativa retirada e casos repetidos com a correção, 25/0, mais o C7, 7/0. Nada mais apontado.
+
+### 2026-11-01: N8.8 (rastreio, B9, executor, Monitor). Relatórios `20261101-124311`, `-162339`, `-230720`
+
+| Relatório | Achado | Decisão |
+|---|---|---|
+| `124311` | 7 achados no `BS_TRAVAS` (anel, custo desligado, travas do Vulkan, conta do áudio, par máximo/instante, limite, evento de campo) | **Todos aceitos** no `2349749`, com `bs_diag_tests` |
+| `162339` | [MÉDIA] negativo B9 podia aprovar mutação inoperante | **Aceito** no `86f58c5`: ordem alternada e prova de ativação |
+| `230720` | [ALTA] campanha de teste com veredito real após editar o manifesto | **Aceito:** `impedimentos_reais` em toda verificação |
+| `230720` | [ALTA] identidade normalizava diferenças observáveis | **Aceito em parte:** normalização só no exe do jogo (`JOGO_RE`). **Rejeitado** parar de normalizar `BS_VERSION`: é só texto e nenhuma prova o compara |
+| `230720` | [MÉDIA] chave sem Windows, UCRT e conteúdo do compilador | **Aceito** |
+| `230720` | [BAIXA] teste da stdout só estatístico, sem conferir o `atexit` | **Aceito:** `atexit` conferido e `fflush` no `--version` |
+
 
 ### 2026-10-22: N7b, segunda rodada. Relatório em `reviews/codex-20261022-000105.md` (5 achados)
 
@@ -4864,5 +4911,8 @@ Depois das correções: todos os testes passam, análise idêntica (3 883 funç�
 - Vídeo NEWGAME.SFD termina cedo (hipótese: relógio do áudio, M6). Áudio e VMU.
 - Mods de arquivo maiores que o original (realocar LBA + registro de diretório).
 - Revisão do Codex desta etapa (limite de uso atingido em 2026-10-14).
-- `--version` sem saída na verificação do Builder: intermitente, não reproduzido.
+- `--version` sem saída na verificação do Builder: **resolvido em 2026-11-01** (`bffbeb5`): o esvaziamento final da stdout podia se perder no encerramento; `main` agora esvazia a saída.
+- H9 (N6): falha intermitente aberta, investigação suspensa (`docs/N8-8-FECHAMENTO.md` 5.1).
+- Campanha completa (D-N8-4): obrigatória, não aprovada, no gate pós-N9.
+- `tools/dev/regressao.ps1`: limite de 3 h do `n6_h` menor que a duração real (6,1 h); corrigir antes de uma futura integral.
 - clang-cl não está instalado nesta máquina. Por enquanto só o MSVC é testado.

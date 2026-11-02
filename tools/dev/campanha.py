@@ -125,11 +125,14 @@ def sessao_dir(m, n):
     return os.path.join(pasta(m["id"]), "sessao_%03d" % n)
 
 
+CONTROLE_TESTE = "controle_teste.txt"  # copia do roteiro do controle virtual: a sessao de teste fica marcada por um arquivo selado
+
+
 def selo(d):
     """SHA-256 de tudo o que a prova da sessao usa (entrada, estado, LOAD/SAVE e o cartao, inicio e fim): conferido antes
     de continuar e de verificar (corrupcao ou edicao depois da gravacao)."""
     out = {}
-    for nome in ("entrada.txt", "estado.tsv", "saves.tsv"):
+    for nome in ("entrada.txt", "estado.tsv", "saves.tsv", "base.txt", CONTROLE_TESTE):
         p = os.path.join(d, nome)
         out[nome] = sha(p) if os.path.isfile(p) else None
     for sub in ("saves_inicio", "saves"):
@@ -327,7 +330,8 @@ def jogar(cid=None, teste_base=None, teste_ate=None, teste_controle=None, log=pr
         shutil.copy(teste_base, os.path.join(d, "base.txt"))
         env.update({"BS_GRAVAR_BASE": os.path.join(d, "base.txt"), "BS_GRAVAR_ATE": str(int(teste_ate))})
     if teste_controle:
-        env["BS_CONTROLE_VIRTUAL"] = os.path.abspath(teste_controle)
+        shutil.copy(teste_controle, os.path.join(d, CONTROLE_TESTE))
+        env["BS_CONTROLE_VIRTUAL"] = os.path.join(d, CONTROLE_TESTE)
     s = {"n": n, "estado": "gravando", "inicio": agora(), "saves_inicio": gv.hashes(ini),
          "programa_identidade": m["programa"]["identidade"], "teste": {"base": bool(teste_base), "controle": bool(teste_controle)}}
     m["sessoes"].append(s)
@@ -468,7 +472,8 @@ def impedimentos_reais(m):
         out.append("relogio fora do padrao: %r" % m.get("relogio"))
     for s in m.get("sessoes", []):
         t = s.get("teste") or {}
-        if t.get("base") or t.get("controle") or os.path.exists(os.path.join(sessao_dir(m, s["n"]), "base.txt")):
+        d, sel = sessao_dir(m, s["n"]), s.get("selo") or {}
+        if t.get("base") or t.get("controle") or any(os.path.exists(os.path.join(d, a)) or sel.get(a) for a in ("base.txt", CONTROLE_TESTE)):
             out.append("sessao %d usou roteiro ou controle de teste" % s["n"])
     return out
 

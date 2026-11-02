@@ -190,6 +190,10 @@ Add-Content "$repo\src\code.txt" "f13"; Commit "f13"
 Run "R42 uma falha nunca e reaproveitada" "make_x,test_a,test_f" 1
 Remove-Item "$root\falhar_f"
 Run "R43 corrigida" "test_f"
+# revisao Codex 20261102-041748: mesma chave, artefato diferente: a aprovada nao pode ser pulada
+"dados 3" | Out-File "$art\dados.bin" -Encoding ascii
+Run "R43a artefato mudou sem commit: a aprovada roda de novo" "test_f"
+Run "R43b nada mudou depois: pulada" ""
 Remove-Item $marks -ErrorAction SilentlyContinue
 & powershell -NoProfile -ExecutionPolicy Bypass -File "$repo\tools\dev\regressao.ps1" -Estado $est -Disc $script:disco -Desde test_f *> "$root\R44.txt"
 $r44 = (Get-Content $marks -ErrorAction SilentlyContinue) -join ","

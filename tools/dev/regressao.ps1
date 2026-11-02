@@ -324,15 +324,19 @@ $durations = @()
 $ativo = Join-Path $Estado "ativo.txt"
 foreach ($st in $steps) {
     $prev = $state[$st.N]
+    # identidade funcional das entradas, calculada antes da etapa (depois dos builds e dos produtores) e tambem antes de pular
+    # uma aprovada: a chave pode ficar igual com o artefato, a configuracao ou o ambiente mudados (revisao Codex 20261102-041748)
+    $temId = $null -ne $st.Id -and $st.T -ne "build"
+    $fk = if ($temId) { FuncKey $st } else { $null }
     if ($st.T -ne "build" -and $prev -and $prev.Rc -eq 0) {
-        Log ("-- {0} ja aprovada ({1}s, {2}): pulada" -f $st.N, $prev.Seg, $prev.Fim)
-        if ($Ate -and $st.N -eq $Ate) { break }
-        continue
+        if (-not $temId -or ($fk -and $prev.Fk -eq $fk)) {
+            Log ("-- {0} ja aprovada ({1}s, {2}): pulada" -f $st.N, $prev.Seg, $prev.Fim)
+            if ($Ate -and $st.N -eq $Ate) { break }
+            continue
+        }
+        Log "-- $($st.N): aprovada, mas a identidade funcional nao confere ($($prev.Fk) -> $fk): a etapa roda"
     }
-    # identidade funcional das entradas, calculada antes da etapa (depois dos builds e dos produtores)
-    $fk = $null
-    if ($null -ne $st.Id -and $st.T -ne "build") {
-        $fk = FuncKey $st
+    if ($temId) {
         $old = $byFk[$st.N]
         if (-not $fk) { Log "-- $($st.N): identidade funcional indisponivel (calculo falhou): a etapa roda" }
         elseif ($old -and $old.Rc -eq 0 -and $old.Fk -eq $fk) {
