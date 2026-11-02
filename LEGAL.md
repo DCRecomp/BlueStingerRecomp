@@ -7,6 +7,9 @@ cópia **fornecida pelo próprio usuário** do disco de Blue Stinger em um
 executável nativo. Blue Stinger é © Climax Graphics / Sega / Activision. Este
 projeto não tem afiliação com nenhum detentor de direitos.
 
+A licença MIT (`LICENSE`) cobre só o código-fonte deste repositório. This license covers only the source code of this
+repository. It grants no rights to Blue Stinger or to any data, code or assets derived from it.
+
 ## O que nunca entra no repositório
 
 - Imagens de disco (CDI, GDI, CHD, ISO, BIN/CUE).
