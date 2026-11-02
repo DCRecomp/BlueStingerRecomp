@@ -618,11 +618,20 @@ def validar(a):
     return 1 if falhas or cfg else 0
 
 
+def roteiro_aqui(caso):
+    """O manifesto guarda o caminho de quem capturou. Noutra maquina (N9-L, referencias do Windows conferidas no Linux), o
+    mesmo roteiro versionado ou a mesma sessao gravada, sem mudar o que o caso compara."""
+    if os.path.isfile(caso["roteiro"]):
+        return caso
+    r = os.path.join(gv.pasta(caso["sessao"]), "entrada.txt") if caso["tipo"] == "sessao" else         os.path.join(ROTEIROS, caso["roteiro"].replace("\\", "/").rsplit("/", 1)[-1])
+    return dict(caso, roteiro=r)
+
+
 def conferir(a):
     a.ref = os.path.abspath(a.ref)
     with open(os.path.join(a.ref, "manifesto.json"), encoding="utf-8") as f:
         man = json.load(f)
-    todos = man["casos"]
+    todos = {n: roteiro_aqui(c) for n, c in man["casos"].items()}
     escolhidos = a.casos.split(",") if a.casos else list(todos)
     exe = os.path.abspath(a.exe)
     exe_sha = sha(exe)
