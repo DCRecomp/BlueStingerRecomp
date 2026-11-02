@@ -957,9 +957,9 @@ Result build(const Request& req, const Callbacks& cb) {
         {
             const std::wstring cmd = quote_arg((stage / L"BlueStinger.exe").native()) + L" --version";
             int rc = 0;
-            // falha intermitente vista uma vez no test_builder (codigo 0 sem a linha de versao,
-            // com o jogo rodando em paralelo; nao reproduzida em 1 800 execucoes do teste de
-            // estresse): uma nova tentativa, registrada no log
+            // codigo 0 sem a linha de versao: era a stdout perdida no fim de um processo curto,
+            // corrigida no main do jogo (N8.8, test_builder confere 400 execucoes seguidas).
+            // A nova tentativa fica, registrada no log, para um projeto editado pelo usuario
             for (int attempt = 0; attempt < 2; ++attempt) {
                 verLine.clear();
                 rc = run(cmd, stage, {}, [&](const std::string& l) {

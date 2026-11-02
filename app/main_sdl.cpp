@@ -1772,8 +1772,18 @@ int mainWindow(Args& a) {
 } // namespace
 
 int main(int, char**) {
+    // N8.8: o esvaziamento final da stdout pelo CRT nao e confiavel neste processo: num processo curto (--version, ~12 ms)
+    // o exit roda os atexit e 1 a 14% das vezes o que estava no buffer se perde, com codigo 0 (corrida com a inicializacao
+    // das threads do sistema, sem causa exata dentro do ucrtbase; 0 de 600 com alguns ms a mais; medido desde a Preview do
+    // N8.0). Este e o primeiro atexit do main, logo o ultimo deles a rodar: pega o que os relatorios registrados depois
+    // escreverem. Quem escreve em destrutor estatico fica fora dele.
+    const int exitFlush = std::atexit([] { std::fflush(nullptr); });
     setupLog(userDir());
     setupCrashLog();
+    if (exitFlush != 0) {
+        std::fprintf(stderr, "erro: nao foi possivel registrar o esvaziamento da saida no encerramento\n");
+        return 1;
+    }
     Args a;
     if (!parseArgs(a)) {
         std::fprintf(stderr, "%s", kUsage);
@@ -1849,6 +1859,7 @@ int main(int, char**) {
 #endif
     if (a.version) {
         std::printf("Blue Stinger (recompilado) %s, compilado em %s\n", BS_VERSION, BS_BUILD_DATE);
+        std::fflush(stdout);  // o caminho que o Builder e os testes conferem nao depende do encerramento
         return 0;
     }
     if (!a.positional.empty()) {  // antes era a imagem CDI: explica em vez de ignorar

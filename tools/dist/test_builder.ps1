@@ -47,6 +47,12 @@ function Run($exe, [string[]]$argv, $timeoutMs = 1800000, [switch]$Filmes) {
     return @{ Code = $p.ExitCode; Out = $o.Result + $e.Result; Secs = [int]((Get-Date) - $t0).TotalSeconds }
 }
 function FailLine($r) { ($r.Out -split "`n" | Where-Object { $_ -match "falhou" } | Select-Object -First 1) }
+# os casos seguintes sobrescrevem o builder.log: guarda o da falha e a pasta de saida como ela ficou
+function GuardaFalha($nome, $out, [string]$saida) {
+    Copy-Item -LiteralPath (Join-Path $out ".bs-build\builder.log") (Join-Path $Work "$nome.falha.builder.log") -ErrorAction SilentlyContinue
+    [IO.File]::WriteAllText((Join-Path $Work "$nome.falha.saida.txt"), $saida)
+    [IO.File]::WriteAllLines((Join-Path $Work "$nome.falha.pasta.txt"), @(Get-ChildItem -LiteralPath $out -Force -ErrorAction SilentlyContinue | ForEach-Object { "$($_.LastWriteTime.ToString('s')) $($_.Name)" }))
+}
 function Hash($f) { if (Test-Path -LiteralPath $f) { (Get-FileHash -LiteralPath $f).Hash } else { "" } }
 function NoStage($out) { @(Get-ChildItem -LiteralPath $out -Directory -Force -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "BlueStinger.new-*" -or $_.Name -like "BlueStinger.old-*" }).Count -eq 0 }
 
@@ -73,6 +79,13 @@ $log1 = [IO.File]::ReadAllText((Join-Path $out1 ".bs-build\builder.log"), [Text.
 Check "kit copiado para o cache (caminho fora do ANSI)" ($log1 -match "copiando o kit para") ""
 $v = Run $exe1 @("--version")
 Check "jogo instalado responde" ($v.Code -eq 0 -and $v.Out -match "Blue Stinger \(recompilado\)") $v.Out.Trim()
+# N8.8: sem o fflush no atexit do main, 1 a 14% destas execucoes saem com codigo 0 e sem a linha (stdout perdida no fim)
+$semLinha = 0
+foreach ($i in 1..400) {
+    $v = Run $exe1 @("--version")
+    if ($v.Code -ne 0 -or $v.Out -notmatch "Blue Stinger \(recompilado\)") { ++$semLinha }
+}
+Check "--version: a linha nunca se perde (400 execucoes)" ($semLinha -eq 0) "$semLinha sem a linha"
 $installed = Hash $exe1
 
 # 1b. independencia do CDI: imagem inacessivel (renomeada) e instalacao movida para outra pasta
@@ -121,7 +134,8 @@ Check "segunda saida nova: sucesso e C++ identico" ($r.Code -eq 0 -and $same) "c
 # 3. incremental: so o que mudou
 $r = Run $cli @("--disc", $cdi, "--out", $out1)
 $steps = @([IO.File]::ReadAllLines((Join-Path $out1 ".bs-build\builder.log"), [Text.Encoding]::UTF8) | Where-Object { $_ -match '^\[\d+/\d+\]' }).Count
-Check "recompilacao incremental" ($r.Code -eq 0 -and $steps -le 5) "codigo $($r.Code), $($r.Secs) s, $steps passos do ninja"
+Check "recompilacao incremental" ($r.Code -eq 0 -and $steps -le 5) "codigo $($r.Code), $($r.Secs) s, $steps passos do ninja$(if ($r.Code -ne 0) { "; $(FailLine $r)" })"
+if ($r.Code -ne 0) { GuardaFalha "incremental" $out1 ([string]$r.Out) }
 $installed = Hash $exe1
 [IO.File]::WriteAllText((Join-Path $out1 "BlueStinger\bluestinger.ini"), "cdi=preservado")
 
@@ -183,6 +197,7 @@ $ini = [IO.File]::ReadAllText((Join-Path $out1 "BlueStinger\bluestinger.ini"))
 $cfgFile = Join-Path $out1 "BlueStinger\instalacao.toml"
 $cfg = if (Test-Path -LiteralPath $cfgFile) { [IO.File]::ReadAllText($cfgFile) } else { "" }
 Check "Recompiler: compilacao ate o fim, ini do usuario preservado, modo portatil gravado" ($closed -and $p.ExitCode -eq 0 -and $ini -eq "cdi=preservado" -and $cfg -match 'local = "portatil"') "codigo $($p.ExitCode)"
+if ($p.ExitCode -ne 0) { GuardaFalha "recompiler" $out1 "" }
 $installed = Hash $exe1  # a janela instalou uma versao nova
 
 # 11b. Developer (sem escolha de modo) recompila: o instalacao.toml da instalacao fica como estava
@@ -190,6 +205,7 @@ $p = Start-Process -FilePath $gui -ArgumentList "--disc `"$cdi`" --out `"$out1`"
 $closed = $p.WaitForExit(1800000)
 $cfg = if (Test-Path -LiteralPath $cfgFile) { [IO.File]::ReadAllText($cfgFile) } else { "" }
 Check "Developer: recompilar preserva o modo portatil da instalacao" ($closed -and $p.ExitCode -eq 0 -and $cfg -match 'local = "portatil"') "codigo $($p.ExitCode)"
+if ($p.ExitCode -ne 0) { GuardaFalha "developer" $out1 "" }
 $installed = Hash $exe1
 
 # 12. sem o kit ao lado: recusa clara
