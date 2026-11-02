@@ -315,6 +315,13 @@ public:
         flushRepeats();
         std::string out;
         char        b[256];
+#if BS_VALIDACAO
+        if (slow_) {  // so com BS_TEMPO_MUTACAO=lento, no exe de validacao (o B9 do test_n2b)
+            std::snprintf(b, sizeof b, "[tempo] mutacao lento aplicada: %llu VBlanks, espera medida %.1f ms (media %.3f ms)\n",
+                          ull(slowApplied_), double(slowNs_) / 1e6, slowApplied_ ? double(slowNs_) / 1e6 / double(slowApplied_) : 0.0);
+            out += b;
+        }
+#endif
         for (uint32_t t = 0; profile_ && t < kMaxThreads; ++t) {  // BS_PROGRESSO_PCS: onde o trabalho foi gasto
             if (prof_[t].empty()) continue;
             std::vector<std::pair<uint64_t, uint32_t>> v;
@@ -551,8 +558,15 @@ private:
             if (!(dropVblankIn_ && mutate)) applied(e, kDueVblankIn);
             if (slow_) {  // mutacao: trabalho extra do host a cada VBlank (criterio de desempenho)
                 const auto until = std::chrono::steady_clock::now() + std::chrono::milliseconds(2);
+#if BS_VALIDACAO
+                const auto t0 = until - std::chrono::milliseconds(2);
+#endif
                 while (std::chrono::steady_clock::now() < until) {
                 }
+#if BS_VALIDACAO  // prova de que a mutacao foi aplicada (B9, so na validacao; revisao Codex 20261101-162339)
+                ++slowApplied_;
+                slowNs_ += uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - t0).count());
+#endif
             }
             vbIn_ = postCrossing(nt::EventKind::VBlankIn, e.due.ticks);
             if (extraVblank_ && mutate)  // IRQ extra meio campo depois
@@ -687,6 +701,9 @@ private:
     bool                                 discFired_ = false;
     bool dropVblankOut_ = false, delayRender_ = false, ignoreCancel_ = false, drift_ = false, coarseClock_ = false;
     bool dropVblankIn_ = false, extraVblank_ = false, fuseVblank_ = false, dropRender_ = false, slow_ = false;
+#if BS_VALIDACAO
+    uint64_t slowApplied_ = 0, slowNs_ = 0;  // mutacao "lento": esperas feitas e o tempo medido delas
+#endif
     bool skipWait_ = false;
     uint64_t   driftTotal_ = 0;
     bool       rtcSet_     = false;

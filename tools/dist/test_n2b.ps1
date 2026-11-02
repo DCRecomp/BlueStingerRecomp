@@ -268,12 +268,38 @@ foreach ($v in "quadro", "agendado") {
 # n8-8\b9_isolado), mais que o efeito da mutacao (2 ms por VBlank, ~7%); uma execucao avulsa contra o limite de 5% nao
 # decide. Cada "lento" e comparado com a sombra da mesma rodada: tem de ser mais lento em todas as rodadas e a diferenca
 # media tem de passar do piso (metade dos 2 ms injetados). O positivo (sombra <= legado x 1,05) nao muda.
-function Work($r) { $m = [regex]::Match($r.Out, "trabalho por campo: media ([\d.]+) ms"); if ($m.Success -and $r.Code -is [int] -and $r.Code -eq 0) { [double]$m.Groups[1].Value } else { [double]::NaN } }  # NaN: toda comparacao reprova
-$wl = @(); $wn = @(); $ws = @()
-for ($i = 0; $i -lt 5; ++$i) {
-    $wl += Work (Run "perf_l$i" "legado" $VBlanksNeg); $wn += Work (Run "perf_n$i" "nativo" $VBlanksNeg)
-    $ws += Work (Run "perf_lento$i" "nativo" $VBlanksNeg @{ BS_TEMPO_MUTACAO = "lento" })
+# A ordem sombra/lento alterna por rodada (pares: sombra antes; impares: lento antes), para que uma deriva ligada a
+# ordem das execucoes nao seja atribuida a mutacao (revisao Codex 20261101-162339, MEDIA)
+# Prova de que a mutacao foi aplicada (exigida pelo mantenedor, 2026-11-01): o exe informa as esperas feitas e o tempo
+# medido delas. No "lento" a linha tem de existir com >= 95% dos VBlanks e media >= 2 ms; na sombra normal e no legado,
+# nao pode existir. Qualquer outra coisa da NaN (reprova).
+function Work($r, [bool]$lento = $false) {
+    $m = [regex]::Match($r.Out, "trabalho por campo: media ([\d.]+) ms")
+    if (-not ($m.Success -and $r.Code -is [int] -and $r.Code -eq 0)) { return [double]::NaN }
+    $a = [regex]::Match($r.Out, "\[tempo\] mutacao lento aplicada: (\d+) VBlanks, espera medida ([\d.]+) ms \(media ([\d.]+) ms\)")
+    if ($lento) {
+        if (-not $a.Success -or [double]$a.Groups[1].Value -lt 0.95 * $VBlanksNeg -or [double]$a.Groups[3].Value -lt 2.0) { return [double]::NaN }
+    } elseif ($a.Success) { return [double]::NaN }
+    return [double]$m.Groups[1].Value
 }
+$wl = @(); $wn = @(); $ws = @(); $aplicadas = @()
+function Lento($i) {
+    $r = Run "perf_lento$i" "nativo" $VBlanksNeg @{ BS_TEMPO_MUTACAO = "lento" }
+    $a = [regex]::Match($r.Out, "\[tempo\] mutacao lento aplicada: ([^\r\n]*)")
+    $script:aplicadas += $(if ($a.Success) { $a.Groups[1].Value } else { "AUSENTE" })
+    return Work $r $true
+}
+for ($i = 0; $i -lt 5; ++$i) {
+    $wl += Work (Run "perf_l$i" "legado" $VBlanksNeg)
+    if ($i % 2 -eq 0) {
+        $wn += Work (Run "perf_n$i" "nativo" $VBlanksNeg)
+        $ws += Lento $i
+    } else {
+        $ws += Lento $i
+        $wn += Work (Run "perf_n$i" "nativo" $VBlanksNeg)
+    }
+}
+Write-Host "[info] B9 mutacao aplicada por rodada: $($aplicadas -join ' | ')"
 $ml = ($wl | Measure-Object -Average).Average; $mn = ($wn | Measure-Object -Average).Average
 Check "B9 desempenho: sombra <= legado x 1,05" ($mn -le $ml * 1.05) ("legado {0:N2} ms, sombra {1:N2} ms" -f $ml, $mn)
 $difs = @(for ($i = 0; $i -lt 5; ++$i) { $ws[$i] - $wn[$i] })
