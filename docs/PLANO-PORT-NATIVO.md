@@ -246,6 +246,9 @@ migração versionada.
   antialiasing, filmes, áudio e acessibilidade, refinamentos, desempenho e validação. **Só planejamento: começa depois
   do N8**, sem mudar a ordem N0–N10.
 
+**N9-L. Suporte nativo a Linux** (decisão do mantenedor, 2026-11-02): marco intermediário provisório, sem alterar a numeração.
+Vem depois do N9.0 e antes do N9.1 e do N9.2. Plano em `docs/N9-L-PLANO.md`.
+
 **N10. Sistema de mods e elevação dos sistemas do jogo** (o antigo N9; contínua)
 - Mods:
   - ferramentas, manifestos, carregador e substituição de recursos;

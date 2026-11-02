@@ -4325,6 +4325,12 @@ não por uma única bateria contínua** (decisão do mantenedor, 2026-11-02).
 - **Pendências:** H9; D-N8-4 no gate pós-N9; ressalva do 7.1 e D-K1(a); limite de 3 h de `n6_h` no executor, defeito a
   corrigir antes de uma futura integral, sem enfraquecer os testes. N9 e N10 não iniciados.
 
+### N9-L: auditoria de portabilidade (2026-11-02)
+
+Plano em `docs/N9-L-PLANO.md`, aguardando aprovação. Sonda com `g++ 13.3 -fsyntax-only` no Ubuntu 24.04 do WSL, sem mudar código: dos 151
+arquivos do jogo, 134 passam, 13 têm dependência real e 4 ficaram inconclusivos pelo `known_versions.h` particular. `funcs_003.cpp` compilou
+com `g++ -O2 -ffp-contract=off` (16 s, 530 MB). Nada foi ligado nem executado no Linux.
+
 ### N9.0: perfis de edição (2026-11-02)
 
 O mantenedor considerou o fechamento técnico do N8 suficiente para abrir o N9 e confirmou o fechamento técnico do N9.0 (2026-11-02).

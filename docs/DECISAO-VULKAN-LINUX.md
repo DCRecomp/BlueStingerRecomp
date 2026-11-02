@@ -1,5 +1,8 @@
 # Decisão: Vulkan como renderer principal e Linux como plataforma futura (2026-10-19)
 
+> **2026-11-02:** o port foi priorizado como N9-L. A auditoria atual está em `docs/N9-L-PLANO.md` e prevalece sobre as tabelas abaixo:
+> o rastreamento de escrita é bloqueador, porque o `--tempo experimental` é o padrão na janela.
+
 Decisão do mantenedor. Substitui a D9 (Direct3D 11) da `ARCHITECTURE.md` §8 e amplia a D8
 (plataforma). **Só documentação e contratos:** nada de Vulkan nem de Linux é implementado agora.
 A ordem do roteiro não muda (seção 7).

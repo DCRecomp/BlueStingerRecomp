@@ -14,7 +14,7 @@ V1.000) para C++ nativo em Windows x64. Arquitetura e decisões em
   sem licença. Usá-los só como referência de comportamento.
 - `STATUS.md` registra cada verificação com data e método.
 - Commits só quando o mantenedor pedir.
-- **N9 (Remasterização)** foi autorizado em 2026-11-02 (`docs/N9-PLANO.md`). N9.0 feito (`docs/N9-0-EDICOES.md`). Cada subetapa
+- **N9 (Remasterização)** foi autorizado em 2026-11-02 (`docs/N9-PLANO.md`). N9.0 fechado (`docs/N9-0-EDICOES.md`). Próximo: **N9-L, Linux nativo** (`docs/N9-L-PLANO.md`), só depois da aprovação do plano; N9.1, N9.2 e N10 bloqueados até lá. Cada subetapa
   passa pelo C8 (`tools/dev/test_campanha.py --casos C8`, seção 14.2) e o N9.5–N9.8 não começa com o N7 aberto. Regras permanentes: um projeto e um núcleo C++ com **duas
   edições** (Original e Remastered), escolhidas pelo Recompiler por um perfil de edição separado das preferências; a
   **edição Original** continua fiel ao Dreamcast e validada contra as referências; na **Remastered a câmera Livre é
