@@ -14,8 +14,8 @@ V1.000) para C++ nativo em Windows x64. Arquitetura e decisões em
   sem licença. Usá-los só como referência de comportamento.
 - `STATUS.md` registra cada verificação com data e método.
 - Commits só quando o mantenedor pedir.
-- **N9 (Remasterização)** está só planejado (`docs/N9-PLANO.md`, 2026-10-23): não implementar nada dele antes do
-  encerramento do N8 e da autorização do mantenedor. Regras permanentes: um projeto e um núcleo C++ com **duas
+- **N9 (Remasterização)** foi autorizado em 2026-11-02 (`docs/N9-PLANO.md`). N9.0 feito (`docs/N9-0-EDICOES.md`). Cada subetapa
+  passa pelo C8 (`tools/dev/test_campanha.py --casos C8`, seção 14.2) e o N9.5–N9.8 não começa com o N7 aberto. Regras permanentes: um projeto e um núcleo C++ com **duas
   edições** (Original e Remastered), escolhidas pelo Recompiler por um perfil de edição separado das preferências; a
   **edição Original** continua fiel ao Dreamcast e validada contra as referências; na **Remastered a câmera Livre é
   obrigatória**; nada de fork, branch por edição ou volta da camada legada; arte do jogo (capa, texturas, áudio) nunca
@@ -65,6 +65,8 @@ Ferramentas:
   `BlueStinger-Recompiler.exe` (simples: idioma pt-BR/en-US, Modo portátil = `instalacao.toml`; `--auto
   --portatil --idioma <cod> --sem-filmes` para testes) e `BlueStinger-Developer.exe` (três áreas: exportar o projeto C++20 sem compilar, `--somente-exportar` no CLI; compilar projeto Release/Debug sem o CDI pela pasta dos recursos; inspecionar instalação ou projeto sem o CDI).
   Textos por chave em `builder/ui`; unitários `bs_ui_tests` (ctest `ui`).
+- Edições (N9.0): `[edicao] perfil` no `instalacao.toml`, escrito só pelo instalador (`--edicao original|remastered` no
+  `bs-builder` e no `BlueStinger-Recompiler`). O jogo não tem essa opção. Suíte `tools/dist/test_edicao.ps1`.
 - `tools/dist/make_preview.ps1 -Disc <img.cdi>` (pelo próprio Builder), `make_builder.ps1`: distribuições
   em `dist/`; testes `test_preview.ps1`, `test_gameplay.ps1` (NEW GAME até a 1ª área),
   `test_builder.ps1 -Disc <img.cdi>`, `test_projeto.ps1 -Disc <img.cdi>` (projeto editável e mods).

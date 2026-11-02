@@ -13,6 +13,7 @@ add_library(bs_native STATIC platform/data_files.cpp platform/clock.cpp platform
             platform/graphics_settings.cpp   # N7: modelo das configuracoes graficas (graficos.toml)
             platform/user_settings.cpp       # N7c: audio.toml e legendas.toml (menu interno)
             platform/camera_settings.cpp     # N7c: camera livre ([camera] em controles.toml)
+            platform/edition.cpp             # N9.0: perfil de edicao (Original, Remastered)
             platform/stall_trace.cpp)        # N8.8: diagnostico BS_TRAVAS (travas, esperas, fila de audio)
 target_link_libraries(bs_native PUBLIC bs_native_api PRIVATE tomlplusplus::tomlplusplus xinput)
 

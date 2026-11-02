@@ -205,11 +205,12 @@ ResourceReport inspect_resources(const fs::path& dir, const std::wstring& instal
             c.state  = ResourceState::Ok;
             c.origin = ResourceOrigin::Installation;
             c.file   = cfg;
-            c.detail = ic.saves == native::install::SavesLocation::Portable ? "saves=portatil" : "saves=documentos";
+            c.detail = std::string(ic.saves == native::install::SavesLocation::Portable ? "saves=portatil" : "saves=documentos") +
+                       " edicao=" + native::edition::edition_name(ic.edition);
             if (!warn.empty()) r.issues.push_back({InspectProblem::ManifestError, warn});
         } else {
             c.state  = ResourceState::Absent;  // o padrao: saves em Documentos
-            c.detail = "saves=documentos (padrao)";
+            c.detail = "saves=documentos edicao=original (padrao)";
         }
         r.rows.push_back(c);
     }

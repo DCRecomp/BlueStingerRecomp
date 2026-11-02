@@ -3,7 +3,7 @@
 // BlueStinger-Developer.exe (sem as opcoes avancadas nem o log tecnico, que fica no builder.log).
 // Todos os textos vem do catalogo (builder/ui/i18n.h); trocar o idioma retraduz a janela na hora.
 //   BlueStinger-Recompiler.exe [--disc <cdi>] [--out <pasta>] [--kit <pasta>] [--sdl3 <pasta>]
-//                              [--portatil] [--idioma <codigo>] [--auto] [--sem-filmes]
+//                              [--portatil] [--edicao original|remastered] [--idioma <codigo>] [--auto] [--sem-filmes]
 //   --auto: comeca sozinho, sem dialogos, e fecha no fim (codigo 0 = sucesso, 1 = falha, 2 = entradas,
 //   3 = cancelado); --idioma vale so para esta execucao.
 #include "builder_core.h"
@@ -64,6 +64,7 @@ struct App {
     std::thread       worker;
     std::atomic<bool> cancelFlag{false};
     bool              running = false, closeAfter = false, autoMode = false, langFromCli = false, noMovies = false;
+    std::optional<bs::native::edition::Edition> edition;  // --edicao; sem ela, a da instalacao anterior fica
     int               exitCode = 0;
     Result            last;
     Status            st;
@@ -242,7 +243,10 @@ void startBuild() {
     req.outDir        = text(g.out);
     req.kitDir        = g.kit;
     req.sdl3Dir       = g.sdl3;
-    req.portableSaves = checked(g.portable);
+    // na janela a caixa e a escolha (confirmInstall avisa se muda); no --auto, sem --portatil nao ha escolha: a instalacao
+    // mantem o local dos saves
+    if (!g.autoMode || checked(g.portable)) req.portableSaves = checked(g.portable);
+    req.edition       = g.edition;
     req.movies        = !g.noMovies;
     if (req.disc.empty() || req.outDir.empty()) {
         if (g.autoMode) {
@@ -253,7 +257,7 @@ void startBuild() {
         ask(tr("msg.missing_input"), MB_ICONWARNING);
         return;
     }
-    if (!confirmInstall(req.outDir, *req.portableSaves)) return;
+    if (!confirmInstall(req.outDir, checked(g.portable))) return;
     if (!g.langFromCli) savePrefs(currentPrefs());
     SendMessageW(g.progress, PBM_SETPOS, 0, 0);
     g.cancelFlag = false;
@@ -500,6 +504,11 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int show) {
         else if (args[i] == L"--idioma" && more) cliLang = narrow(args[++i]);
         else if (args[i] == L"--auto") g.autoMode = true;
         else if (args[i] == L"--sem-filmes") g.noMovies = true;  // testes: sem a conversao dos filmes (N5)
+        else if (args[i] == L"--edicao" && more) {  // N9.0: a tela de edicao e do N9.1
+            bs::native::edition::Edition e{};
+            if (!bs::native::edition::parse_edition(narrow(args[++i]), &e)) return 2;
+            g.edition = e;
+        }
     }
     g.langFromCli = !cliLang.empty();
     ui::set_language(ui::initial_language(g.langFromCli ? cliLang : prefs.lang, windowsLanguages()));

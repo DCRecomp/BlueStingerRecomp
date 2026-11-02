@@ -38,6 +38,13 @@ void out(const std::string& s) {  // UTF-8 no console e em pipes
     std::fflush(stdout);
 }
 
+bool parseEdition(const std::wstring& v, Request& req) {
+    bs::native::edition::Edition e{};
+    if (!bs::native::edition::parse_edition(narrow(v), &e)) return false;
+    req.edition = e;
+    return true;
+}
+
 fs::path exeDir() {
     std::wstring b(32768, L'\0');
     b.resize(GetModuleFileNameW(nullptr, b.data(), DWORD(b.size())));
@@ -71,12 +78,14 @@ int main() {
         else if (a == L"--de-projeto" && more) req.fromProject = args[++i];
         else if (a == L"--clean") req.clean = true;
         else if (a == L"--sem-filmes") req.movies = false;
+        else if (a == L"--edicao" && more && parseEdition(args[i + 1], req)) ++i;
         else if (a == L"--somente-exportar") req.exportOnly = true;
         else if (a == L"--tipo" && more) req.buildType = narrow(args[++i]);
         else {
             std::fprintf(stderr,
                          "uso: bs-builder --disc <imagem.cdi> --out <pasta> [--kit <pasta>] [--sdl3 <pasta>]\n"
                          "                [--vcvars <vcvars64.bat> | --vswhere <vswhere.exe>] [--clean] [--name <subpasta>]\n"
+                         "                [--edicao original|remastered]\n"
                          "                [--projeto <pasta>]      exporta o projeto C++ editavel\n"
                          "  bs-builder --de-projeto <pasta> --out <pasta> [--disc <cdi>]   compila o projeto (mods)\n"
                          "                [--verify-vblanks N] [--sem-filmes] [--tipo Release|Debug]\n"

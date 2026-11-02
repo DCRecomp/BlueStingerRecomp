@@ -282,6 +282,18 @@ fs::path exeDir() {
 
 // Pasta dos arquivos do usuario (log): ao lado do executavel se der para gravar la; senao
 // %LOCALAPPDATA%\BlueStingerRecomp. (Os dados do jogo ficam em data/, so leitura.)
+// N9.0: o perfil da instalacao, lido uma vez ao abrir (docs/N9-0-EDICOES.md). Nao ha opcao de linha de comando para ele.
+const bs::native::edition::EditionProfile& editionProfile() {
+    static const bs::native::edition::EditionProfile profile = [] {
+        std::string warn;
+        const auto  cfg = bs::native::install::read_config(exeDir(), &warn);
+        if (!warn.empty()) std::fprintf(stderr, "[edicao] %s\n", warn.c_str());
+        std::fprintf(stderr, "[edicao] perfil %s\n", bs::native::edition::edition_name(cfg.edition));
+        return bs::native::edition::profile_for(cfg.edition);
+    }();
+    return profile;
+}
+
 fs::path userDir() {
     const fs::path  here  = exeDir();
     const fs::path  probe = here / L".bluestinger_teste_escrita";
@@ -634,7 +646,7 @@ public:
                bs::Preferences prefs, bs::Preferences persisted, bool renderOverride, bool subtitleOverride, bool cameraOverride,
                st::Capabilities caps, std::vector<std::string> languages)
         : host_(host), input_(input), window_(window), pres_(pres), dir_(std::move(dir)),
-          menu_(prefs, caps, std::move(languages)), applied_(prefs), persisted_(std::move(persisted)),
+          menu_(prefs, caps, std::move(languages), editionProfile()), applied_(prefs), persisted_(std::move(persisted)),
           renderOverride_(renderOverride), subtitleOverride_(subtitleOverride), cameraOverride_(cameraOverride),
           confirmed_(prefs.graphics) {
         std::vector<bs::MenuItem> info;
@@ -871,7 +883,7 @@ public:
         if (renderOverride_) d.graphics.vulkan = persisted_.graphics.vulkan;
         d.subtitles = applied_.subtitles;
         if (subtitleOverride_) d.subtitles.enabled = persisted_.subtitles.enabled, d.subtitles.language = persisted_.subtitles.language;
-        d.camera = applied_.camera;
+        d.camera = bs::native::edition::for_file(applied_.camera, persisted_.camera, editionProfile());
         if (cameraOverride_) d.camera.mode = persisted_.camera.mode;
         std::string err;
         bool        wrote = false;
@@ -1411,6 +1423,7 @@ bs::GameOptions gameOptions(const Args& a) {
     opt.subtitles         = subtitlesLanguage(a);
     opt.registerFunctions = [] { bsg::register_functions(); };
     if (a.cameraMode >= 0) opt.camera.mode = st::CameraMode(a.cameraMode);
+    opt.camera            = bs::native::edition::clamp_to(opt.camera, editionProfile());
     opt.realtime          = a.headless == 0;
     opt.vblankLimit       = a.headless;
     return opt;
@@ -1676,6 +1689,11 @@ int mainWindow(Args& a) {
         renderOverride   = a.renderExplicit;
         cameraOverride   = a.cameraMode >= 0;
         if (cameraOverride) prefs.camera.mode = st::CameraMode(a.cameraMode);
+        {  // N9.0: o que o perfil impoe nao muda o controles.toml do jogador (persist, for_file)
+            std::vector<std::string> notes;
+            prefs.camera = bs::native::edition::clamp_to(prefs.camera, editionProfile(), &notes);
+            for (const std::string& n : notes) std::fprintf(stderr, "[edicao] %s\n", n.c_str());
+        }
         subtitleOverride = a.subtitlesSet || !legFile;  // sem legendas.toml, o idioma vem do instalacao.toml
         if (a.renderExplicit) prefs.graphics.vulkan = a.render == 1;
         else a.render = prefs.graphics.vulkan ? 1 : 0;
@@ -1789,6 +1807,10 @@ int main(int, char**) {
         std::fprintf(stderr, "%s", kUsage);
         nativeBox(kUsage, MB_ICONINFORMATION);
         return 2;
+    }
+    if (a.cameraMode == int(st::CameraMode::Original) && editionProfile().free_camera_required) {  // o resto le o perfil ao usar
+        std::fprintf(stderr, "[edicao] --camera original ignorado: a edicao exige a camera livre\n");
+        a.cameraMode = -1;
     }
     // N8.3 (docs/N8-3-BOOT.md): o modelo HLE do sistema e o que depende dele sairam do produto: pedido explicito, recusa
     // explicita (nunca um recuo silencioso para o servico nativo)

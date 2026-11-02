@@ -191,20 +191,33 @@ Check "janela: cancelar mantem a instalada" ($closed -and $p.ExitCode -eq 3 -and
 
 # 11. Recompiler (janela simples) em modo --auto ate o fim, com o modo portatil; arquivos do usuario
 # preservados e instalacao.toml gravado na instalacao (o jogo o le ao abrir direto)
-$p = Start-Process -FilePath $rec -ArgumentList "--disc `"$cdi`" --out `"$out1`" --portatil --idioma en-US --auto --sem-filmes" -PassThru
+$p = Start-Process -FilePath $rec -ArgumentList "--disc `"$cdi`" --out `"$out1`" --portatil --edicao remastered --idioma en-US --auto --sem-filmes" -PassThru
 $closed = $p.WaitForExit(1800000)
 $ini = [IO.File]::ReadAllText((Join-Path $out1 "BlueStinger\bluestinger.ini"))
 $cfgFile = Join-Path $out1 "BlueStinger\instalacao.toml"
 $cfg = if (Test-Path -LiteralPath $cfgFile) { [IO.File]::ReadAllText($cfgFile) } else { "" }
-Check "Recompiler: compilacao ate o fim, ini do usuario preservado, modo portatil gravado" ($closed -and $p.ExitCode -eq 0 -and $ini -eq "cdi=preservado" -and $cfg -match 'local = "portatil"') "codigo $($p.ExitCode)"
+Check "Recompiler: compilacao ate o fim, ini do usuario preservado, modo portatil e edicao gravados" ($closed -and $p.ExitCode -eq 0 -and $ini -eq "cdi=preservado" -and $cfg -match 'local = "portatil"' -and $cfg -match 'perfil = "remastered"') "codigo $($p.ExitCode)"
 if ($p.ExitCode -ne 0) { GuardaFalha "recompiler" $out1 "" }
 $installed = Hash $exe1  # a janela instalou uma versao nova
+
+# 11a. Recompiler --auto sem --portatil e sem --edicao: o que nao foi escolhido fica. O idioma e o save sao marcas do jogador
+$legFile = $cfgFile
+[IO.File]::WriteAllText($legFile, ($cfg -replace 'idioma = "[^"]*"', 'idioma = "pt-BR"'))
+$saveDir = Join-Path $out1 "BlueStinger\saves"
+New-Item -ItemType Directory -Force -Path $saveDir | Out-Null
+$save = Join-Path $saveDir "sentinela.vms"
+[IO.File]::WriteAllText($save, "save do jogador")
+$p = Start-Process -FilePath $rec -ArgumentList "--disc `"$cdi`" --out `"$out1`" --idioma en-US --auto --sem-filmes" -PassThru
+$closed = $p.WaitForExit(1800000)
+$cfg = if (Test-Path -LiteralPath $cfgFile) { [IO.File]::ReadAllText($cfgFile) } else { "" }
+Check "Recompiler --auto sem escolhas: mantem saves, edicao, legendas e o save" ($closed -and $p.ExitCode -eq 0 -and $cfg -match 'local = "portatil"' -and $cfg -match 'perfil = "remastered"' -and $cfg -match 'idioma = "pt-BR"' -and (Test-Path -LiteralPath $save)) "codigo $($p.ExitCode)"
+if ($p.ExitCode -ne 0) { GuardaFalha "recompiler-auto" $out1 "" }
 
 # 11b. Developer (sem escolha de modo) recompila: o instalacao.toml da instalacao fica como estava
 $p = Start-Process -FilePath $gui -ArgumentList "--disc `"$cdi`" --out `"$out1`" --auto --sem-filmes" -PassThru
 $closed = $p.WaitForExit(1800000)
 $cfg = if (Test-Path -LiteralPath $cfgFile) { [IO.File]::ReadAllText($cfgFile) } else { "" }
-Check "Developer: recompilar preserva o modo portatil da instalacao" ($closed -and $p.ExitCode -eq 0 -and $cfg -match 'local = "portatil"') "codigo $($p.ExitCode)"
+Check "Developer: recompilar preserva o modo portatil, a edicao, as legendas e o save" ($closed -and $p.ExitCode -eq 0 -and $cfg -match 'local = "portatil"' -and $cfg -match 'perfil = "remastered"' -and $cfg -match 'idioma = "pt-BR"' -and (Test-Path -LiteralPath $save)) "codigo $($p.ExitCode)"
 if ($p.ExitCode -ne 0) { GuardaFalha "developer" $out1 "" }
 $installed = Hash $exe1
 

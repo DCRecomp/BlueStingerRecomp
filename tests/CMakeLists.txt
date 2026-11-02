@@ -34,6 +34,7 @@ add_executable(bs_unit_tests
   unit/test_pad_contract.cpp
   unit/test_input_native.cpp
   unit/test_camera.cpp   # N7c: camera livre
+  unit/test_edition.cpp  # N9.0: perfil de edicao
   unit/test_camera_slots.cpp
   unit/test_saves_native.cpp
   unit/test_bu_machine.cpp

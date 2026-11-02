@@ -75,7 +75,7 @@ BS_TEST(dev_inspect_movies_mods_and_config) {
     const auto* e3 = row(r, bb::ResourceKind::Movie, "5");
     BS_CHECK(e3 && e3->state == bb::ResourceState::FileMissing && e3->origin == bb::ResourceOrigin::Builder && e3->moddable);
     const auto* c = row(r, bb::ResourceKind::Config);
-    BS_CHECK(c && c->state == bb::ResourceState::Ok && c->detail == "saves=portatil");
+    BS_CHECK(c && c->state == bb::ResourceState::Ok && c->detail == "saves=portatil edicao=original");
 }
 
 // Manifesto com erro: aparece como problema (com a mensagem do leitor), a inspecao continua

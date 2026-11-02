@@ -86,6 +86,7 @@ $steps = @(
     @{ N = "test_controles"; T = "suite"; A = @("$dist\test_controles.ps1"); Max = 10800; Id = @("@comum") },
     @{ N = "test_pd_nativo"; T = "suite"; A = @("$dist\test_pd_nativo.ps1"); Max = 10800; Id = @("@comum") },
     @{ N = "test_saves";    T = "suite"; A = @("$dist\test_saves.ps1"); Id = @("@comum") },
+    @{ N = "test_edicao";   T = "suite"; A = @("$dist\test_edicao.ps1"); Id = @("@comum") },
     # N5: o filme nativo no jogo (E001: conversao so dele, rotas legado x nativo, START medido)
     @{ N = "n5_e001";       T = "suite"; A = @("$repo\tools\dev\n5_e001.ps1"); Id = @("@comum") },
     # N8: produto nativo x validacao (test_n8_nativo) e a bateria H do N6: a validacao nos casos com o legado, o H4 em

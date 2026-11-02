@@ -4325,7 +4325,39 @@ não por uma única bateria contínua** (decisão do mantenedor, 2026-11-02).
 - **Pendências:** H9; D-N8-4 no gate pós-N9; ressalva do 7.1 e D-K1(a); limite de 3 h de `n6_h` no executor, defeito a
   corrigir antes de uma futura integral, sem enfraquecer os testes. N9 e N10 não iniciados.
 
+### N9.0: perfis de edição (2026-11-02)
+
+O mantenedor considerou o fechamento técnico do N8 suficiente para abrir o N9 e confirmou o fechamento técnico do N9.0 (2026-11-02).
+Isso não aprova a campanha completa nem retira as ressalvas do N8.8.
+
+Contrato em `docs/N9-0-EDICOES.md`. O mesmo executável roda as duas edições, escolhidas por `[edicao] perfil` no
+`instalacao.toml`. Só a câmera muda nesta etapa. Preview `B232422B…`, com `BD2E9C84…` (final do N8) como programa anterior.
+
+- **Original idêntica:** referências do N8.0 16/16 (179 exceções, nenhuma nova) e do N8.7 16/16 no executável novo.
+- **Portão C8:** 8/0 contra o programa anterior e 8/0 contra a instalação Remastered. Na Remastered, o caso `outro-programa`
+  reproduz a sessão curta com a câmera Livre imposta: `--camera original` é ignorado (E3). Estado, VBlanks, LOAD/SAVE e saves
+  iguais. A comparação de estado exclui a câmera (`BS_STATE_PASSO_SEM_CAMERA`).
+- **`test_edicao`:** 11/0. O E8 usa o menu real: na Remastered a sensibilidade muda no `controles.toml`, modo e movimento não.
+- **`test_builder`:** 24/0, com o `known_versions.h` do HEAD durante o teste e o particular restaurado depois (hash conferido).
+  Sem essa troca o kit não compila do zero (falha fora do N9.0, registrada antes). Recompiler e Developer sem escolhas mantêm
+  edição, saves, legendas e um save do jogador.
+- **Build e unitários:** Release e Debug ok; `ctest` 27, 100 %, com o disco, `boot_trace` ignorado. Depois das provas de
+  referência só o Builder e testes mudaram: nenhum arquivo do jogo tocado desde a Preview `B232422B…`.
+- **Decisão 12.1 do plano fechada:** as edições usam os mesmos arquivos de preferências, e o perfil limita sem reescrever.
+- **Não feito nesta etapa:** tela de edição (N9.1), preset Remastered (N9.5–N9.8).
+
 ## Revisões independentes (Codex)
+
+### 2026-11-02: N9.0. Relatório `reviews/codex-20261102-115056.md` (4 achados)
+
+Nenhum caminho deixa a Remastered sem câmera Livre, e a Original não muda.
+
+| Achado | Decisão |
+|---|---|
+| [MÉDIA] Recompiler `--auto` sem `--portatil` trocava saves portáteis por Documentos | **Aceito.** Sem a escolha, a instalação mantém o local. Na janela a caixa continua sendo a escolha, com o aviso de sempre. Anterior ao N9.0, mas contrariava o contrato. Caso novo no `test_builder` |
+| [MÉDIA] `instalacao.toml` com erro de sintaxe é regravado com os padrões | **Rejeitado.** O jogo já usa esses padrões com esse arquivo, então nada efetivo se perde, e o instalador registra o aviso. Comportamento escrito no contrato |
+| [MÉDIA] E7 não exercitava `InGameMenu::persist` | **Aceito.** Novo E8, nas duas edições, com o menu real |
+| [BAIXA] Developer só conferia `local` e `perfil` | **Aceito em parte.** Legenda e save sentinela acrescentados. A parte sobre E0/E1 não procede: a equivalência da Original vem das referências, como o contrato diz |
 
 ### 2026-11-02: fechamento do N8.8. Relatório `reviews/codex-20261102-041748.md` (6 achados)
 

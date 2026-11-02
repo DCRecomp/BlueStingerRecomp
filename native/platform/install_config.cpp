@@ -39,6 +39,11 @@ InstallConfig read_config(const fs::path& dir, std::string* warning) {
             if (!parse_subtitles(*v, &c.subtitles) && warning)
                 *warning = "instalacao.toml: legendas.idioma = \"" + *v + "\" invalido; usando " + kDefaultSubtitles;
         }
+        if (const toml::node_view v = t["edicao"]["perfil"]) {
+            const auto s = v.value<std::string>();
+            if ((!s || !edition::parse_edition(*s, &c.edition)) && warning)
+                *warning = "instalacao.toml: edicao.perfil invalido; usando original";
+        }
         if (const auto v = t["saves"]["local"].value<std::string>()) {
             if (*v == "portatil") c.saves = SavesLocation::Portable;
             else if (*v != "documentos" && warning)
@@ -52,10 +57,14 @@ InstallConfig read_config(const fs::path& dir, std::string* warning) {
 
 std::string config_text(const InstallConfig& c) {
     return std::string("# Blue Stinger: configuracao desta instalacao (gravada pelo BlueStinger-Recompiler).\n"
-                       "# saves.local: \"documentos\" = Documentos\\DC-Recomp\\Blue Stinger\\saves;\n"
-                       "#              \"portatil\"   = pasta saves ao lado do BlueStinger.exe.\n"
-                       "# Trocar o valor nao move as partidas de um lugar para o outro.\n"
-                       "[saves]\nlocal = \"") +
+                       "# edicao.perfil: \"original\" ou \"remastered\"; quem troca e o instalador.\n"
+                       "[edicao]\nperfil = \"") +
+           edition::edition_name(c.edition) +
+           "\"\n\n"
+           "# saves.local: \"documentos\" = Documentos\\DC-Recomp\\Blue Stinger\\saves;\n"
+           "#              \"portatil\"   = pasta saves ao lado do BlueStinger.exe.\n"
+           "# Trocar o valor nao move as partidas de um lugar para o outro.\n"
+           "[saves]\nlocal = \"" +
            (c.saves == SavesLocation::Portable ? "portatil" : "documentos") + "\"\n" +
            "\n# legendas.idioma: \"auto\" (padrao: pt-BR se instalado, senao en-US), um idioma (pt-BR, en-US...) ou \"nenhuma\".\n"
            "# As legendas vem de mods\n"

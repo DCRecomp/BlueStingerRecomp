@@ -12,6 +12,8 @@
 // Build incremental do CMake: %LOCALAPPDATA%\BlueStingerRecomp\build\<hash da saida>
 // (caminho curto: o MSVC nao passa de 260 caracteres).
 // Uma falha em qualquer etapa deixa a versao instalada anterior intacta.
+#include "platform/install_config.h"
+
 #include <atomic>
 #include <filesystem>
 #include <functional>
@@ -53,6 +55,8 @@ struct Request {
     // Local dos saves gravado em <instalacao>\instalacao.toml (native/platform/install_config.h).
     // Vazio: o arquivo da instalacao anterior fica como esta (arquivo do usuario, preservado).
     std::optional<bool>   portableSaves;
+    // N9.0: a edicao gravada na instalacao. Vazio: a da instalacao anterior fica (uma instalacao nova: Original).
+    std::optional<native::edition::Edition> edition;
 };
 
 struct Callbacks {
@@ -124,6 +128,10 @@ struct ArchiveError : std::runtime_error {
 //   esta a versao anterior se nem a restauracao der certo).
 // - Com sucesso, a versao anterior fica em `<dest>.anterior` (rollback: renomear de
 //   volta); uma `.anterior` mais antiga, marcada por nos, sai.
+// O instalacao.toml novo: o que `req` escolhe sobre o que a instalacao em `installDir` ja tem (o resto nao muda).
+native::install::InstallConfig install_config_for(const Request& req, const std::filesystem::path& installDir,
+                                                  std::string* warning = nullptr);
+
 void install_swap(const std::filesystem::path& stage, const std::filesystem::path& dest,
                   const std::function<bool(const std::filesystem::path& relative)>& isPackageFile,
                   const std::atomic<bool>* cancel = nullptr);

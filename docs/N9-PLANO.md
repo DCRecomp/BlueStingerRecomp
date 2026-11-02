@@ -1,8 +1,7 @@
 # N9 — Blue Stinger Remastered: planejamento
 
-**Situação: planejamento aprovado pelo mantenedor (2026-10-23), atualizado com as lições do N8 em 2026-10-28 (seção 13). N9 NÃO INICIADO.** Este documento só registra o
-escopo, a arquitetura e os critérios. Nada do N9 é implementado antes do encerramento do N8 (executável sem legado) e
-da autorização do mantenedor para começar. A ordem N0–N10 não muda (`docs/PLANO-PORT-NATIVO.md`, seções 4 e 4.2).
+**Situação: N9 autorizado e iniciado em 2026-11-02. O mantenedor considerou o fechamento técnico do N8 suficiente para abrir o N9; as ressalvas do N8 e a campanha completa (seção 14) continuam abertas. N9.0 com fechamento técnico confirmado pelo mantenedor (`docs/N9-0-EDICOES.md`).** Planejamento aprovado em
+2026-10-23 e atualizado com as lições do N8 em 2026-10-28 (seção 13). Este documento registra o escopo, a arquitetura e os critérios. A ordem N0–N10 não muda (`docs/PLANO-PORT-NATIVO.md`, seções 4 e 4.2).
 
 Fontes: o pedido do mantenedor de 2026-10-23 ("Planejamento oficial do N9: Remasterização"), a definição do N9 de
 2026-10-22 (`docs/PLANO-PORT-NATIVO.md` seção 4) e os itens transferidos do N7 (`docs/N7-PLANO.md` seção 25.2: SSAO,
@@ -411,11 +410,10 @@ marcos 3–5, já que só depende do perfil.
 
 ## 12. Decisões técnicas em aberto
 
-1. Formato e local do perfil de edição (`instalacao.toml` `[edicao]` é a proposta) e o comportamento de uma pasta
-   com preferências de outra edição.
-2. Tecnologia da interface do instalador (Win32 com Direct2D, como o menu do jogo; WinUI; ou um renderizador próprio
-   compartilhado com a interface do jogo).
-3. Se a interface do jogo (N9.2) usa o mesmo motor de desenho do instalador.
+1. **Fechada em 2026-11-02 (`docs/N9-0-EDICOES.md`):** `instalacao.toml` `[edicao] perfil`. As edições usam os mesmos arquivos de
+   preferências, e o perfil limita o valor usado sem reescrever o arquivo.
+2. **Fechada em 2026-11-02:** instalador Windows em Win32 + Direct2D.
+3. **Fechada em 2026-11-02:** o instalador e a interface do jogo (N9.2) compartilham só a identidade visual, não o motor.
 4. Formato dos saves de PC: o `.vms` do N4 com metadados ao lado, ou um contêiner novo com o `.vms` dentro; política de
    quantidade depois de medir os limites do jogo.
 5. Pontos seguros de autosave: critério e prova.
@@ -423,10 +421,10 @@ marcos 3–5, já que só depende do perfil.
 7. Técnica de iluminação e sombras (forward com luzes por objeto, deferred parcial ou só pós-processamento com
    profundidade) depois das provas.
 8. 21:9: suporte completo ou só em gameplay.
-9. Origem das artes do instalador e da identidade visual (criação própria, encomenda, licença).
+9. **Fechada em 2026-11-02:** artes próprias, com origem e direitos documentados.
 10. Pacotes HD e áudio remasterizado oficiais: quem produz, licença e como se distribuem sem conteúdo comercial.
 11. Preset gráfico Remastered padrão por classe de GPU (detecção automática ou escolha no instalador).
-12. Se a Original ganha o menu inicial nativo como opção, ou mantém só a interface original.
+12. **Fechada em 2026-11-02:** a edição Original preserva exclusivamente o menu original.
 
 ## 13. Atualização do planejamento depois do N8 (2026-10-28)
 

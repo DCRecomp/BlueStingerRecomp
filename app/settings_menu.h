@@ -14,6 +14,7 @@
 //   - o idioma da interface acompanha o das legendas (pt-* = portugues, os outros = ingles); com as legendas
 //     desativadas fica o ultimo escolhido (o idioma continua gravado em legendas.toml). Vale na hora e no reinicio.
 #include "platform/camera_settings.h"
+#include "platform/edition.h"
 #include "platform/graphics_settings.h"
 #include "platform/user_settings.h"
 
@@ -60,7 +61,8 @@ struct MenuView {
 
 class SettingsMenu {
 public:
-    SettingsMenu(Preferences prefs, native::settings::Capabilities caps, std::vector<std::string> languages);
+    SettingsMenu(Preferences prefs, native::settings::Capabilities caps, std::vector<std::string> languages,
+                 native::edition::EditionProfile profile = {});
 
     void open();
     void close();
@@ -103,6 +105,7 @@ private:
 
     Preferences                      prefs_, defaults_;
     native::settings::Capabilities   caps_;
+    native::edition::EditionProfile  profile_;
     std::vector<std::string>         languages_;
     bool                             speakers_ = false;
     bool                             open_ = false, dirty_ = false;

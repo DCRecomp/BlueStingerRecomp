@@ -395,6 +395,14 @@ void archivePrevious(const fs::path& parent, const fs::path& dest, const fs::pat
 
 } // namespace
 
+native::install::InstallConfig install_config_for(const Request& req, const fs::path& installDir, std::string* warning) {
+    native::install::InstallConfig ic = native::install::read_config(installDir, warning);
+    if (req.edition) ic.edition = *req.edition;
+    if (req.portableSaves)
+        ic.saves = *req.portableSaves ? native::install::SavesLocation::Portable : native::install::SavesLocation::Documents;
+    return ic;
+}
+
 void install_swap(const fs::path& stage, const fs::path& dest, const std::function<bool(const fs::path&)>& isPkg,
                   const std::atomic<bool>* cancel) {
     std::error_code    ec;
@@ -890,15 +898,17 @@ Result build(const Request& req, const Callbacks& cb) {
             fs::copy_file(sdl3 / L"LICENSE.txt", stage / L"licencas" / L"SDL3-zlib.txt");
         if (fs::is_regular_file(toml / L"LICENSE", ec))  // N3-1: o jogo le controles.toml com o toml++
             fs::copy_file(toml / L"LICENSE", stage / L"licencas" / L"tomlplusplus-MIT.txt");
-        // local dos saves escolhido na interface (sem escolha: o instalacao.toml anterior fica, como
+        // edicao e local dos saves escolhidos (sem escolha: o instalacao.toml anterior fica, como
         // arquivo do usuario). Nao faz parte da lista do pacote: nunca e apagado por uma troca.
-        if (req.portableSaves) {
-            native::install::InstallConfig ic;
-            ic.saves = *req.portableSaves ? native::install::SavesLocation::Portable : native::install::SavesLocation::Documents;
+        if (req.portableSaves || req.edition) {
+            std::string     iwarn;
+            const native::install::InstallConfig ic = install_config_for(req, res.installDir, &iwarn);
+            if (!iwarn.empty()) log(iwarn);
             std::string     ierr;
             std::error_code icode;
             if (!native::install::write_config(stage, ic, &ierr, &icode)) throw StepError(kindOf(icode, ErrorKind::Other), ierr);
-            log(std::string("saves: ") + (*req.portableSaves ? "portatil (saves\\ na instalacao)" : "Documentos"));
+            log(std::string("edicao: ") + native::edition::edition_name(ic.edition) + "; saves: " +
+                (ic.saves == native::install::SavesLocation::Portable ? "portatil (saves\\ na instalacao)" : "Documentos"));
         }
         // dados do jogo: hard links dos preparados (sem copiar 700 MB; copia se o volume nao
         // aceitar links). Os arquivos nunca sao reescritos no lugar: o Builder prepara de novo

@@ -37,8 +37,9 @@ struct SettingsMenu::Entry {
     bool                                submenu = false;
 };
 
-SettingsMenu::SettingsMenu(Preferences prefs, st::Capabilities caps, std::vector<std::string> languages)
-    : prefs_(std::move(prefs)), caps_(caps), languages_(std::move(languages)) {
+SettingsMenu::SettingsMenu(Preferences prefs, st::Capabilities caps, std::vector<std::string> languages,
+                           native::edition::EditionProfile profile)
+    : prefs_(std::move(prefs)), caps_(caps), profile_(profile), languages_(std::move(languages)) {
     if (languages_.empty()) languages_.push_back("en-US");
 }
 
@@ -289,13 +290,15 @@ std::vector<SettingsMenu::Entry> SettingsMenu::entries() const {
         auto fstep = [](float st::CameraSettings::*m, float by, float lo, float hi) {
             return [=](Preferences& p, int d) { p.camera.*m = std::clamp(std::round((p.camera.*m + by * float(d)) / by) * by, lo, hi); };
         };
-        e.push_back({L("Modo", "Mode"), camera_label(c.mode), true, [](Preferences& p, int d) { p.camera.mode = cycle(p.camera.mode, d, 2); }});
-        // no Original nao ha deslocamento: o movimento e sempre o do console
-        e.push_back({L("Movimentação", "Movement"),
-                     !on || c.movement == st::MoveMode::Original ? "Original" : L("Relativa à câmera", "Camera-relative"), on,
-                     [](Preferences& p, int) {
-                         p.camera.movement = p.camera.movement == st::MoveMode::Camera ? st::MoveMode::Original : st::MoveMode::Camera;
-                     }});
+        if (!profile_.free_camera_required) {  // N9.0: na edicao que exige a camera Livre estas opcoes nao existem
+            e.push_back({L("Modo", "Mode"), camera_label(c.mode), true, [](Preferences& p, int d) { p.camera.mode = cycle(p.camera.mode, d, 2); }});
+            // no Original nao ha deslocamento: o movimento e sempre o do console
+            e.push_back({L("Movimentação", "Movement"),
+                         !on || c.movement == st::MoveMode::Original ? "Original" : L("Relativa à câmera", "Camera-relative"), on,
+                         [](Preferences& p, int) {
+                             p.camera.movement = p.camera.movement == st::MoveMode::Camera ? st::MoveMode::Original : st::MoveMode::Camera;
+                         }});
+        }
         e.push_back({L("Sensibilidade horizontal", "Horizontal sensitivity"), num(c.sens_x, 0, " °/s"), on,
                      fstep(&st::CameraSettings::sens_x, 10, 10, 360)});
         e.push_back({L("Sensibilidade vertical", "Vertical sensitivity"), num(c.sens_y, 0, " °/s"), on,
@@ -317,6 +320,7 @@ std::vector<SettingsMenu::Entry> SettingsMenu::entries() const {
 void SettingsMenu::commit(const Preferences& wanted, double now) {
     Preferences next = wanted;
     next.graphics    = st::clamp_to(next.graphics, caps_);  // nada que o renderizador nao tenha
+    next.camera      = native::edition::clamp_to(next.camera, profile_);  // nem "Restaurar padroes" tira a camera exigida
     if (next == prefs_) return;
     if (st::requires_confirmation(prefs_.graphics, next.graphics) && pending_ != Pending::Display)
         before_ = prefs_, pending_ = Pending::Display, deadline_ = now + st::kConfirmSeconds;

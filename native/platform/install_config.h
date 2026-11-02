@@ -2,11 +2,13 @@
 // Configuracao local de uma instalacao do jogo: instalacao.toml ao lado do BlueStinger.exe, gravado
 // pelo recompilador (BlueStinger-Recompiler.exe) e lido pelo proprio jogo ao iniciar. Vale ao abrir o
 // executavel direto e continua valendo se a pasta inteira for movida (os caminhos sao relativos ao
-// executavel). Hoje: o local dos saves nativos e o idioma das legendas.
+// executavel). Hoje: a edicao (N9.0, platform/edition.h), o local dos saves nativos e o idioma das legendas.
 //   - documentos (padrao): <Documentos>\DC-Recomp\Blue Stinger\saves (FOLDERID_Documents, que segue
 //     redirecionamentos como o OneDrive; nunca o diretorio de trabalho);
 //   - portatil: saves\ ao lado do executavel (o mesmo que --saves-portatil).
 // Os dois usam os saves nativos (N4); muda so o lugar. Trocar o modo nao move partidas.
+#include "platform/edition.h"
+
 #include <filesystem>
 #include <string>
 #include <system_error>
@@ -25,6 +27,7 @@ inline constexpr const char* kDefaultSubtitles = "auto";
 struct InstallConfig {
     SavesLocation saves = SavesLocation::Documents;
     std::string   subtitles = kDefaultSubtitles;  // "" = desligadas
+    edition::Edition edition = edition::Edition::Original;  // ausente: Original (as instalacoes de antes do N9)
 };
 
 // Valor de --legendas ou de legendas.idioma: "nenhuma"/"off"/"nao" = desligadas (""); uma etiqueta de idioma
