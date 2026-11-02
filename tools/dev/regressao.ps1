@@ -66,34 +66,34 @@ $steps = @(
     @{ N = "ctest_disco";   T = "cmd";   C = "ctest --preset msvc-debug"; Disc = $true },
     @{ N = "make_builder";  T = "suite"; A = @("$dist\make_builder.ps1"); Stop = $true },
     @{ N = "make_preview";  T = "suite"; A = @("$dist\make_preview.ps1", "-Disc", $Disc); Stop = $true },
-    @{ N = "test_preview";  T = "suite"; A = @("$dist\test_preview.ps1") },
+    @{ N = "test_preview";  T = "suite"; A = @("$dist\test_preview.ps1"); Id = @("@comum") },
     # N8.0: as 16 referencias no exe da Preview (com mods\ ao lado), com as 179 excecoes de SPC aprovadas
     # N8.7: as referencias do N8.0 sao anteriores a fog por tabela e aos volumes: conferidas com os dois desligados; os
     # quadros com os efeitos tem o conjunto proprio (referencias_n87, capturado com o exe do N8.7, sem excecoes)
-    @{ N = "referencias";   T = "cmd";   C = "python tools\dev\n8_referencias.py conferir --exe dist\BlueStinger-Preview\BlueStinger.exe --ref analysis\n8\referencias --excecoes config\n8_1_excecoes_spc.toml --paralelo 4 --ambiente BS_RENDER_SEM_FOG_VOLUMES=1"; Max = 7200 },
-    @{ N = "referencias_n87"; T = "cmd"; C = "python tools\dev\n8_referencias.py conferir --exe dist\BlueStinger-Preview\BlueStinger.exe --ref analysis\n8\referencias_n87 --paralelo 4"; Max = 7200 },
-    @{ N = "test_gameplay"; T = "suite"; A = @("$dist\test_gameplay.ps1") },
-    @{ N = "test_builder";  T = "suite"; A = @("$dist\test_builder.ps1", "-Disc", $Disc) },
-    @{ N = "test_projeto";  T = "suite"; A = @("$dist\test_projeto.ps1", "-Disc", $Disc) },
-    @{ N = "test_arquivos"; T = "suite"; A = @("$dist\test_arquivos.ps1") },
-    @{ N = "test_ordem";    T = "suite"; A = @("$dist\test_ordem.ps1") },
-    @{ N = "test_tempo";    T = "suite"; A = @("$dist\test_tempo.ps1") },
-    @{ N = "test_n2b";      T = "suite"; A = @("$dist\test_n2b.ps1"); Max = 10800 },
-    @{ N = "test_cri";      T = "suite"; A = @("$dist\test_cri.ps1") },
-    @{ N = "test_efeito";   T = "suite"; A = @("$dist\test_efeito.ps1") },
-    @{ N = "test_n2b2";     T = "suite"; A = @("$dist\test_n2b2.ps1") },
-    @{ N = "test_assistido"; T = "suite"; A = @("$dist\test_assistido.ps1") },
-    @{ N = "test_controles"; T = "suite"; A = @("$dist\test_controles.ps1"); Max = 10800 },
-    @{ N = "test_pd_nativo"; T = "suite"; A = @("$dist\test_pd_nativo.ps1"); Max = 10800 },
-    @{ N = "test_saves";    T = "suite"; A = @("$dist\test_saves.ps1") },
+    @{ N = "referencias";   T = "cmd";   C = "python tools\dev\n8_referencias.py conferir --exe dist\BlueStinger-Preview\BlueStinger.exe --ref analysis\n8\referencias --excecoes config\n8_1_excecoes_spc.toml --paralelo 4 --ambiente BS_RENDER_SEM_FOG_VOLUMES=1"; Max = 7200; Id = @("@comum") },
+    @{ N = "referencias_n87"; T = "cmd"; C = "python tools\dev\n8_referencias.py conferir --exe dist\BlueStinger-Preview\BlueStinger.exe --ref analysis\n8\referencias_n87 --paralelo 4"; Max = 7200; Id = @("@comum") },
+    @{ N = "test_gameplay"; T = "suite"; A = @("$dist\test_gameplay.ps1"); Id = @("@comum") },
+    @{ N = "test_builder";  T = "suite"; A = @("$dist\test_builder.ps1", "-Disc", $Disc); Id = @("@comum") },
+    @{ N = "test_projeto";  T = "suite"; A = @("$dist\test_projeto.ps1", "-Disc", $Disc); Id = @("@comum") },
+    @{ N = "test_arquivos"; T = "suite"; A = @("$dist\test_arquivos.ps1"); Id = @("@comum") },
+    @{ N = "test_ordem";    T = "suite"; A = @("$dist\test_ordem.ps1"); Id = @("@comum") },
+    @{ N = "test_tempo";    T = "suite"; A = @("$dist\test_tempo.ps1"); Id = @("@comum") },
+    @{ N = "test_n2b";      T = "suite"; A = @("$dist\test_n2b.ps1"); Max = 10800; Id = @("@comum") },
+    @{ N = "test_cri";      T = "suite"; A = @("$dist\test_cri.ps1"); Id = @("@comum") },
+    @{ N = "test_efeito";   T = "suite"; A = @("$dist\test_efeito.ps1"); Id = @("@comum") },
+    @{ N = "test_n2b2";     T = "suite"; A = @("$dist\test_n2b2.ps1"); Id = @("@comum") },
+    @{ N = "test_assistido"; T = "suite"; A = @("$dist\test_assistido.ps1"); Id = @("@comum") },
+    @{ N = "test_controles"; T = "suite"; A = @("$dist\test_controles.ps1"); Max = 10800; Id = @("@comum") },
+    @{ N = "test_pd_nativo"; T = "suite"; A = @("$dist\test_pd_nativo.ps1"); Max = 10800; Id = @("@comum") },
+    @{ N = "test_saves";    T = "suite"; A = @("$dist\test_saves.ps1"); Id = @("@comum") },
     # N5: o filme nativo no jogo (E001: conversao so dele, rotas legado x nativo, START medido)
-    @{ N = "n5_e001";       T = "suite"; A = @("$repo\tools\dev\n5_e001.ps1") },
+    @{ N = "n5_e001";       T = "suite"; A = @("$repo\tools\dev\n5_e001.ps1"); Id = @("@comum") },
     # N8: produto nativo x validacao (test_n8_nativo) e a bateria H do N6: a validacao nos casos com o legado, o H4 em
     # etapa propria e o H9 (tudo nativo, em tempo real) na Preview
-    @{ N = "test_n8_nativo"; T = "suite"; A = @("$dist\test_n8_nativo.ps1"); Max = 10800 },
-    @{ N = "n6_h";          T = "suite"; A = @("$repo\tools\dev\n6_h.ps1", "-Exe", "$repo\build\msvc-validacao\app\bluestinger.exe", "-ExeMods", "$repo\build\msvc-release-mods\app\bluestinger.exe", "-Data", "$repo\dist\BlueStinger-Preview\data", "-Build", "$repo\build\msvc-release", "-Casos", "H2,H3,H5,H6,H7,H8"); Max = 10800 },
-    @{ N = "n6_h4";         T = "suite"; A = @("$repo\tools\dev\n6_h.ps1", "-Exe", "$repo\build\msvc-validacao\app\bluestinger.exe", "-Data", "$repo\dist\BlueStinger-Preview\data", "-Build", "$repo\build\msvc-release", "-Casos", "H4", "-Saida", "$env:TEMP\bs-n6-h4") },
-    @{ N = "n6_h9";         T = "suite"; A = @("$repo\tools\dev\n6_h.ps1", "-Exe", "$repo\dist\BlueStinger-Preview\BlueStinger.exe", "-Casos", "H9", "-Saida", "$env:TEMP\bs-n6-h9") }
+    @{ N = "test_n8_nativo"; T = "suite"; A = @("$dist\test_n8_nativo.ps1"); Max = 10800; Id = @("@comum") },
+    @{ N = "n6_h";          T = "suite"; A = @("$repo\tools\dev\n6_h.ps1", "-Exe", "$repo\build\msvc-validacao\app\bluestinger.exe", "-ExeMods", "$repo\build\msvc-release-mods\app\bluestinger.exe", "-Data", "$repo\dist\BlueStinger-Preview\data", "-Build", "$repo\build\msvc-release", "-Casos", "H2,H3,H5,H6,H7,H8"); Max = 10800; Id = @("@comum") },
+    @{ N = "n6_h4";         T = "suite"; A = @("$repo\tools\dev\n6_h.ps1", "-Exe", "$repo\build\msvc-validacao\app\bluestinger.exe", "-Data", "$repo\dist\BlueStinger-Preview\data", "-Build", "$repo\build\msvc-release", "-Casos", "H4", "-Saida", "$env:TEMP\bs-n6-h4"); Id = @("@comum") },
+    @{ N = "n6_h9";         T = "suite"; A = @("$repo\tools\dev\n6_h.ps1", "-Exe", "$repo\dist\BlueStinger-Preview\BlueStinger.exe", "-Casos", "H9", "-Saida", "$env:TEMP\bs-n6-h9"); Id = @("@comum") }
 )
 if ($env:BS_REGRESSAO_ETAPAS) { $steps = & $env:BS_REGRESSAO_ETAPAS $repo $Disc }
 # revisao Codex 20261028-012302: esquema das etapas (T/C/N texto, A lista de textos, Disc/Stop booleanos, Max inteiro);
@@ -103,6 +103,7 @@ foreach ($st in $steps) {
     foreach ($k in "N", "T", "C") { if ($null -ne $st[$k] -and $st[$k] -isnot [string]) { $bad += $k } }
     if ($st.T -notin "build", "cmd", "suite") { $bad += "T" }
     if ($null -ne $st.A -and @($st.A | Where-Object { $_ -isnot [string] }).Count) { $bad += "A" }
+    if ($null -ne $st.Id -and (@($st.Id).Count -eq 0 -or @($st.Id | Where-Object { $_ -isnot [string] -or -not $_ }).Count)) { $bad += "Id" }
     foreach ($k in "Disc", "Stop") { if ($null -ne $st[$k] -and $st[$k] -isnot [bool]) { $bad += $k } }
     if ($null -ne $st.Max -and $st.Max -isnot [int]) { $bad += "Max" }
     if ($bad.Count) { Write-Host "ERRO: etapa '$($st.N)' com tipo invalido em: $($bad -join ', ')"; exit 2 }
@@ -167,9 +168,14 @@ function MediaId {
     }
     return $script:midia
 }
-function StepKey($st, $base) {
+function StepDef($st) {
     $def = "T=$(Canon $st.T)|C=$(Canon $st.C)|A=$(Canon @($st.A))|Disc=$(Canon $st.Disc)|Max=$(Canon $st.Max)|Stop=$(Canon $st.Stop)"
+    if ($null -ne $st.Id) { $def += "|Id=$(Canon @($st.Id))" }  # so com Id: as chaves das outras etapas nao mudam
     if ($st.Disc -or (@($st.A) -contains $Disc)) { $def += "|Midia=$(MediaId)" }
+    return $def
+}
+function StepKey($st, $base) {
+    $def = StepDef $st
     $sha = [Security.Cryptography.SHA256]::Create()
     $d = ([BitConverter]::ToString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($def))) -replace "-", "").Substring(0, 8)
     if ($st.T -ne "suite") { return "$base-$d" }
@@ -178,20 +184,94 @@ function StepKey($st, $base) {
     return "$base-$h-$d"
 }
 
+# Identidade funcional (N8.8, decisao do mantenedor 2026-11-01): uma etapa com `Id` (a lista do que a prova usa: pastas,
+# arquivos ou "@comum") reaproveita a aprovacao anterior mesmo com outro commit, desde que TUDO que pode afetar a prova
+# seja igual ao da aprovacao: os artefatos (exe/dll pelo PE normalizado so nos metadados de build comprovados, ver
+# tools/dev/exe_identidade.py; o resto byte a byte), a definicao tipada da etapa, a midia, o script da suite, o resto de
+# tools\ e config\, as configuracoes do usuario em %LOCALAPPDATA%\BlueStingerRecomp, as variaveis BS_* do ambiente, o
+# driver de video e os compiladores instalados. Qualquer falha ao calcular invalida (a etapa roda). Builds, unitarios,
+# ctest e os produtores (Stop) nao tem `Id`: continuam presos ao commit.
+$identPy = Join-Path $repo "tools\dev\exe_identidade.py"
+function ArtefatosComuns {
+    $l = @("$repo\dist\BlueStinger-Preview", "$repo\dist\BlueStinger-Builder", "$repo\analysis\n8",
+           (Join-Path $env:LOCALAPPDATA "BlueStingerRecomp\gravacoes"), (Join-Path $env:LOCALAPPDATA "BlueStingerRecomp\n6f\jogo"))
+    foreach ($p in "msvc-release", "msvc-validacao", "msvc-release-mods", "msvc-release-watch") {
+        $b = "$repo\build\$p"
+        foreach ($d in "app", "builder", "translator") {  # os binarios que as suites executam (sem os objetos, o .map e o ctest)
+            $l += @(Get-ChildItem -LiteralPath "$b\$d" -File -ErrorAction SilentlyContinue | Where-Object { $_.Extension -in ".exe", ".dll" } |
+                    Where-Object { $_.Name -notmatch "\.em-uso-" } | Sort-Object Name | ForEach-Object { $_.FullName })
+        }
+        $l += @(Get-ChildItem -LiteralPath "$b\tools" -Recurse -File -ErrorAction SilentlyContinue | Where-Object { $_.Extension -in ".exe", ".dll" } |
+                Sort-Object FullName | ForEach-Object { $_.FullName })
+        $l += "$b\app\mods"
+    }
+    return $l
+}
+$script:msvcId = $null
+function FuncKey($st) {
+    try {
+        $l = New-Object System.Collections.Generic.List[string]
+        foreach ($x in @($st.Id)) { if ($x -eq "@comum") { foreach ($y in ArtefatosComuns) { $l.Add($y) } } else { $l.Add($x) } }
+        # tools\ e config\ inteiros, menos o executor e os scripts das suites (cada um so na chave da propria etapa)
+        $skipAbs = @("tools/dev/regressao.ps1") + @(SuiteScripts) | ForEach-Object { (Join-Path $repo $_).ToLowerInvariant() }
+        foreach ($d in "tools", "config") {
+            foreach ($f in (Get-ChildItem -LiteralPath (Join-Path $repo $d) -Recurse -File -ErrorAction SilentlyContinue | Sort-Object FullName)) {
+                if ($f.FullName -match "\\__pycache__\\" -or $f.Extension -eq ".pyc") { continue }  # cache do Python (refeito da fonte)
+                if ($skipAbs -contains $f.FullName.ToLowerInvariant()) { continue }
+                $l.Add($f.FullName)
+            }
+        }
+        # configuracoes do usuario (nao os logs nem as pastas de estado)
+        foreach ($f in (Get-ChildItem -LiteralPath (Join-Path $env:LOCALAPPDATA "BlueStingerRecomp") -File -ErrorAction SilentlyContinue |
+                        Where-Object { $_.Extension -in ".toml", ".ini", ".json" } | Sort-Object Name)) { $l.Add($f.FullName) }
+        $lista = Join-Path $Estado "identidade_$($st.N).txt"
+        $det   = Join-Path $Estado "identidade_$($st.N).detalhe.txt"
+        if (Test-Path -LiteralPath $det) { Copy-Item -LiteralPath $det -Destination "$det.anterior" -Force }  # para comparar
+        [IO.File]::WriteAllLines($lista, [string[]]$l)
+        $art = (& python -I $identPy --lista $lista $det 2>$null | Select-Object -Last 1)
+        if ($LASTEXITCODE -ne 0 -or -not $art -or $art -notmatch "^lista-\d+-[0-9a-f]{32}$") { return $null }
+        $amb = (Get-ChildItem env: | Where-Object { $_.Name -like "BS_*" } | Sort-Object Name | ForEach-Object { "$($_.Name)=$($_.Value)" }) -join [char]31
+        $gpu = (Get-CimInstance Win32_VideoController -ErrorAction Stop | Sort-Object Name | ForEach-Object { "$($_.Name)|$($_.DriverVersion)" }) -join [char]31
+        if ($null -eq $script:msvcId) {  # os compiladores instalados (uma vez por execucao: nao mudam no meio)
+            # o conteudo, nao so o caminho: uma atualizacao no lugar muda o compilador sem mudar a pasta; idem o Windows e o UCRT
+            # (a falha do --version do N8.8 dependia do encerramento do processo pelo CRT; revisao Codex 2026-11-01)
+            $dirs = @(Get-ChildItem "${env:ProgramFiles(x86)}\Microsoft Visual Studio", "$env:ProgramFiles\Microsoft Visual Studio" -Recurse -Directory -Depth 6 -ErrorAction SilentlyContinue |
+                      Where-Object { $_.Parent.Name -eq "MSVC" -and $_.Parent.Parent.Name -eq "Tools" } | ForEach-Object { $_.FullName } | Sort-Object)
+            # uma pasta de toolset pode nao ter os binarios (so bibliotecas): ausente tambem e identidade
+            $bins = foreach ($d in $dirs) {
+                foreach ($n in "cl.exe", "link.exe") {
+                    $b = Join-Path $d "bin\Hostx64\x64\$n"
+                    "$n=" + $(if (Test-Path -LiteralPath $b) { (Get-FileHash -LiteralPath $b -Algorithm SHA256 -ErrorAction Stop).Hash } else { "ausente" })
+                }
+            }
+            $nt = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion" -ErrorAction Stop
+            $ucrt = (Get-FileHash -LiteralPath "$env:windir\System32\ucrtbase.dll" -Algorithm SHA256 -ErrorAction Stop).Hash
+            $script:msvcId = (@($dirs) + @($bins) + "win=$($nt.CurrentBuildNumber).$($nt.UBR)" + "ucrt=$ucrt") -join [char]31
+        }
+        $msvc = $script:msvcId
+        $script = if ($st.T -eq "suite" -and (Test-Path -LiteralPath $st.A[0])) { (Get-FileHash -LiteralPath $st.A[0] -Algorithm SHA256).Hash } else { "-" }
+        $txt = "def=$(StepDef $st)|script=$script|art=$art|amb=$amb|gpu=$gpu|msvc=$msvc|vcvars=$vcvars"
+        $sha = [Security.Cryptography.SHA256]::Create()
+        return "F" + ([BitConverter]::ToString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($txt))) -replace "-", "").Substring(0, 31)
+    } catch { return $null }
+}
+
 function LoadState {
     $s = @{}
     if (Test-Path $stateFile) {
         foreach ($l in Get-Content $stateFile) {
             $c = $l.Split("`t")
-            if ($c.Count -ge 5 -and $c[0] -ne "etapa") { $s[$c[0]] = @{ Rc = [int]$c[1]; Seg = $c[2]; Fim = $c[3]; Fp = $c[4] } }
+            if ($c.Count -ge 5 -and $c[0] -ne "etapa") {
+                $s[$c[0]] = @{ Rc = [int]$c[1]; Seg = $c[2]; Fim = $c[3]; Fp = $c[4]; Fk = $(if ($c.Count -ge 6 -and $c[5] -match "^F[0-9A-F]{31}$") { $c[5] } else { $null }) }
+            }
         }
     }
     return $s
 }
-function SaveStep($name, $rc, $sec, $fp) {
-    if (-not (Test-Path $stateFile)) { "etapa`trc`tsegundos`tfim`tfonte" | Out-File $stateFile -Encoding utf8 }
+function SaveStep($name, $rc, $sec, $fp, $fk = $null, $origem = "") {
+    if (-not (Test-Path $stateFile)) { "etapa`trc`tsegundos`tfim`tfonte`tidentidade`torigem" | Out-File $stateFile -Encoding utf8 }
     # grava ao terminar a etapa: uma interrupcao no meio deixa a etapa sem registro (refeita)
-    "$name`t$rc`t$sec`t$(Get-Date -Format s)`t$fp" | Out-File $stateFile -Append -Encoding utf8
+    "$name`t$rc`t$sec`t$(Get-Date -Format s)`t$fp`t$(if ($fk) { $fk } else { '-' })`t$origem" | Out-File $stateFile -Append -Encoding utf8
 }
 function Log($text) { Write-Host $text; $text | Out-File $log -Append -Encoding utf8 }
 
@@ -218,16 +298,21 @@ if (Test-Path $lock) {
 "$PID" | Out-File $lock -Encoding ascii
 # etapas cuja chave mudou saem do estado (rodam de novo); as outras aprovadas continuam valendo
 $changed = @($steps | Where-Object { $state[$_.N] -and $state[$_.N].Fp -ne $keys[$_.N] } | ForEach-Object { $_.N })
+# aprovacoes com identidade funcional: candidatas a reaproveitamento mesmo com a chave do commit diferente (so se a
+# identidade calculada na hora da etapa for igual; -Novo e -Desde as descartam)
+$byFk = @{}
+foreach ($n in $changed) { if ($state[$n].Rc -eq 0 -and $state[$n].Fk) { $byFk[$n] = $state[$n] } }
 if ($Novo) {
     Remove-Item -LiteralPath $stateFile -ErrorAction SilentlyContinue
     $state = @{}
+    $byFk  = @{}
 } elseif ($changed.Count) {
-    Log "chave mudou (refazer): $($changed -join ', ')"
+    Log "chave mudou (refazer, ou reaproveitar se a identidade funcional for a mesma): $($changed -join ', ')"
     foreach ($n in $changed) { $state.Remove($n) }
 }
 if ($Desde) {
     $i = [array]::IndexOf($names, $Desde)
-    foreach ($st in $steps[$i..($steps.Count - 1)]) { $state.Remove($st.N) }
+    foreach ($st in $steps[$i..($steps.Count - 1)]) { $state.Remove($st.N); $byFk.Remove($st.N) }
 }
 if (Get-Process bluestinger -ErrorAction SilentlyContinue) {
     Log "AVISO: ha processos bluestinger rodando (de uma execucao interrompida?); as suites podem disputar CPU"
@@ -243,6 +328,19 @@ foreach ($st in $steps) {
         Log ("-- {0} ja aprovada ({1}s, {2}): pulada" -f $st.N, $prev.Seg, $prev.Fim)
         if ($Ate -and $st.N -eq $Ate) { break }
         continue
+    }
+    # identidade funcional das entradas, calculada antes da etapa (depois dos builds e dos produtores)
+    $fk = $null
+    if ($null -ne $st.Id -and $st.T -ne "build") {
+        $fk = FuncKey $st
+        $old = $byFk[$st.N]
+        if (-not $fk) { Log "-- $($st.N): identidade funcional indisponivel (calculo falhou): a etapa roda" }
+        elseif ($old -and $old.Rc -eq 0 -and $old.Fk -eq $fk) {
+            Log ("-- {0} aprovada por identidade funcional {1} (os mesmos artefatos, definicao, script e ambiente da aprovacao de {2}): pulada" -f $st.N, $fk, $old.Fim)
+            SaveStep $st.N 0 0 $keys[$st.N] $fk "identidade funcional da aprovacao de $($old.Fim)"
+            if ($Ate -and $st.N -eq $Ate) { break }
+            continue
+        } elseif ($old) { Log "-- $($st.N): identidade funcional mudou ($($old.Fk) -> $fk): a etapa roda (ver identidade_$($st.N).detalhe.txt)" }
     }
     $outFile = Join-Path $Estado "$($st.N).txt"
     $t0 = Get-Date
@@ -281,7 +379,7 @@ foreach ($st in $steps) {
     if ($st.N -eq "unitarios") { $summary = "ok=$(([regex]::Matches($o, '(?m)^\[ ok \]')).Count)" }
     Log ("== {0} rc={1} ({2}s)`n{3}" -f $st.N, $rc, $sec, $summary)
     $durations += ,@($st.N, $sec, $rc)
-    if ($st.T -ne "build") { SaveStep $st.N $rc $sec $keys[$st.N] }
+    if ($st.T -ne "build") { SaveStep $st.N $rc $sec $keys[$st.N] $fk }
     if ($rc -ne 0) {
         $failed++
         if ($st.Stop) {

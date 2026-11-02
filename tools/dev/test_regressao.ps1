@@ -133,6 +133,79 @@ param(`$repo)
 "@ | Out-File "$root\etapas.ps1" -Encoding utf8
     Run "R25 $($c[0]) textual recusado" "" 2
 }
+# N8.8: identidade funcional. Artefatos: um PE real (copia de um exe do Windows), uma DLL falsa (nao PE: entra crua) e um
+# arquivo de dados. A etapa test_f tem Id; test_a nao (presa ao commit).
+$art = "$root\artefatos"; New-Item -ItemType Directory -Force $art | Out-Null
+Copy-Item "$env:SystemRoot\System32\whoami.exe" "$art\jogo.exe"
+"dll 1" | Out-File "$art\lib.dll" -Encoding ascii
+"dados 1" | Out-File "$art\dados.bin" -Encoding ascii
+"Add-Content '$marks' 'test_f'`nexit 0" | Out-File "$repo\tools\dist\test_f.ps1" -Encoding utf8
+@"
+param(`$repo)
+@(
+    @{ N = "make_x"; T = "suite"; A = @("`$repo\tools\dist\make_x.ps1"); Stop = `$true },
+    @{ N = "test_a"; T = "suite"; A = @("`$repo\tools\dist\test_a.ps1") },
+    @{ N = "test_f"; T = "suite"; A = @("`$repo\tools\dist\test_f.ps1"); Id = @("$art") }
+)
+"@ | Out-File "$root\etapas.ps1" -Encoding utf8
+function Commit($m) { Push-Location $repo; git -c user.email=t@t -c user.name=t add -A; git -c user.email=t@t -c user.name=t commit -qm $m; Pop-Location }
+function PatchPE([int]$off, [byte]$v) { $b = [IO.File]::ReadAllBytes("$art\jogo.exe"); $b[$off] = $v; [IO.File]::WriteAllBytes("$art\jogo.exe", $b) }
+$peOff = [BitConverter]::ToInt32([IO.File]::ReadAllBytes("$art\jogo.exe"), 0x3C)
+# sem o calculador da identidade (exe_identidade.py ausente no repositorio): invalida, nada e reaproveitado
+Commit "f0"
+Run "R26 sem a ferramenta de identidade: tudo roda" "make_x,test_a,test_f"
+Add-Content "$repo\src\code.txt" "f1"; Commit "f1"
+Run "R27 commit novo, identidade indisponivel: tudo roda" "make_x,test_a,test_f"
+Copy-Item (Join-Path $PSScriptRoot "exe_identidade.py") "$repo\tools\dev\exe_identidade.py"; Commit "f2"
+Run "R28 com a ferramenta (tools mudou): tudo roda" "make_x,test_a,test_f"
+Add-Content "$repo\src\code.txt" "f3"; Commit "f3"
+Run "R29 commit novo, artefatos iguais: test_f reaproveitada" "make_x,test_a"
+$st29 = Get-Content "$est\estado.tsv" | Select-String "^test_f\t0\t0\t.*identidade funcional" -Quiet
+Write-Host ("{0} R30 o estado registra o reaproveitamento por identidade" -f $(if ($st29) { "[ ok ]" } else { "[FALHA]" })); if (-not $st29) { $fails++ }
+PatchPE ($peOff + 8) 0x5A; Add-Content "$repo\src\code.txt" "f4"; Commit "f4"
+Run "R31 so o TimeDateStamp do PE mudou: reaproveitada" "make_x,test_a"
+$b = [IO.File]::ReadAllBytes("$art\jogo.exe"); $sec = $peOff + 24 + [BitConverter]::ToUInt16($b, $peOff + 20); $text = [BitConverter]::ToInt32($b, $sec + 20) + 0x40
+PatchPE $text ($b[$text] -bxor 0xFF); Add-Content "$repo\src\code.txt" "f5"; Commit "f5"
+Run "R32 um byte do codigo do exe mudou: roda" "make_x,test_a,test_f"
+"dll 2" | Out-File "$art\lib.dll" -Encoding ascii; Add-Content "$repo\src\code.txt" "f6"; Commit "f6"
+Run "R33 a DLL mudou: roda" "make_x,test_a,test_f"
+"dados 2" | Out-File "$art\dados.bin" -Encoding ascii; Add-Content "$repo\src\code.txt" "f7"; Commit "f7"
+Run "R34 um dado mudou: roda" "make_x,test_a,test_f"
+"novo" | Out-File "$art\extra.txt" -Encoding ascii; Add-Content "$repo\src\code.txt" "f8"; Commit "f8"
+Run "R35 arquivo novo nos artefatos: roda" "make_x,test_a,test_f"
+$env:BS_REGRESSAO_TESTE_AMB = "1"; Add-Content "$repo\src\code.txt" "f9"; Commit "f9"
+Run "R36 variavel BS_* nova no ambiente: roda" "make_x,test_a,test_f"
+Remove-Item Env:\BS_REGRESSAO_TESTE_AMB; Add-Content "$repo\src\code.txt" "f10"; Commit "f10"
+Run "R37 variavel removida: so a aprovacao mais recente (com a variavel) e candidata: roda" "make_x,test_a,test_f"
+"config 1" | Out-File "$repo\tools\dist\roteiro_x.txt" -Encoding utf8; Commit "f11"
+Run "R38 arquivo novo em tools (roteiro): roda" "make_x,test_a,test_f"
+Add-Content "$repo\tools\dist\test_f.ps1" "# f editado"
+Run "R39 so o script de test_f mudou: so ela" "test_f"
+Add-Content "$repo\src\code.txt" "f12"; Commit "f12"
+Run "R40 commit novo depois: reaproveitada de novo" "make_x,test_a"
+New-Item "$root\falhar_f" -ItemType File | Out-Null
+"if (Test-Path '$root\falhar_f') { Add-Content '$marks' 'test_f'; exit 1 }`nAdd-Content '$marks' 'test_f'`nexit 0" | Out-File "$repo\tools\dist\test_f.ps1" -Encoding utf8
+Run "R41 test_f falha" "test_f" 1
+Add-Content "$repo\src\code.txt" "f13"; Commit "f13"
+Run "R42 uma falha nunca e reaproveitada" "make_x,test_a,test_f" 1
+Remove-Item "$root\falhar_f"
+Run "R43 corrigida" "test_f"
+Remove-Item $marks -ErrorAction SilentlyContinue
+& powershell -NoProfile -ExecutionPolicy Bypass -File "$repo\tools\dev\regressao.ps1" -Estado $est -Disc $script:disco -Desde test_f *> "$root\R44.txt"
+$r44 = (Get-Content $marks -ErrorAction SilentlyContinue) -join ","
+Write-Host ("{0} R44 -Desde refaz mesmo com a identidade igual: [{1}]" -f $(if ($r44 -eq "test_f") { "[ ok ]" } else { "[FALHA]" }), $r44); if ($r44 -ne "test_f") { $fails++ }
+Remove-Item $marks -ErrorAction SilentlyContinue
+& powershell -NoProfile -ExecutionPolicy Bypass -File "$repo\tools\dev\regressao.ps1" -Estado $est -Disc $script:disco -Novo *> "$root\R45.txt"
+$r45 = (Get-Content $marks -ErrorAction SilentlyContinue) -join ","
+Write-Host ("{0} R45 -Novo refaz tudo: [{1}]" -f $(if ($r45 -eq "make_x,test_a,test_f") { "[ ok ]" } else { "[FALHA]" }), $r45); if ($r45 -ne "make_x,test_a,test_f") { $fails++ }
+# esquema: Id vazio ou com nao-texto e recusado
+foreach ($c in @('@()', '@(1)')) {
+    @"
+param(`$repo)
+@( @{ N = "test_f"; T = "suite"; A = @("`$repo\tools\dist\test_f.ps1"); Id = $c } )
+"@ | Out-File "$root\etapas.ps1" -Encoding utf8
+    Run "R46 Id invalido $c recusado" "" 2
+}
 Remove-Item Env:\BS_REGRESSAO_ETAPAS
 if ($fails -eq 0) { Remove-Item -Recurse -Force $root } else { Write-Host "artefatos em $root" }
 Write-Host "falhas: $fails"
