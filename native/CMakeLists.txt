@@ -15,11 +15,12 @@ add_library(bs_native STATIC platform/data_files.cpp platform/clock.cpp platform
             platform/camera_settings.cpp     # N7c: camera livre ([camera] em controles.toml)
             platform/edition.cpp             # N9.0: perfil de edicao (Original, Remastered)
             platform/stall_trace.cpp)        # N8.8: diagnostico BS_TRAVAS (travas, esperas, fila de audio)
-target_link_libraries(bs_native PUBLIC bs_native_api PRIVATE tomlplusplus::tomlplusplus xinput)
+target_link_libraries(bs_native PUBLIC bs_native_api PRIVATE tomlplusplus::tomlplusplus $<$<PLATFORM_ID:Windows>:xinput>)
 
 # N5: filmes nativos (catalogo por ID com mods, leitura e gravacao MP4 por Media Foundation)
 add_library(bs_native_video STATIC video/movie_catalog.cpp video/mf_movie.cpp video/movie_playback.cpp video/subtitles.cpp video/movie_color.cpp)
-target_link_libraries(bs_native_video PUBLIC bs_native_api PRIVATE tomlplusplus::tomlplusplus mfplat mfreadwrite mfuuid ole32 d2d1 dwrite windowscodecs)
+target_link_libraries(bs_native_video PUBLIC bs_native_api PRIVATE tomlplusplus::tomlplusplus
+                      $<$<PLATFORM_ID:Windows>:mfplat;mfreadwrite;mfuuid;ole32;d2d1;dwrite;windowscodecs>)
 # N5 (D2): saida de audio (XAudio2 e nula) atras de IAudioOutput; o N6 reaproveita
 # OGG/Vorbis (third_party/xiph/README.md): so a decodificacao do libogg 1.3.6 e do libvorbis 1.3.7, compilada aqui (sem
 # o CMake deles; nada baixado). Codigo C de terceiros sem alteracoes: os avisos dele nao valem para o projeto.
@@ -82,7 +83,7 @@ target_include_directories(bs_native_render_vk PRIVATE ${PROJECT_SOURCE_DIR}/thi
 target_link_libraries(bs_native_render_vk PUBLIC bs_native_render PRIVATE bs_native ${CMAKE_DL_LIBS})
 
 add_library(bs_native_audio STATIC audio/audio_output.cpp)
-target_link_libraries(bs_native_audio PUBLIC bs_native_api PRIVATE bs_native xaudio2 ole32)
+target_link_libraries(bs_native_audio PUBLIC bs_native_api PRIVATE bs_native $<$<PLATFORM_ID:Windows>:xaudio2;ole32>)
 
 if(BS_BUILD_TESTS AND BS_BUILD_TOOLS)
   # Compila todos os cabecalhos so com native/ no include path: nada do legado pode vazar.

@@ -83,6 +83,10 @@ foreach ($rel in $kitList) {
     New-Item -ItemType Directory -Force -Path (Split-Path $dst) | Out-Null
     Copy-Item -LiteralPath $src -Destination $dst
 }
+# known_versions.h na arvore e particular do mantenedor: o kit leva sempre a versao do commit
+$kv = "tools/extractor/known_versions.h"
+cmd /c "git -C `"$repo`" show HEAD:$kv > `"$(Join-Path $kit $kv)`""
+if ($LASTEXITCODE -ne 0) { Fail "nao consegui ler $kv do commit" }
 $locais = @()
 if ($LegendasLocais) {
     foreach ($p in Get-ChildItem -Directory (Join-Path $repo "mods-padrao") -ErrorAction SilentlyContinue) {

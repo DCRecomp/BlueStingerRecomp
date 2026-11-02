@@ -54,6 +54,9 @@ if(MSVC)
   endif()
 else()
   add_compile_options(-Wall -Wextra)
+  # N9-L (docs/N9-L-PLANO.md secao 3): o codigo do SH-4 reinterpreta memoria, conta com estouro em complemento de dois e
+  # precisa de ponto flutuante sem fusao de operacoes. Sem isto a Original deixa de ser identica
+  add_compile_options(-fno-strict-aliasing -fwrapv -ffp-contract=off -fno-fast-math)
 endif()
 
 # toml++ (MIT): configuracao do tradutor e, desde o N3-1, o arquivo de controles do produto. No kit do
@@ -89,6 +92,8 @@ if(EXISTS "${BS_GENERATED_DIR}/generated.cmake")
   if(MSVC)
     # substitui as opcoes herdadas (/W4) para nao gerar o aviso D9025
     set_property(TARGET bs_generated PROPERTY COMPILE_OPTIONS /bigobj /W1 /utf-8 /permissive-)
+  else()
+    target_compile_options(bs_generated PRIVATE -w)
   endif()
   if(BS_BUILD_TOOLS)
   add_executable(bs-gen-check tools/gen_check/main.cpp)
@@ -101,8 +106,8 @@ endif()
 # Executavel nativo e seu nucleo (app/); o executavel so com BS_BUILD_GAME=ON.
 add_subdirectory(app)
 
-# Builder (CDI -> BlueStinger.exe na maquina do usuario)
-if(BS_BUILD_TOOLS)
+# Builder (CDI -> BlueStinger.exe na maquina do usuario); no Linux, a partir da L5 do N9-L
+if(BS_BUILD_TOOLS AND WIN32)
   add_subdirectory(builder)
 endif()
 
