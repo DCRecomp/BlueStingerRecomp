@@ -318,7 +318,8 @@ Ordem de trabalho a partir do N4. As etapas mantêm a identificação original: 
    `docs/DECISAO-VULKAN-LINUX.md`, seção 2.
 5. **Retorno ao N2**: encerrar as pendências funcionais do N2b e promover o tempo lógico — concluído em 2026-10-24.
 6. **N8**: N2c como primeira subetapa técnica, seguido da remoção dos componentes de emulação do produto.
-7. **N9**: remasterização (decisão de 2026-10-22; planejamento em `docs/N9-PLANO.md`, 2026-10-23).
+7. **N9**: remasterização (decisão de 2026-10-22; planejamento em `docs/N9-PLANO.md`, 2026-10-23). Termina com o **gate de
+   campanha completa** (D-N8-4 transferida em 2026-11-01): uma única gravação valida as duas edições.
 8. **N10**: gameplay C++ editável e sistema de mods (o antigo N9).
 
 **Escopo do retorno ao N2.**
@@ -397,7 +398,9 @@ Antes de trocar:
 - **Matriz de cobertura**: cada sala, chefe, menu, save/load, cada FMV e o final, com
   roteiros determinísticos.
   - O smoke test atual (1ª área) continua.
-  - N8, N9 e N10 exigem a **campanha completa**.
+  - N8, N9 e N10 exigem a **campanha completa**. Atualização de 2026-11-01 (mantenedor): a do N8 foi transferida ao gate
+    de campanha completa pós-N9, uma única gravação para as duas edições (`docs/N8-PLANO.md` seção 9.1,
+    `docs/N9-PLANO.md` seção 14). Continua obrigatória e não aprovada.
 - Suítes atuais como portões permanentes: `test_builder`, `test_preview`, `test_projeto`,
   `test_gameplay`.
 

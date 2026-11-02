@@ -304,7 +304,7 @@ objetivos preservam a descoberta e as regras do jogo, sem revelar conteúdo ante
 - Nunca sacrificar a correção do gameplay por ganho gráfico.
 - **Aceitação:** matriz de GPUs com os três fabricantes, em três resoluções, sem falha nem perda do dispositivo nas
   rotas; percentil 99 do tempo de quadro dentro do orçamento do perfil; 0 faltas de áudio no H9 em cada perfil; campanha
-  completa nas duas edições.
+  completa nas duas edições, com **uma única gravação** (gate pós-N9, seção 14).
 
 ---
 
@@ -467,7 +467,8 @@ Radeon integrada) sob carga da CPU. Para o N9.11:
 - critério do H4 do N6 desatualizado desde o `e13a123` (`docs/N8-6-AUDIO.md` 5.1): decisão do mantenedor antes do
   N9.9 (áudio remasterizado), porque a comparação nativo × legado é a prova de equivalência do áudio;
 - N7 em 95% (AMD, fog e volumes contra o Flycast): o N9 não começa a parte gráfica (N9.5–N9.8) com o N7 aberto;
-- campanha completa reproduzível (D-N8-4): critério do N8.8, base da validação da Remastered (seção 9).
+- campanha completa reproduzível (D-N8-4): critério do N8.8, base da validação da Remastered (seção 9). **Atualização de
+  2026-11-01:** transferida ao gate pós-N9 (seção 14, `docs/N8-PLANO.md` seção 9.1).
 
 ### 13.5 Ordem revista
 
@@ -478,3 +479,45 @@ Radeon integrada) sob carga da CPU. Para o N9.11:
 | 6 | N9.5 começa pela marca cena/HUD sobre a IR nativa do N8.7 (não mais uma tarefa "do N7") |
 | 7 | N9.6 parte dos volumes fiéis do N8.7 |
 | 11 | N9.11 inclui a APU com carga da CPU na matriz |
+
+## 14. Gate de campanha completa pós-N9 (D-N8-4 transferida em 2026-11-01)
+
+**Situação: obrigatório, não executado, não aprovado.** É a validação final depois da Remastered e substitui o critério de
+encerramento do N8.8 (`docs/N8-PLANO.md` seção 9.1). Esta seção é planejamento: nada do N9 começa sem autorização específica
+do mantenedor.
+
+**Ideia:** o mantenedor joga Blue Stinger **uma única vez**, gravando a campanha inteira, e essa gravação valida as duas
+edições. A gravação não é refeita para cada edição.
+
+### 14.1 Critério de aprovação
+
+1. Campanha real (não de teste), do NEW GAME com cartão vazio até o fim de um filme dos créditos, em quantas sessões o
+   mantenedor quiser.
+2. `campanha.py verificar` com o programa em que foi gravada: `CAMPANHA REPRODUZIDA ATE OS CREDITOS`.
+3. `campanha.py reproduzir-em` na **outra** edição: cadeia completa, sem divergência de estado lógico, LOAD/SAVE e saves.
+4. Exceções só listadas, medidas e aprovadas pelo mantenedor; nenhuma exceção implícita. Reprovar uma edição reprova o gate.
+5. O H9 e as referências da Original continuam valendo em separado; este gate não os substitui.
+
+### 14.2 O que o N9 precisa preservar
+
+A gravação é a entrada por passo de jogo, mais o estado lógico por passo e os saves. Para ela ser reutilizável, o N9 não pode
+mudar nenhum destes contratos em nenhuma das edições:
+
+| Contrato | Exigência |
+|---|---|
+| Controles | o roteiro `indice passo` continua significando o mesmo controle do jogo; mapa, mouse e interface novos entram **antes** da entrada efetiva gravada, nunca depois (N9.4) |
+| Câmera | a entrada gravada é a **efetiva**, depois da movimentação relativa; a câmera Livre muda só a apresentação e o objeto câmera do SDK, excluído da comparação entre edições |
+| Estados | a contagem de passos e o estado lógico por passo (`BS_STATE_PASSO`, com `BS_STATE_PASSO_SEM_CAMERA=1` entre edições) não mudam por causa de apresentação |
+| Saves | cartão, envelope e conteúdo compatíveis: o N9.3 traz os saves de PC como camada de cima, sem mudar o que a reprodução compara, ou com conversão provada e sem perda |
+| Sincronização | a sequência de VBlanks, passos e esperas do jogo fica igual; nenhum efeito gráfico entra nessa sequência |
+| Áudio | fins de fala e de filme alimentam o jogo no mesmo passo lógico; áudio remasterizado com outra duração não pode mudar esse passo (ou a diferença é medida e aprovada) |
+| Vídeo | os filmes terminam no mesmo passo lógico, mesmo com filme substituído por um mod ou uma versão remasterizada |
+
+**Portão em cada subetapa do N9:** a sessão curta de `tools/dev/test_campanha.py` (C8) reproduzida no programa novo. Uma
+divergência é regressão a corrigir, não uma exceção a acrescentar.
+
+### 14.3 Ordem
+
+A gravação só começa depois do fechamento do N9 (N9.11), com a edição que o mantenedor escolher para jogar, porque ela fixa o
+programa. Um defeito achado na gravação corrige o programa: as sessões já gravadas continuam válidas se a reprodução seguir
+igual, e o relatório diz qual programa foi usado em cada verificação.

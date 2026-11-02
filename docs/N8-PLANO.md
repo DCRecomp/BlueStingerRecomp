@@ -224,7 +224,8 @@ N8.1 é a primeira alteração funcional. N8.0 abaixo só captura referências e
 2. Pré-requisitos: N8.1–N8.7 e bloqueios N7 relevantes resolvidos ou decisão explícita compatível.
 3. Alterações: docs, catracas e últimos vínculos já mortos.
 4. Risco/reversão: cobertura; não apagar oráculos, voltar à Preview aprovada.
-5. Testes: regressão nível 3 pós-corte, campanha, Preview, Builder/Recompiler e projeto editável.
+5. Testes: regressão nível 3 pós-corte, campanha (**transferida ao gate pós-N9**, seção 9.1), Preview, Builder/Recompiler e
+   projeto editável.
 6. Evidências: mapa/imports/strings/hwscan, matriz, hashes de saves e produtos.
 7. Conclusão: seção 7 aprovada; revisão Codex sem achado funcional aberto.
 8. Dist: Preview/Builder finais x64 testados do pacote.
@@ -240,7 +241,9 @@ N8.1 é a primeira alteração funcional. N8.0 abaixo só captura referências e
 - Vulkan e fallback software sobre IR nativa;
 - controles, câmeras, menus, saves antigos, SAVE/LOAD, filmes, áudio, legendas e pausa sem regressão;
 - tempo padrão/fallback e gravações antigas preservados sem ciclos;
-- determinismo/saves nas rotas e campanha completa reproduzível;
+- determinismo/saves nas rotas; campanha completa reproduzível **transferida, obrigatória e não aprovada**: é o gate
+  pós-N9 (decisão do mantenedor de 2026-11-01, seção 9.1). Redação até essa data: "determinismo/saves nas rotas e campanha
+  completa reproduzível";
 - Builder/Recompiler, Preview e projeto editável; CDI só na conversão;
 - mapa/imports/strings/hwscan e instrumentação concordam;
 - regressões nível 3 pré/pós, negativos e revisão independente aprovados;
@@ -288,6 +291,26 @@ como desnecessária às ferramentas.
 4. **D-N8-4:** a campanha completa é critério obrigatório de **encerramento** do N8.8, não pré-requisito do N8.0.
 
 O renderizador em software é preservado permanentemente como recuo do Vulkan.
+
+### 9.1 Transferência da D-N8-4 (mantenedor, 2026-11-01)
+
+A D-N8-4 acima fica como foi decidida em 2026-10-24; esta seção registra a mudança, não a apaga.
+
+**Decisão:** a campanha completa reproduzível deixa de ser critério de encerramento do N8.8 e passa a ser o **gate de
+campanha completa pós-N9** (`docs/N9-PLANO.md` seção 14). Continua **obrigatória**. **Não está aprovada** e nada neste
+fechamento conta como aprovação dela.
+
+**Justificativa:** o mantenedor quer jogar Blue Stinger uma única vez, gravando a campanha inteira, e reutilizar essa
+gravação para validar as duas edições (Original e Remastered). Jogar agora obrigaria a jogar de novo depois do N9, ou
+deixaria a Remastered sem a prova.
+
+**Efeitos:**
+- o fechamento técnico do N8.8 é permitido quando os demais gates estiverem comprovados, com **H9**, **D-K1(a)** e a
+  **campanha adiada** registrados separadamente, cada um com a sua situação (`docs/N8-8-FECHAMENTO.md`);
+- fechamento técnico não é N8 = 100%: o critério da seção 7.1 segue aberto até o gate pós-N9;
+- o Monitor de Campanha (`tools/dev/campanha.py`, `docs/CAMPANHA.md`) continua em desenvolvimento e testado, com a gravação
+  independente dos recursos gráficos;
+- nenhuma referência, comparador ou resultado histórico muda por causa desta decisão.
 
 ## 10. Andamento
 

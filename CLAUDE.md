@@ -20,6 +20,9 @@ V1.000) para C++ nativo em Windows x64. Arquitetura e decisões em
   **edição Original** continua fiel ao Dreamcast e validada contra as referências; na **Remastered a câmera Livre é
   obrigatória**; nada de fork, branch por edição ou volta da camada legada; arte do jogo (capa, texturas, áudio) nunca
   no repositório público, só local a partir dos arquivos do usuário (ex.: `icone-local/`).
+- **Campanha completa (D-N8-4):** transferida em 2026-11-01 ao gate pós-N9 (`docs/N9-PLANO.md` seção 14): uma única gravação
+  valida as duas edições. Continua obrigatória e **não aprovada**; o N8 não fecha 100% sem ela. O N9 preserva os contratos
+  da seção 14.2 (controles, estados, saves, sincronização, áudio e vídeo).
 
 ## Build e testes
 
