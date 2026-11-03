@@ -3,6 +3,7 @@
 // (cores, quadros, tempos), audio, fim e interrupcao pelo MoviePlayback, arquivos invalidos ou ausentes sem queda, a escolha do
 // decodificador pelo conteudo e o MP4 de mod pelo ffmpeg (aqui um ffmpeg falso, por script, para o teste nao depender dele).
 #include "test.h"
+#include "sfd_fixture.h"
 
 #include "video/movie_backends_posix.h"
 #include "video/movie_catalog.h"
@@ -62,51 +63,8 @@ void writeAll(const fs::path& p, const std::vector<uint8_t>& d) {
 }
 void writeText(const fs::path& p, const std::string& s) { std::ofstream(p, std::ios::binary) << s; }
 
-void pes(std::vector<uint8_t>& o, uint8_t id, std::span<const uint8_t> payload, int64_t pts) {
-    std::vector<uint8_t> h = {0xFF};
-    if (pts >= 0) {
-        h.push_back(uint8_t(0x21 | ((pts >> 29) & 0x0E)));
-        h.push_back(uint8_t(pts >> 22)), h.push_back(uint8_t(((pts >> 14) & 0xFE) | 1));
-        h.push_back(uint8_t(pts >> 7)), h.push_back(uint8_t(((pts << 1) & 0xFE) | 1));
-    } else h.push_back(0x0F);
-    const size_t len = h.size() + payload.size();
-    o.insert(o.end(), {0, 0, 1, id, uint8_t(len >> 8), uint8_t(len)});
-    o.insert(o.end(), h.begin(), h.end());
-    o.insert(o.end(), payload.begin(), payload.end());
-}
-
-const fs::path kBars = fs::path(BS_TEST_DATA_DIR) / "video" / "barras_64x48.m1v";
-
-// 12 quadros de 64x48 a 30 fps (0,4 s) e 0,4 s de ADX estereo a 22050 Hz, intercalados como num SFD do disco
-std::vector<uint8_t> makeSfd(std::vector<int16_t>* pcmOut = nullptr) {
-    const auto           es = readAll(kBars);
-    const uint32_t       rate = 22050, frames = rate * 4 / 10;
-    std::vector<int16_t> pcm(size_t(frames) * 2);
-    for (uint32_t i = 0; i < frames; ++i) {
-        pcm[2 * i]     = int16_t(8000 * std::sin(2 * std::numbers::pi * 440 * i / rate));
-        pcm[2 * i + 1] = int16_t(6000 * std::sin(2 * std::numbers::pi * 660 * i / rate));
-    }
-    const auto adx = nv::adx_encode(pcm, 2, rate);
-    if (pcmOut) nv::adx_decode(adx, *pcmOut);
-    std::vector<uint8_t> f(0x800, 0);
-    std::memcpy(f.data(), "Sofdec Stream", 13);
-    const size_t chunk = 700;
-    for (size_t v = 0, a = 0, n = 0; v < es.size() || a < adx.size(); ++n) {
-        f.insert(f.end(), {0, 0, 1, 0xBA, 0x21, 0, 1, 0, 1, 0x80, 0, 1});
-        if (n == 0) f.insert(f.end(), {0, 0, 1, 0xBB, 0, 6, 0x80, 0, 1, 0x04, 0xE1, 0xFF});
-        if (v < es.size()) {
-            const size_t k = std::min(chunk, es.size() - v);
-            pes(f, 0xE0, std::span(es).subspan(v, k), n == 0 ? 90000 : -1), v += k;
-        }
-        if (a < adx.size()) {
-            const size_t k = std::min(chunk, adx.size() - a);
-            pes(f, 0xC0, std::span(adx).subspan(a, k), n == 0 ? 90000 : -1), a += k;
-        }
-    }
-    f.insert(f.end(), {0, 0, 1, 0xB9});
-    f.resize((f.size() + 0x7FF) & ~size_t(0x7FF), 0);  // setores de 2048
-    return f;
-}
+// o SFD sintetico (makeSfd) e comum com o manifesto do Builder (L5): tests/unit/sfd_fixture.h
+std::vector<uint8_t> makeSfd(std::vector<int16_t>* pcmOut = nullptr) { return bs::test::make_sfd(pcmOut); }
 
 uint32_t px(const nv::VideoFrame& f, uint32_t x, uint32_t y) { return f.argb[size_t(y) * f.width + x]; }
 bool near(uint32_t c, int r, int g, int b, int tol = 28) {
@@ -379,7 +337,7 @@ BS_TEST(video_linux_ffmpeg_times_errors_and_stop) {
     }
     {   // MPEG-PS com audio MPEG (nao ADX): o leitor do SFD nao serve; com o ffmpeg, toca por ele
         std::vector<uint8_t> ps = {0, 0, 1, 0xBA, 0x21, 0, 1, 0, 1, 0x80, 0, 1};
-        pes(ps, 0xC0, std::vector<uint8_t>{0xFF, 0xFB, 0x90, 0x00}, 0);
+        bs::test::sfd_pes(ps, 0xC0, std::vector<uint8_t>{0xFF, 0xFB, 0x90, 0x00}, 0);
         writeAll(d.p / "comum.mpg", ps);
         BS_CHECK(!nv::sfd_reader_fits(d.p / "comum.mpg") && nv::can_decode(d.p / "comum.mpg"));
         auto dec = nv::make_movie_decoder();

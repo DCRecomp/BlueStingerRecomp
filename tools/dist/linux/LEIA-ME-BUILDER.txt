@@ -1,0 +1,73 @@
+Blue Stinger Builder para Linux
+==============================
+
+O que e
+-------
+O Builder transforma a SUA imagem CDI do Blue Stinger (Dreamcast, NTSC-U T13001N V1.000) num jogo
+nativo para Linux x86-64: recompila o codigo SH-4 do jogo para C++, compila esse C++ junto com o
+runtime aqui, no seu computador, e prepara os dados do disco. Nao usa Wine, Proton nem emulador.
+Depois da conversao o jogo NAO precisa mais do CDI.
+
+Este pacote NAO contem dados nem codigo do jogo: so o Builder, o codigo-fonte do runtime (licenca
+MIT), o SDL3 pre-compilado (zlib), as fontes do FreeType (FTL) e do toml++ (MIT), a fonte Noto Sans
+(OFL) e, quando presente, o compilador portatil (pasta toolchain/; licencas em licencas/compilador).
+O jogo gerado (executavel e pasta data/) e derivado da sua copia: use-o so localmente e nao o
+publique.
+
+Requisitos
+----------
+- Linux x86-64 (Ubuntu 22.04 ou mais novo, SteamOS 3). Nada para instalar no sistema quando o
+  pacote traz o compilador (pasta toolchain/; veja VERSAO.txt).
+- A imagem CDI do Blue Stinger NTSC-U (V1.000). Outras versoes sao recusadas.
+- Cerca de 1,5 GB livres (dados do jogo, jogo compilado e cache de compilacao) e 4 GB de memoria.
+
+Instalar
+--------
+  tar -xzf BlueStinger-Builder-<versao>-linux-x86_64.tar.gz
+  cd BlueStinger-Builder-<versao>-linux-x86_64
+  ./instalar.sh                      # em ~/.local/share/BlueStinger-Builder (sem root)
+  ./instalar.sh --destino <pasta>    # em outra pasta
+  ./instalar.sh --atalho             # tambem cria ~/.local/bin/bs-builder
+  ./instalar.sh --verificar          # confere a instalacao (SHA-256 de cada arquivo)
+O instalador confere o pacote antes, instala por troca (uma interrupcao nunca deixa uma instalacao
+pela metade), guarda a versao anterior em <pasta>.anterior e nao apaga nada seu: arquivos que voce
+acrescentou passam para a nova versao, e arquivos do pacote que voce alterou ficam guardados como
+<arquivo>.usuario-<data>. Jogos gerados, saves e configuracoes nunca sao tocados.
+
+Gerar o jogo
+------------
+  ~/.local/share/BlueStinger-Builder/bs-builder --disc "/caminho/Blue Stinger.cdi" --out ~/Jogos/BlueStinger
+Opcoes:
+  --edicao original|remastered   edicao do jogo (padrao: Original; Remastered com a camera livre)
+  --sem-filmes                   sem os filmes
+  --clean                        descarta a compilacao incremental
+  --compilador <pasta>           outro compilador portatil
+  --compilador-sistema           clang, cmake e ninja do sistema (fora do compilador do pacote; a
+                                 fidelidade so foi provada com o compilador do pacote)
+O que o Builder faz: confere a imagem (hash do executavel do jogo), prepara os dados do disco em
+BlueStinger/data (conferidos setor a setor com a imagem), grava quando cada filme termina (os filmes
+tocam direto do disco), analisa e gera o C++, compila, monta o pacote numa pasta temporaria, testa o
+executavel SEM o CDI (dados e boot curto) e so entao troca a versao instalada. Se qualquer etapa
+falhar ou for cancelada (Ctrl+C), a versao anterior continua intacta.
+
+Pastas
+------
+<saida>/BlueStinger/            o jogo: BlueStinger, data/ (dados do disco), mods/
+<saida>/BlueStinger.anterior/   a versao anterior (rollback)
+<saida>/.bs-build/              trabalho, dados preparados e builder.log
+~/.cache/BlueStingerRecomp/build/<codigo>/   cache de compilacao (pode ser apagado)
+Arquivos seus dentro de <saida>/BlueStinger (log, saves portateis, mods, instalacao.toml) sao
+mantidos quando o jogo e gerado de novo.
+
+Codigo de saida: 0 = sucesso; 1 = falha; 2 = uso; 3 = cancelado. BS_BUILDER_VERBOSE=1 mostra tudo.
+
+Problemas comuns
+----------------
+- "compilador portatil incompleto": reinstale o pacote (./instalar.sh) ou use --compilador-sistema.
+- "esta imagem nao pode ser usada": so a imagem CDI NTSC-U V1.000 e aceita.
+- "sem permissao de gravacao": escolha uma pasta de saida sua (ex.: ~/Jogos/BlueStinger).
+- "outra execucao do Builder esta usando": espere a outra terminar.
+- Pasta montada sem execucao (noexec): o instalador avisa; instale em outra pasta.
+- Detalhes de qualquer falha: <saida>/.bs-build/builder.log.
+
+O projeto C++ editavel (mods em C++) existe so no Builder do Windows nesta versao.

@@ -54,16 +54,19 @@ endif()
 
 # N5: unitarios dos filmes (so native/video e a conversao; build leve, sem o runtime)
 if(WIN32)
-add_executable(bs_video_tests unit/main.cpp unit/test_video_native.cpp unit/test_video_audio.cpp unit/test_video_subs.cpp unit/test_video_mw.cpp unit/test_video_fixes.cpp unit/test_video_adapter.cpp unit/test_video_build.cpp unit/test_video_mods.cpp unit/test_video_slot.cpp unit/test_video_decoder.cpp)
+add_executable(bs_video_tests unit/main.cpp unit/test_video_native.cpp unit/test_video_audio.cpp unit/test_video_subs.cpp unit/test_video_mw.cpp unit/test_video_fixes.cpp unit/test_video_adapter.cpp unit/test_video_build.cpp unit/test_video_mods.cpp unit/test_video_slot.cpp unit/test_video_decoder.cpp
+               unit/test_movie_manifest.cpp)  # N9-L (L5): o manifesto dos filmes do disco, igual nos dois sistemas
 target_include_directories(bs_video_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/unit)
-target_link_libraries(bs_video_tests PRIVATE bs_native_video bs_native_audio bs_video_convert bs_video_mw bs_video_adapter)
+target_compile_definitions(bs_video_tests PRIVATE BS_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
+target_link_libraries(bs_video_tests PRIVATE bs_native_video bs_native_audio bs_video_convert bs_video_mw bs_video_adapter tomlplusplus::tomlplusplus)
 add_test(NAME video COMMAND bs_video_tests)
 else()
 # N9-L (L4): filmes (SFD pelo pl_mpeg, MP4 de mod pelo ffmpeg) e texto (FreeType) do Linux, sem dados do jogo
-add_executable(bs_video_linux_tests unit/main.cpp unit/test_video_linux.cpp unit/test_text.cpp)
+add_executable(bs_video_linux_tests unit/main.cpp unit/test_video_linux.cpp unit/test_text.cpp
+               unit/test_movie_manifest.cpp)  # N9-L (L5): o manifesto dos filmes do disco, igual nos dois sistemas
 target_include_directories(bs_video_linux_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/unit)
 target_compile_definitions(bs_video_linux_tests PRIVATE BS_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
-target_link_libraries(bs_video_linux_tests PRIVATE bs_native_video)
+target_link_libraries(bs_video_linux_tests PRIVATE bs_native_video bs_video_convert tomlplusplus::tomlplusplus)
 add_test(NAME video_linux COMMAND bs_video_linux_tests)
 set_tests_properties(video_linux PROPERTIES TIMEOUT 300)
 # os 16 filmes do disco do usuario contra o manifesto do Builder; SKIP sem BS_DATA_DIR
@@ -174,6 +177,22 @@ add_executable(bs_analysis_real_test data/test_analysis_real.cpp)
 target_link_libraries(bs_analysis_real_test PRIVATE bs_recomp_lib bs_runtime bs_runtime_cdi)
 add_test(NAME analysis_real COMMAND bs_analysis_real_test WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
 set_tests_properties(analysis_real PROPERTIES SKIP_RETURN_CODE 77)
+
+# N9-L (L5): o manifesto dos filmes do Linux contra o do Windows, com os dados do usuario; SKIP sem BS_DATA_DIR
+add_executable(bs_movie_manifest_test data/test_movie_manifest_disc.cpp)
+target_link_libraries(bs_movie_manifest_test PRIVATE bs_video_convert tomlplusplus::tomlplusplus)
+target_compile_definitions(bs_movie_manifest_test PRIVATE $<$<CXX_COMPILER_ID:MSVC>:_CRT_SECURE_NO_WARNINGS>)
+add_test(NAME movie_manifest COMMAND bs_movie_manifest_test)
+set_tests_properties(movie_manifest PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 900)
+
+# N9-L (L5): o Builder no Linux (processos sem shell, troca da instalacao, trava, compilador, entradas ruins), sem o jogo
+if(NOT WIN32)
+  add_executable(bs_builder_linux_tests unit/main.cpp unit/test_builder_posix.cpp)
+  target_include_directories(bs_builder_linux_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/unit)
+  target_link_libraries(bs_builder_linux_tests PRIVATE bs_builder_core)
+  add_test(NAME builder_linux COMMAND bs_builder_linux_tests)
+  set_tests_properties(builder_linux PROPERTIES TIMEOUT 300)
+endif()
 
 # Pipeline completo sobre o programa sintetico: analise -> C++ -> compila -> executa.
 # Duas variantes: constantes do pool inline (1) e lidas da RAM (0).

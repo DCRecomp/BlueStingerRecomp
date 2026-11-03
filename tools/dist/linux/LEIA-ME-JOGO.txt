@@ -1,0 +1,77 @@
+Blue Stinger (recompilado) para Linux
+=====================================
+
+O que e
+-------
+Versao nativa para Linux x86-64 do Blue Stinger (Dreamcast, NTSC-U T13001N V1.000), gerada na
+sua maquina pelo Blue Stinger Builder: o codigo SH-4 do jogo foi recompilado para C++ e compilado
+com o runtime nativo. Nao e um emulador, e nao usa Wine nem Proton.
+
+Esta pasta e a SUA instalacao privada: o executavel contem codigo derivado da sua copia do jogo,
+e a pasta data/ contem os arquivos do seu disco. Use apenas localmente e nao publique.
+
+Como executar
+-------------
+  ./BlueStinger
+O CDI NAO e mais necessario: o jogo usa a pasta data/ (preparada pelo Builder a partir do seu CDI e
+conferida setor a setor). A pasta inteira pode ser movida para outro lugar.
+
+Controles (teclado e controles Xbox, PlayStation, Switch Pro e genericos)
+-------------------------------------------------------------------------
+  Acao              Teclado          Controle (por posicao)
+  START ........... Enter            Start
+  Direcional ...... setas            D-pad
+  A / B / X / Y ... Z / X / A / S    baixo / direita / esquerda / cima
+  Gatilhos L / R .. Q / W            gatilhos
+  Analogico ....... I / J / K / L    analogico esquerdo
+  Camera livre .... -                analogico direito (R3 centraliza; desligada por padrao)
+  Configuracoes ... Esc              Back / Select
+  Tela cheia ...... F11
+Remapeamento, zona morta e perfis por modelo de controle: controles.toml (criado na primeira
+execucao, na mesma pasta do bluestinger.log; apague-o para voltar ao padrao).
+
+Pastas do usuario
+-----------------
+- Saves: $XDG_DATA_HOME/DC-Recomp/Blue Stinger/saves (normalmente
+  ~/.local/share/DC-Recomp/Blue Stinger/saves), um arquivo por slot (BLUESTIN.000 a .005, com copia
+  anterior .bak). O mesmo formato do Windows: um save de la abre aqui e o contrario.
+  --saves-portatil guarda em saves/ ao lado do BlueStinger (o "modo portatil" do Builder grava isso
+  em instalacao.toml); --saves-pasta <pasta> usa outra pasta.
+- Configuracoes e log: nesta pasta, se ela aceitar escrita; senao em
+  $XDG_CONFIG_HOME/BlueStingerRecomp (normalmente ~/.config/BlueStingerRecomp).
+Arquivo danificado nunca e apagado: fica como .corrompido.
+
+Filmes e legendas
+-----------------
+Os filmes tocam direto dos arquivos do disco (data/disc/BSDATA/*.SFD), sem conversao; o Builder
+grava em data/video/manifest.toml quando cada um termina, igual ao Windows. Legendas: --legendas
+<idioma> ou o menu (Esc). Mods de video em mods/video (nomes sem diferenciar maiusculas): um .mp4 de
+mod precisa do ffmpeg do sistema (Ubuntu: sudo apt install ffmpeg); sem ele, o jogo toca o filme
+original e avisa no log.
+
+Configuracoes (Esc no teclado, Back no controle)
+-----------------------------------------------
+As mesmas do Windows: Graficos (Vulkan ou Software), Audio, Legendas e Controles. Sem Vulkan
+disponivel, ou se o dispositivo falhar, o jogo volta sozinho para o renderizador em software
+(tambem: BS_RENDER=software ou --render software). Edicao (Original ou Remastered): escolhida no
+Builder (--edicao), gravada em instalacao.toml.
+
+Dados e problemas
+-----------------
+- ./BlueStinger --verify-data confere o SHA-256 de todos os arquivos de data/.
+- Nao edite os arquivos de data/: eles sao gerenciados pelo Builder.
+- Registro: bluestinger.log (veja "Pastas do usuario"). Anexe-o ao relatar problemas.
+- Versao anterior: o Builder guarda a instalacao anterior em BlueStinger.anterior (ao lado desta
+  pasta). Para voltar, renomeie as pastas.
+
+Limitacoes conhecidas
+---------------------
+- Validacao em Ubuntu e SteamOS reais ainda em andamento (GPU, audio, controles); veja STATUS.md do
+  projeto.
+- Texto do menu e das legendas com a fonte Noto Sans (no Windows, Segoe UI): um pouco mais largo.
+- Diferencas visuais pequenas em relacao ao hardware (sem dither; bordas de texto).
+
+Requisitos
+----------
+Linux x86-64 com glibc 2.31 ou mais nova (Ubuntu 20.04+, SteamOS 3), Vulkan ou nada (software),
+PipeWire, PulseAudio ou ALSA. A versao, a data e o compilador da compilacao estao em VERSAO.txt.
