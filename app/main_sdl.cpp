@@ -23,6 +23,7 @@
 #include "window_present.h"
 #include "settings_menu.h"
 #include "cursor_policy.h"
+#include "core/path_case.h"
 #include "localization/mod_packages.h"
 #include "localization/subtitle_service.h"
 #include "platform/camera_settings.h"
@@ -249,6 +250,10 @@ bool parseArgs(Args& a) {
 void nativeBox(const std::string& msg, bs::platform::BoxKind kind) { bs::platform::message_box(kTitle, msg, kind); }
 
 fs::path exeDir() { return bs::platform::exe_dir(); }
+// N9-L (A11): a pasta dos mods ao lado do executavel e as subpastas, sem diferenciar maiusculas ("Mods/Video" no Linux)
+fs::path modsPath(const wchar_t* sub = nullptr) {
+    return bs::native::resolve_case(exeDir(), sub ? fs::path(L"mods") / sub : fs::path(L"mods"));
+}
 
 // Pasta dos arquivos do usuario (log): ao lado do executavel se der para gravar la; senao
 // %LOCALAPPDATA%\BlueStingerRecomp. (Os dados do jogo ficam em data/, so leitura.)
@@ -360,7 +365,7 @@ void errorBox(SDL_Window* parent, const std::string& msg) {
 bool validateData(const fs::path& dir, bs::FilesProvider files, std::string& err) {
     try {
         bs::boot_read_data(dir);
-        const fs::path mods = exeDir() / L"mods" / L"assets";
+        const fs::path mods = modsPath(L"assets");
         if (files == bs::FilesProvider::Native) {
             bs::native::files::DataFileSystem check(dir / L"disc", mods);  // mods de recursos validos?
             bs::transitional::gdfs::check_sizes(check);                    // cabem no contrato do jogo?
@@ -1284,7 +1289,7 @@ TempSaves g_tempSaves;
 
 // "auto" (o padrao): pt-BR se um pacote de mods\ tiver as falas em pt-BR, senao en-US, senao desligadas (com aviso).
 std::string resolveAutoSubtitles() {
-    const auto mods = bs::native::localization::ModPackages::discover(exeDir() / L"mods", "T13001N V1.000");
+    const auto mods = bs::native::localization::ModPackages::discover(modsPath(), "T13001N V1.000");
     for (const char* lang : {"pt-BR", "en-US"})
         if (const auto f = mods.find("legendas/falas.{idioma}.toml", lang); f && f->language == lang) {
             std::fprintf(stderr, "[legenda] idioma automatico: %s (pacote %s)\n", lang, f->package->id.c_str());
@@ -1337,7 +1342,7 @@ fs::path savesRoot(const Args& a) {
 bs::GameOptions gameOptions(const Args& a) {
     bs::GameOptions opt;
     opt.data              = a.gameData;
-    opt.modAssets         = exeDir() / L"mods" / L"assets";  // mods de arquivos (opcional)
+    opt.modAssets         = modsPath(L"assets");  // mods de arquivos (opcional)
     opt.flash             = a.flash;
     opt.files             = a.files;
     opt.system            = a.system;
@@ -1351,8 +1356,8 @@ bs::GameOptions gameOptions(const Args& a) {
     opt.audioVoices       = a.audioVoices;
     opt.audioMusic        = a.audioMusic;
     opt.dubbing           = a.dubbing;
-    opt.modAudio          = exeDir() / L"mods" / L"audio";  // dublagens e audio de mods (opcional)
-    opt.modVideo          = exeDir() / L"mods" / L"video";  // filmes e legendas de mods (opcional)
+    opt.modAudio          = modsPath(L"audio");  // dublagens e audio de mods (opcional)
+    opt.modVideo          = modsPath(L"video");  // filmes e legendas de mods (opcional)
     opt.subtitles         = subtitlesLanguage(a);
     opt.registerFunctions = [] { bsg::register_functions(); };
     if (a.cameraMode >= 0) opt.camera.mode = st::CameraMode(a.cameraMode);
@@ -1657,14 +1662,14 @@ int mainWindow(Args& a) {
         caps.features.tonemap = caps.features.sharpen = caps.features.bloom = caps.features.crt = true;
     }
     // shaders de pos-processamento de mods (mods\shaders\<nome>): validados aqui; os invalidos ficam com o motivo
-    auto postShaders = bs::native::render::discover_post_shaders(exeDir() / L"mods" / L"shaders");
+    auto postShaders = bs::native::render::discover_post_shaders(modsPath(L"shaders"));
     for (const auto& p : postShaders)
         std::fprintf(stderr, "[pos] shader de mod %s: %s\n", p.name.c_str(), p.error.empty() ? "valido" : ("INVALIDO: " + p.error).c_str());
     if (caps.vulkan) std::fprintf(stderr, "[menu] resolucao interna: ate %u (GPU: ate %u)\n", caps.max_height, gpuMaxHeight);
     prefs.graphics = st::clamp_to(prefs.graphics, caps);
     if (!prefs.graphics.vulkan) a.render = 0;
     std::vector<std::string> languages;  // os idiomas dos pacotes de legendas encontrados
-    const auto modPackages = bs::native::localization::ModPackages::discover(exeDir() / L"mods", "T13001N V1.000");
+    const auto modPackages = bs::native::localization::ModPackages::discover(modsPath(), "T13001N V1.000");
     for (const auto& pr : modPackages.problems())
         std::fprintf(stderr, "[menu] pacote de mod recusado (%s): %s\n", utf8(pr.dir.filename()).c_str(), pr.message.c_str());
     for (const auto& pkg : modPackages.packages())

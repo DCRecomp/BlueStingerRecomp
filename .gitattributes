@@ -1,3 +1,6 @@
 * text=auto eol=lf
 *.bat text eol=crlf
 *.ps1 text eol=crlf
+# N9-L (L4): fontes e a amostra MPEG-1 dos testes, sempre binarios
+*.ttf binary
+*.m1v binary

@@ -84,6 +84,7 @@ struct MfMovieReader::Impl {
 
 std::unique_ptr<IMovieDecoder> make_movie_decoder() { return std::make_unique<MfMovieReader>(); }
 bool                           plays_disc_movies() { return false; }
+bool                           can_decode(const std::filesystem::path&) { return true; }  // o Media Foundation tenta
 
 MfMovieReader::MfMovieReader() = default;
 MfMovieReader::~MfMovieReader() { close(); }

@@ -53,15 +53,24 @@ bool demux_sfd(std::span<const uint8_t> f, SfdStreams& out, std::string* err) {
         const size_t len = be16(f, i + 4), end = i + 6 + len;
         if (end > f.size()) return fail(err, "pacote PES alem do fim do arquivo");
         if (id == 0xE0 || id == 0xC0) {
-            size_t k = i + 6;
+            // N9-L (revisao Codex 20261103-030426): cada campo do cabecalho e conferido contra o fim do pacote ANTES de ser lido
+            // (antes um PES curto com 0x20/0x30 lia o PTS alem do pacote, e alem do arquivo no ultimo pacote)
+            const std::string where = " no deslocamento " + std::to_string(i);
+            size_t            k     = i + 6;
             while (k < end && f[k] == 0xFF) ++k;  // stuffing
-            if (k < end && (f[k] & 0xC0) == 0x40) k += 2;  // STD buffer
+            if (k < end && (f[k] & 0xC0) == 0x40) {  // STD buffer
+                if (k + 2 > end) return fail(err, "cabecalho PES truncado (STD)" + where);
+                k += 2;
+            }
             int64_t pts = -1;
-            if (k < end && (f[k] & 0xF0) == 0x20) pts = readPts(f, k), k += 5;
-            else if (k < end && (f[k] & 0xF0) == 0x30) pts = readPts(f, k), k += 10;
-            else if (k < end && f[k] == 0x0F) k += 1;
-            else return fail(err, "cabecalho PES MPEG-1 invalido no deslocamento " + std::to_string(i));
-            if (k > end) return fail(err, "cabecalho PES maior que o pacote");
+            if (k < end && (f[k] & 0xF0) == 0x20) {
+                if (k + 5 > end) return fail(err, "cabecalho PES truncado (PTS)" + where);
+                pts = readPts(f, k), k += 5;
+            } else if (k < end && (f[k] & 0xF0) == 0x30) {
+                if (k + 10 > end) return fail(err, "cabecalho PES truncado (PTS e DTS)" + where);
+                pts = readPts(f, k), k += 10;
+            } else if (k < end && f[k] == 0x0F) k += 1;
+            else return fail(err, "cabecalho PES MPEG-1 invalido" + where);
             auto& dst = id == 0xE0 ? out.video : out.audio;
             dst.insert(dst.end(), f.begin() + ptrdiff_t(k), f.begin() + ptrdiff_t(end));
             if (id == 0xE0) {

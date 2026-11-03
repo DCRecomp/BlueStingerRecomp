@@ -1,6 +1,6 @@
 // N9-L: filmes do disco no Linux, sem reconversao. O SFD (Sofdec) e decodificado na hora: pl_mpeg para o MPEG-1 e o ADX de
 // sfd_media.cpp, os mesmos que o Builder do Windows usa como referencia. O MP4 de um mod vai por outro decodificador.
-#include "video/movie_decoder.h"
+#include "video/movie_backends_posix.h"
 #include "video/sfd_media.h"
 
 #include <algorithm>
@@ -95,7 +95,6 @@ private:
 
 } // namespace
 
-std::unique_ptr<IMovieDecoder> make_movie_decoder() { return std::make_unique<SfdMovieReader>(); }
-bool                           plays_disc_movies() { return true; }
+std::unique_ptr<IMovieDecoder> make_sfd_decoder() { return std::make_unique<SfdMovieReader>(); }
 
 } // namespace bs::native::video

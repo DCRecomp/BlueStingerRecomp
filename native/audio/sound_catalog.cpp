@@ -1,5 +1,7 @@
 #include "audio/sound_catalog.h"
 
+#include "core/path_case.h"
+
 #include <toml++/toml.hpp>
 
 #include <algorithm>
@@ -99,7 +101,7 @@ SoundCatalog SoundCatalog::load(const SoundCatalogOptions& o) {
             c.problems_.push_back(std::string("manifest.toml ilegivel: ") + std::string(e.description()));
         }
     }
-    const fs::path modman = o.modsDir / "manifest.toml";
+    const fs::path modman = resolve_case(o.modsDir, "manifest.toml");  // A11: caixa livre nos mods
     if (!o.modsDir.empty() && fs::is_regular_file(modman, ec)) {
         try {
             const toml::table t = toml::parse(readAll(modman));
@@ -135,8 +137,9 @@ std::optional<SoundEntry> SoundCatalog::resolve(std::string_view id, std::string
     if (!o_.modsDir.empty())
         for (const auto& lg : langs)
             for (const char* ext : {".wav", ".flac", ".ogg"}) {
-                const fs::path base = lg.empty() ? o_.modsDir : o_.modsDir / fromUtf8(lg);
-                const fs::path  f = base / fromUtf8(fileName(id) + ext);
+                // A11: "PT-BR/voz/E001_01.WAV" vale como "pt-br/voz/E001_01.wav" tambem onde o sistema diferencia maiusculas
+                const fs::path  rel = lg.empty() ? fromUtf8(fileName(id) + ext) : fromUtf8(lg) / fromUtf8(fileName(id) + ext);
+                const fs::path  f   = resolve_case(o_.modsDir, rel);
                 std::error_code ec;
                 if (!fs::is_regular_file(f, ec)) continue;
                 const fs::path canon = contained(o_.modsDir, f);

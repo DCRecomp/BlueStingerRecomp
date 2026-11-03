@@ -4,7 +4,9 @@
 // toca (MoviePlayback) decide QUAL quadro mostrar pela posicao do relogio logico do jogo. O quadro fica
 // em memoria (ARGB), sem textura ou superficie de API grafica: o renderer (hoje o host, no N7 o Vulkan)
 // o recebe como esta.
-//   Windows: Media Foundation (video/mf_movie.h). Linux: SFD do disco (video/sfd_movie.cpp).
+//   Windows: Media Foundation (video/mf_movie.h). Linux: SFD do disco (video/sfd_movie.cpp) e, para mods em outro formato,
+//   o ffmpeg do sistema como processo separado (video/ffmpeg_movie.cpp), escolhidos pelo conteudo do arquivo
+//   (video/movie_decoder_posix.cpp).
 #include <cstdint>
 #include <filesystem>
 #include <memory>
@@ -40,9 +42,13 @@ public:
     virtual void close() = 0;
 };
 
-// O decodificador da plataforma (Windows: Media Foundation; Linux: sfd_movie.cpp).
+// O decodificador da plataforma (Windows: Media Foundation; Linux: SFD ou ffmpeg, pelo conteudo).
 std::unique_ptr<IMovieDecoder> make_movie_decoder();
 // O decodificador toca os SFD do disco direto, sem a conversao do Builder (Linux).
 bool plays_disc_movies();
+// Ha decodificador para este arquivo nesta maquina. Windows: sempre (o Media Foundation tenta e falha com mensagem). Linux:
+// SFD e MPEG pelo pl_mpeg; outros formatos (MP4 de mod) so com `ffmpeg` e `ffprobe` no PATH. O catalogo usa isto para
+// manter o filme original quando o mod nao pode tocar (N9-L, D-L3).
+bool can_decode(const std::filesystem::path& file);
 
 } // namespace bs::native::video

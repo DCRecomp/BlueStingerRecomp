@@ -2,6 +2,8 @@
 
 #include "localization/locale.h"
 
+#include "core/path_case.h"
+
 #include <toml++/toml.hpp>
 
 #include <algorithm>
@@ -17,7 +19,9 @@ std::optional<fs::path> safe_join(const fs::path& root, std::string_view relativ
     std::error_code ec;
     const fs::path  base = fs::weakly_canonical(root, ec);
     if (ec) return std::nullopt;
-    const fs::path p = fs::weakly_canonical(base / fs::path(std::u8string(relative.begin(), relative.end())), ec);
+    // A11: cada parte achada sem diferenciar maiusculas (no Windows o caminho exato ja basta); a conferencia de dentro da pasta
+    // vem depois, sobre o caminho achado
+    const fs::path p = fs::weakly_canonical(resolve_case(base, fs::path(std::u8string(relative.begin(), relative.end()))), ec);
     if (ec) return std::nullopt;
     const auto rel = p.lexically_relative(base);  // juncao/link que sai da pasta: o canonico fica fora
     if (rel.empty() || rel.generic_u8string().rfind(u8"..", 0) == 0) return std::nullopt;
@@ -29,13 +33,13 @@ ModPackages ModPackages::discover(const fs::path& modsDir, std::string_view game
     std::error_code ec;
     std::vector<fs::path> dirs;
     for (const auto& e : fs::directory_iterator(modsDir, ec))
-        if (e.is_directory(ec) && fs::is_regular_file(e.path() / L"mod.toml", ec)) dirs.push_back(e.path());
+        if (e.is_directory(ec) && fs::is_regular_file(resolve_case(e.path(), L"mod.toml"), ec)) dirs.push_back(e.path());
     std::sort(dirs.begin(), dirs.end());
     for (const fs::path& d : dirs) {
         auto fail = [&](std::string m) { out.problems_.push_back({d, std::move(m)}); };
         toml::table t;
         try {
-            t = toml::parse_file((d / L"mod.toml").u8string());
+            t = toml::parse_file(resolve_case(d, L"mod.toml").u8string());
         } catch (const toml::parse_error& e) {
             fail("mod.toml ilegivel: " + std::string(e.description()));
             continue;

@@ -1,5 +1,8 @@
 #include "video/movie_catalog.h"
 
+#include "core/path_case.h"
+#include "video/movie_decoder.h"
+
 #include <toml++/toml.hpp>
 
 #include <algorithm>
@@ -36,6 +39,14 @@ bool isFile(const fs::path& p) {
     return fs::is_regular_file(p, ec);
 }
 
+// N9-L (D-L3): o mod existe mas esta maquina nao tem decodificador para ele (MP4 no Linux sem o ffmpeg): o filme original
+// continua, com aviso. No Windows can_decode() e sempre verdadeiro e nada muda.
+bool modPlayable(const fs::path& file, const std::string& who, std::vector<std::string>& problems) {
+    if (!isFile(file) || can_decode(file)) return true;
+    problems.push_back(who + ": " + file.filename().string() + " sem decodificador neste sistema (instale o ffmpeg): toca o filme original");
+    return false;
+}
+
 // Caminho relativo a pasta do manifesto, sem sair dela: nada absoluto, de unidade ou com "..".
 bool safeRelative(const std::string& s) {
     if (s.empty()) return false;
@@ -47,17 +58,19 @@ bool safeRelative(const std::string& s) {
 }
 
 // Depois de resolver juncoes e links: o alvo continua dentro da pasta do manifesto (um caminho
-// lexicamente relativo ainda escapa por uma juncao; revisao Codex 2026-10-19).
-bool contained(const fs::path& base, const fs::path& target) {
+// lexicamente relativo ainda escapa por uma juncao; revisao Codex 2026-10-19). Devolve o caminho canonico conferido (vazio se
+// fora): e ele que se guarda e se abre, sem reconsultar o caminho original, como no catalogo de audio (revisao Codex
+// 20261103-030426: um link trocado depois da conferencia nao leva para fora).
+fs::path contained(const fs::path& base, const fs::path& target) {
     std::error_code ec;
     const fs::path  b = fs::weakly_canonical(base, ec);
-    if (ec) return false;
+    if (ec) return {};
     const fs::path t = fs::weakly_canonical(target, ec);
-    if (ec) return false;
+    if (ec) return {};
     auto bi = b.begin(), ti = t.begin();
     for (; bi != b.end(); ++bi, ++ti)
-        if (ti == t.end() || *bi != *ti) return false;
-    return true;
+        if (ti == t.end() || *bi != *ti) return {};
+    return t;
 }
 
 // [[filme]] id, original, arquivo, quadros, fps, largura, altura, sha256, legendas = { pt = "..." }
@@ -100,11 +113,12 @@ void readManifest(const fs::path& path, bool mod, std::map<uint32_t, MovieEntry>
         MovieEntry e = mod && out.count(uint32_t(*id)) ? out[uint32_t(*id)] : MovieEntry{};
         e.id         = uint32_t(*id);
         if (auto o = (*f)["original"].value<std::string>()) e.original = upper(*o);
-        e.file = path.parent_path() / fs::path(std::u8string(file->begin(), file->end()));
-        if (!contained(path.parent_path(), e.file)) {
+        e.file = contained(path.parent_path(), resolve_case(path.parent_path(), fs::path(std::u8string(file->begin(), file->end()))));  // A11
+        if (e.file.empty()) {
             problems.push_back(path.filename().string() + ": filme " + std::to_string(*id) + " aponta para fora da pasta por juncao ou link (recusado)");
             continue;
         }
+        if (mod && !modPlayable(e.file, path.filename().string() + ": filme " + std::to_string(*id), problems)) continue;
         e.mod  = mod;
         e.absent = false;
         if (mod) e.frames = 0, e.width = 0, e.height = 0, e.fps = 0, e.sha256.clear();  // o mod tem os seus
@@ -121,8 +135,8 @@ void readManifest(const fs::path& path, bool mod, std::map<uint32_t, MovieEntry>
         if (const auto* subs = (*f)["legendas"].as_table())
             for (const auto& [lang, v] : *subs)
                 if (auto s = v.value<std::string>()) {
-                    const fs::path sp = path.parent_path() / fs::path(std::u8string(s->begin(), s->end()));
-                    if (safeRelative(*s) && contained(path.parent_path(), sp)) e.subtitles[lowerLang(lang.str())] = sp;
+                    const fs::path sp = safeRelative(*s) ? contained(path.parent_path(), resolve_case(path.parent_path(), fs::path(std::u8string(s->begin(), s->end())))) : fs::path();
+                    if (!sp.empty()) e.subtitles[lowerLang(lang.str())] = sp;
                     else problems.push_back(path.filename().string() + ": legenda com caminho fora da pasta (recusada): " + *s);
                 }
         if (!isFile(e.file)) problems.push_back(path.filename().string() + ": filme " + std::to_string(e.id) + " sem o arquivo " + e.file.filename().string());
@@ -139,7 +153,7 @@ MovieCatalog MovieCatalog::load(const CatalogOptions& o) {
         for (auto& [id, e] : c.byId_)
             if (!e.absent && !e.original.empty()) e.file = o.discDir / e.original, e.audioDelaySamples = 0;
     if (o.modsDir.empty()) return c;
-    readManifest(o.modsDir / "manifest.toml", true, c.byId_, c.problems_);
+    readManifest(resolve_case(o.modsDir, "manifest.toml"), true, c.byId_, c.problems_);
     // mod pelo nome do original (sem manifesto): mods\video\<NOME>.mp4 e <NOME>.<idioma>.srt/.vtt
     for (auto& [id, e] : c.byId_) {
         if (e.original.empty()) continue;
@@ -148,9 +162,12 @@ MovieCatalog MovieCatalog::load(const CatalogOptions& o) {
         for (const auto& f : fs::directory_iterator(o.modsDir, ec)) {
             if (!f.is_regular_file(ec)) continue;
             const std::string name = upper(f.path().filename().string());
-            if (!e.mod && name == stem + ".MP4") {
-                e.file = f.path(), e.mod = true, e.absent = false, e.audioDelaySamples = 0;
-                e.frames = e.width = e.height = 0, e.fps = 0, e.sha256.clear();
+            // o achado pelo nome tambem guarda o canonico conferido dentro da pasta (revisao Codex 20261103-034502)
+            if (!e.mod && name == stem + ".MP4" && modPlayable(f.path(), "mods de video", c.problems_)) {
+                if (const fs::path canon = contained(o.modsDir, f.path()); !canon.empty()) {
+                    e.file = canon, e.mod = true, e.absent = false, e.audioDelaySamples = 0;
+                    e.frames = e.width = e.height = 0, e.fps = 0, e.sha256.clear();
+                } else c.problems_.push_back("mods de video: " + f.path().filename().string() + " aponta para fora da pasta (recusado)");
             }
             for (const char* ext : {".SRT", ".VTT"}) {  // NOME.<idioma>.srt
                 const std::string pre = stem + ".";
@@ -158,7 +175,10 @@ MovieCatalog MovieCatalog::load(const CatalogOptions& o) {
                     std::string lang = f.path().filename().string().substr(pre.size());
                     lang             = lang.substr(0, lang.size() - 4);
                     std::transform(lang.begin(), lang.end(), lang.begin(), [](char ch) { return char(std::tolower(static_cast<unsigned char>(ch))); });
-                    if (!lang.empty() && lang.find('.') == std::string::npos) e.subtitles[lang] = f.path();
+                    if (!lang.empty() && lang.find('.') == std::string::npos) {
+                        if (const fs::path canon = contained(o.modsDir, f.path()); !canon.empty()) e.subtitles[lang] = canon;
+                        else c.problems_.push_back("mods de video: " + f.path().filename().string() + " aponta para fora da pasta (recusado)");
+                    }
                 }
             }
         }

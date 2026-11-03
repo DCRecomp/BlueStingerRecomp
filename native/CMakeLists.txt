@@ -23,9 +23,31 @@ add_library(bs_native_video STATIC video/movie_catalog.cpp video/movie_playback.
 if(WIN32)
   target_sources(bs_native_video PRIVATE video/mf_movie.cpp video/subtitles_dwrite.cpp)
 else()
-  # N9-L: os SFD do disco, decodificados na hora (pl_mpeg + ADX)
-  target_sources(bs_native_video PRIVATE video/sfd_movie.cpp video/sfd_media.cpp video/pl_mpeg_impl.c video/subtitles_text_posix.cpp)
+  # N9-L (L4): texto sem DirectWrite: FreeType (FTL) sobre a Noto Sans (OFL 1.1) embutida. So os modulos de fonte TrueType,
+  # sem zlib, PNG, bzip2, Brotli nem HarfBuzz. O menu e as legendas do Linux desenham por aqui (native/text/text_engine.h)
+  include(FetchContent)
+  foreach(_ft ZLIB BZIP2 PNG HARFBUZZ BROTLI)
+    set(FT_DISABLE_${_ft} ON CACHE BOOL "" FORCE)
+  endforeach()
+  set(SKIP_INSTALL_ALL ON CACHE BOOL "" FORCE)
+  FetchContent_Declare(freetype
+    GIT_REPOSITORY https://github.com/freetype/freetype.git
+    GIT_TAG        VER-2-13-3
+    GIT_SHALLOW    TRUE)
+  FetchContent_MakeAvailable(freetype)
+  set_property(TARGET freetype PROPERTY COMPILE_OPTIONS -w)  # codigo de terceiros sem alteracoes
+  enable_language(ASM)
+  set(BS_FONT_REGULAR  ${PROJECT_SOURCE_DIR}/third_party/fonts/noto-sans/NotoSans-Regular.ttf)
+  set(BS_FONT_SEMIBOLD ${PROJECT_SOURCE_DIR}/third_party/fonts/noto-sans/NotoSans-SemiBold.ttf)
+  configure_file(text/fonts_embed.S.in ${CMAKE_CURRENT_BINARY_DIR}/fonts_embed.S @ONLY)
+  set_source_files_properties(${CMAKE_CURRENT_BINARY_DIR}/fonts_embed.S PROPERTIES OBJECT_DEPENDS "${BS_FONT_REGULAR};${BS_FONT_SEMIBOLD}")
+  add_library(bs_native_text STATIC text/text_freetype.cpp ${CMAKE_CURRENT_BINARY_DIR}/fonts_embed.S)
+  target_link_libraries(bs_native_text PUBLIC bs_native_api PRIVATE freetype)
+  # N9-L: os SFD do disco, decodificados na hora (pl_mpeg + ADX); MP4 de mod pelo ffmpeg externo
+  target_sources(bs_native_video PRIVATE video/sfd_movie.cpp video/sfd_media.cpp video/sfd_info.cpp video/pl_mpeg_impl.c
+                 video/movie_decoder_posix.cpp video/ffmpeg_movie.cpp video/subtitles_text_posix.cpp)
   target_include_directories(bs_native_video PRIVATE ${PROJECT_SOURCE_DIR}/third_party/pl_mpeg)
+  target_link_libraries(bs_native_video PUBLIC bs_native_text)
   set_source_files_properties(video/pl_mpeg_impl.c PROPERTIES COMPILE_OPTIONS -w)
 endif()
 target_link_libraries(bs_native_video PUBLIC bs_native_api PRIVATE tomlplusplus::tomlplusplus
