@@ -4,7 +4,9 @@
 L0 e L1 feitas. L2 feita: A3 16/16 e 16/16 no Linux (WSL), com a ressalva dos filmes do `STATUS.md`, aceita pelo mantenedor em
 2026-11-03. L3 implementada e provada no WSL (áudio SDL3, raster paralelo, Windows sem regressão); falta a porta de saída em Ubuntu
 nativo. L4 implementada e provada no WSL e no Windows (seção 6.1); a parte que depende de GPU, áudio e controles reais vai junto
-com a da L3 na mesma sessão em Ubuntu nativo. L5 em diante não iniciadas. Detalhes e evidências no `STATUS.md`.
+com a da L3 na mesma sessão em Ubuntu nativo. L5 implementada e provada no WSL e no Windows (seção 6.2), com o compilador portátil
+da D-L2 (Zig 0.13, escolha do mantenedor em 2026-11-03); A1 e A2 em Ubuntu nativo vão na mesma sessão da L3 e da L4
+(`docs/N9-L-ROTEIRO-UBUNTU.md`). L6 em diante não iniciadas. Detalhes e evidências no `STATUS.md`.
 
 N9-L é um marco intermediário provisório, sem alterar a numeração N0–N10. Vem depois do N9.0 e antes do N9.1 e do N9.2, que ficam
 bloqueados até a portabilidade ser validada. O alvo inicial é Linux x86-64, Ubuntu e SteamOS, sem Wine nem Proton.
@@ -103,7 +105,7 @@ O código compartilhado não ganha `#ifdef`. Cada dependência fica num `.cpp` d
 | # | Decisão | Recomendação | Motivo |
 |---|---|---|---|
 | D-L1 | Onde validar | Uma máquina Ubuntu 24.04 nativa com GPU real e um Steam Deck, operados por você com um roteiro meu | Sem isso, os critérios A5 e A6 não têm como ser cumpridos. Máquina virtual com GPU dedicada serve para Ubuntu, mas não substitui o Deck |
-| D-L2 | Compilador no Linux | Clang e LLD portáteis dentro do pacote, com um sysroot de glibc antiga e o SDL3 pré-compilado | Funciona no SteamOS sem tocar no sistema, e todos compilam com o mesmo compilador, o que torna a prova de fidelidade válida para todos. O pacote fica maior; tamanho a medir na L5 |
+| D-L2 | Compilador no Linux | Clang e LLD portáteis dentro do pacote, com um sysroot de glibc antiga e o SDL3 pré-compilado. **Implementação escolhida em 2026-11-03 (L5):** Zig 0.13.0, que é o Clang/LLD 18.1.6 com o alvo de glibc 2.31 e o libc++ estático embutidos, mais CMake 3.30.5 e Ninja 1.12.1 oficiais | Funciona no SteamOS sem tocar no sistema, e todos compilam com o mesmo compilador, o que torna a prova de fidelidade válida para todos. O pacote fica maior; tamanho a medir na L5 |
 | D-L3 | Filmes no Linux | Tocar os SFD do disco em tempo real com `pl_mpeg` e o ADX que já temos, sem reconverter. `.mp4` de mods por `libav` do sistema carregada em tempo de execução, se existir; sem ela, toca o filme do disco e registra aviso. **Ajuste aprovado em 2026-11-03:** o MP4 de mod vai pelo **`ffmpeg` e `ffprobe` do sistema como processos separados**, não pela libav por `dlopen` (o jogo teria de ler estruturas da libav, cuja disposição muda entre as versões 59, 60 e 61; sem os cabeçalhos LGPL de cada uma, isso quebraria em silêncio). O resto da decisão fica | Sem codec patenteado no pacote, e a imagem é a original, sem perda. Os mods continuam substituíveis no Linux, mas MP4 depende de um programa do sistema. Alternativa: exigir um formato aberto nos mods, com `dav1d` |
 | D-L4 | Ferramentas no WSL | Autorizar `cmake`, `ninja`, `clang` e bibliotecas de desenvolvimento do X11, Wayland, ALSA e PipeWire no Ubuntu do WSL | A regra do projeto proíbe instalar sem autorização. Sem isso, a L1 não anda |
 | D-L5 | Forma do pacote | `.tar.gz` com o Builder, o kit e `instalar.sh`. Sem AppImage ou Flatpak nesta versão | É o mais simples, e o jogo é gerado na máquina do usuário, como no Windows |
@@ -167,6 +169,33 @@ Paralelismo do raster por pool de threads próprio (sem TBB) entra na L3, com pr
 - **Pendente em hardware real (sessão única com a L3, roteiro em `docs/N9-L-ROTEIRO-UBUNTU.md`):** filme com som e legenda em GPU e
   saída de áudio reais, sincronia de ouvido, menu com teclado, controle e mouse, mod MP4 com o `ffmpeg` do próprio Ubuntu.
 
+### 6.2 L5: Builder e distribuição Linux (resultado, 2026-11-03)
+
+- **Builder:** um fluxo e uma linha de comando para os dois sistemas. O que depende do sistema fica em
+  `builder_platform_*`, `child_process_*` e `toolchain_*`. No Windows nada mudou: mensagens de uso com os mesmos bytes, linha do
+  CMake, stamp, `VERSAO.txt`, limites de caminho e cache iguais, e a regressão completa aprovada. No Linux os processos sobem
+  sem shell (`execve`), a árvore de processos é morta no fim, no prazo e no cancelamento, e a trava é por `flock`. O cache fica no
+  XDG e o modo portátil continua sendo o `instalacao.toml`. Kit, compilador ou cache com `;`, `\`, `"` ou `$` são recusados, com o
+  motivo: o CMake não aceita esses caracteres em caminhos.
+- **Compilador (D-L2):** Zig 0.13.0 (Clang 18.1.6), alvo glibc 2.31, CPU x86-64 base, libc++ estática, mais CMake 3.30.5 e Ninja
+  1.12.1. SHA-256 de cada download fixados no script. SDL3 3.2.30 pré-compilado com os backends por `dlopen` (sem D-Bus por
+  enquanto). Opção `--compilador-sistema` para clang, cmake e ninja do sistema.
+- **Filmes:** manifesto gravado direto dos SFD, com os fins arredondados como no Windows; os 16 iguais ao manifesto do Windows.
+- **Pacote (D-L5):** `.tar.gz` reprodutível de 87 MB (405 MB extraído), com `instalar.sh` (sem root, troca atômica, recuperação de
+  interrupção, arquivos do usuário preservados, `--verificar`), licenças, `VERSAO.txt` e `SHA256SUMS.txt`. Não traz jogo
+  compilado, mídia nem arquivo particular.
+- **Provas (WSL):**
+  - Suíte B1–B14 com 108 ok e 0 falha, na árvore do commit.
+  - A2: dados e C++ gerado iguais aos do Windows por SHA-256.
+  - A3 com o executável que o Builder do pacote compilou com o Zig: N8.0 16/16 (só as 179 exceções) e N8.7 16/16, sem exceção.
+  - Duas revisões do Codex (5 e 3 achados, todos tratados; detalhes no `STATUS.md`).
+- **Pendente:**
+  - A1 em Ubuntu nativo (roteiro em `docs/N9-L-ROTEIRO-UBUNTU.md`, sessão única com a L3 e a L4) e no SteamOS (L6).
+  - **Revisão das licenças e avisos do Zig antes de publicar qualquer pacote**: cabeçalhos do kernel Linux (GPL-2.0 com a exceção
+    de syscall) e bibliotecas C dos outros alvos. Uma alternativa é podar o Zig, que reduz o tamanho e as obrigações, mas exige
+    nova decisão.
+  - Projeto C++ editável (Developer) no Linux.
+
 ## 7. Publicação da v0.8.0
 
 Autorizada antecipadamente, condicionada a todos os critérios acima:
@@ -185,6 +214,6 @@ decisão do mantenedor. Uma versão Linux que só compila não é publicada.
 |---|---|---|
 | O estado diverge entre MSVC e Clang | Original deixa de ser idêntica no Linux | L2 detecta cedo; sanitizadores ajudam a achar comportamento indefinido, que também é defeito no Windows |
 | Falhas de página do B2 pesam no desempenho | Queda de quadros no Deck | Medir na L1; alternativa `userfaultfd` |
-| Tamanho do pacote com compilador | Download grande | Medir na L5; pacote com compilador opcional só depois de nova decisão |
+| Tamanho do pacote com compilador | Download grande | Medido na L5: 87 MB o `.tar.gz`, 405 MB instalado (o Zig sozinho, 341 MB, por levar as bibliotecas C de todos os alvos). Pacote com compilador opcional ou Zig podado só depois de nova decisão |
 | H9 aparecer no Linux | A falha intermitente segue sem causa conhecida | Registrar à parte; não vira critério novo sem decisão |
 | Diferença visual do texto | FreeType não desenha igual ao DirectWrite | Aceitável: menu e legendas não entram nas referências. A fonte muda no Linux |

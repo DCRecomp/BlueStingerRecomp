@@ -4325,6 +4325,87 @@ não por uma única bateria contínua** (decisão do mantenedor, 2026-11-02).
 - **Pendências:** H9; D-N8-4 no gate pós-N9; ressalva do 7.1 e D-K1(a); limite de 3 h de `n6_h` no executor, defeito a
   corrigir antes de uma futura integral, sem enfraquecer os testes. N9 e N10 não iniciados.
 
+### N9-L L5: Builder e distribuição Linux (2026-11-03)
+
+Autorizada pelo mantenedor em 2026-11-03. Implementada e provada no WSL (Ubuntu 24.04, kernel 5.15.167.4-microsoft-standard-WSL2)
+e no Windows. **A1 em Ubuntu nativo não foi feita:** fica para a sessão única do `docs/N9-L-ROTEIRO-UBUNTU.md`, junto com A7, A8,
+A9 e A11 da L3 e da L4, que continuam pendentes. Nada do WSL vale como aprovação desses critérios.
+
+- **Arquitetura:** um só fluxo (`builder_core.cpp`) e uma só linha de comando (`main_cli.cpp`). O que depende do sistema fica em
+  `builder_platform_{win,posix}.cpp`, `child_process_{win,posix}.cpp` e `toolchain_{win,posix}.cpp`, escolhidos pelo CMake, sem
+  `#ifdef` no código comum. No Windows o comportamento foi só movido. A mensagem de uso tem os mesmos bytes de antes (SHA-256
+  `F851F1…`, código 2) e as opções do Linux são recusadas. A linha do CMake, o stamp, o `VERSAO.txt`, os limites de caminho e o
+  cache também são os mesmos.
+- **Linux:**
+  - **Processos:** `fork`/`execve` com a lista de argumentos, sem shell. O filho tem grupo próprio e a árvore inteira morre no fim,
+    no prazo e no cancelamento. Os descritores são fechados com `close_range`. Ctrl+C, SIGTERM e SIGHUP cancelam a execução e o
+    SIGPIPE é ignorado.
+  - **Arquivos e caminhos:** trava por `flock`. Os nomes UTF-8 não passam pela localidade. O cache fica em `$BS_BUILDER_CACHE`,
+    `$XDG_CACHE_HOME`/`~/.cache` ou na pasta de trabalho. O Builder recusa, com o motivo, caminhos de kit, compilador e cache que
+    tenham `;`, `\`, `"` ou `$`, que o CMake não aceita.
+- **Compilador (D-L2):** Zig 0.13.0 (Clang/LLD 18.1.6), alvo `x86_64-linux-gnu.2.31`, CPU base, `-g0`, libc++ estática; CMake
+  3.30.5 e Ninja 1.12.1, binários oficiais. Os SHA-256 conferidos estão no `tools/dist/linux/toolchain_linux.sh` e no `VERSAO.txt`
+  do pacote. O SDL3 3.2.30 vem pré-compilado, com os backends X11, Wayland, PipeWire, PulseAudio, ALSA, Vulkan e HIDAPI carregados
+  por `dlopen`; sem D-Bus, porque falta o `libdbus-1-dev` na máquina que monta o pacote. O `--compilador-sistema` usa clang,
+  cmake ≥ 3.25 e ninja do sistema.
+- **Filmes:** o Builder do Linux grava `data/video/manifest.toml` direto dos SFD (`conversor = "n9l-sfd-direto-1"`,
+  `fonte = "disco"`, sem `arquivo`). Os fins usam as mesmas funções do conversor do Windows (`video_end_100ns` arredonda,
+  `audio_end_100ns` trunca). Os 16 filmes são iguais ao manifesto do Windows campo a campo, inclusive NEWGAME, E193 e ENDING2,
+  os três do arredondamento (B11; `bs_movie_manifest_test` 16/16 no Windows). Os testes `movie_manifest` cobrem duração,
+  arredondamento e entradas maliciosas. O catálogo só aceita entrada sem `arquivo` se houver `discDir` e o `original` for um
+  único componente contido nele.
+- **Pacote (D-L5):** `.tar.gz` determinístico com `bs-builder`, kit de fontes (1524 arquivos, 35 MB; `known_versions.h` público),
+  compilador portátil, `instalar.sh`, LEIA-ME, licenças, `VERSAO.txt` e `SHA256SUMS.txt`. O pacote não traz jogo compilado, ISO,
+  CDI, filme nem música.
+  - Tamanho: 90 875 900 bytes (87 MB), 19 519 entradas, 351 MiB de conteúdo (405 MB ocupados em disco).
+  - O `bs-builder` precisa de glibc 2.17 ou mais nova e liga só `libc`, `libm`, `libdl` e `libpthread`.
+  - Pacote `l5zig6` da árvore `72132c1a` (a do commit, salvo o texto desta seção e do plano): SHA-256 `70a785ee…eb4474`,
+    igual nas duas montagens.
+- **`instalar.sh`:**
+  - Instala sem root, só no destino escolhido; o padrão é `~/.local/share` e o atalho só é criado com `--atalho`.
+  - O pacote é conferido antes da cópia. A troca é por renomeação, com recuperação depois de morte do processo na cópia ou na
+    troca.
+  - Arquivos do usuário são mantidos; os do pacote que o usuário alterou são guardados como `.usuario-<data>`.
+  - `--verificar` confere a instalação. Os caracteres que o CMake recusa também são recusados.
+- **Suíte `tools/dist/linux/test_builder_linux.py` (B1–B14, WSL, árvore `72132c1a`): 108 ok, 0 falha**, em 2069 s; 2218 s
+  com as duas montagens do pacote. A passada anterior (`8f00fbed2e`, antes da segunda revisão do Codex) também deu 108/0.
+  - Paralelismo limitado a 6 (`CMAKE_BUILD_PARALLEL_LEVEL`). Memória do WSL: no máximo 1800 MB usados e no mínimo 13 747 MB
+    disponíveis (amostra a cada 5 s). O cache de arquivos da VM foi esvaziado (`drop_caches`, autorizado pelo mantenedor)
+    sempre que passou de 4 GB, porque a VM não o devolve ao Windows.
+  - Do CDI ao jogo em 155 s. A2: 2095 arquivos de dados e os 14 arquivos de C++ gerado iguais aos do Windows por SHA-256.
+  - Edições Original e Remastered na mesma pasta, com a escolha anterior mantida.
+  - Caminhos com espaço, acento, aspas, `&`, parênteses e `#`, sem comando injetado.
+  - Recuperação de interrupções, falta de espaço, cache e saída sem gravação, reaproveitamento dos dados e reprodutibilidade.
+  - As duas falhas do B6 da passada anterior (caminhos com `"` e `$`) foram corrigidas e estão provadas.
+  - O B3 confere que nada é gravado na pasta de onde o Builder é chamado. O Zig 0.13 grava o `-o -` de um teste do CMake num
+    arquivo chamado `-` na pasta atual; um desses arquivos tinha ido parar no repositório pelos scripts de montagem, que agora
+    rodam o CMake de dentro da pasta de compilação.
+- **Unitários no Linux:** `builder_linux` (9 testes: sem shell, argumentos, ambiente e pasta, prazo, cancelamento e neto que
+  sobrevive à saída normal, descritor 70000, trava, caminhos recusados, troca, compilador, cache do Zig), `movie_manifest` (4) e
+  `movie_manifest_disc` (com os dados do usuário). **Provas de mutação:** 12/12 derrubam o teste que guarda a correção.
+- **A3 com o executável do Zig** (o jogo que o Builder do pacote `l5zig6` gerou no B3, `BlueStinger` SHA-256
+  `22939060…0656cf`, dados do Builder do Linux, `disc.manifest` `24fa3cb0…8524`; nenhum resultado do Clang usado como prova;
+  `--paralelo 2`, uma bateria por vez):
+  - N8.0 sem fog e volumes (`tools/dev/linux_referencias.sh … n80`): **16/16 iguais**, só com as 179 exceções de SPC, nenhuma nova; 5265 s; no
+    máximo 1636 MB usados no WSL.
+  - N8.7 (`… n87`): **16/16 iguais**, sem exceção; 6689 s; no máximo 1549 MB usados no WSL.
+  - Uma tentativa anterior da N8.0 foi encerrada pelo Claude Code por falta de memória no Windows (o cache da VM do WSL chegou a
+    15 GB) e descartada; a A3 acima foi refeita do início com o cache esvaziado.
+- **Windows (`gate_win`, árvore sobre `0223f2df07`; `known_versions.h` do HEAD durante os passos e o particular restaurado com o
+  hash `C4AD9E1A…` conferido):**
+  - Builds Release e Debug ok.
+  - Testes: `video` 50/0, manifesto 16/16, ctest 100 % (`boot_trace` e `movie_manifest` pulados de propósito).
+  - Builder, Preview `1A75E9C8…B8D9`, `test_builder` 24/0, `test_edicao` 11/0, C8 com 0 falhas.
+  - Referências N8.0 16/16 iguais (179 exceções, nenhuma nova) e N8.7 16/16 iguais.
+  - Depois dela só mudaram arquivos do Linux (`builder_platform_posix.cpp`, scripts e testes do Linux) e um comentário em
+    `builder_platform.h`. Na árvore final o Release foi recompilado (`known_versions.h` público durante o build e o particular
+    restaurado com o hash conferido). Com `--help`, `--compilador-sistema`, `--compilador x` e `--toolchain x`, a mensagem de
+    uso tem os mesmos 661 bytes de antes (SHA-256 `F851F1F7…`), com código 2.
+- **Não feito:** A1 em Ubuntu nativo e no SteamOS; o pacote não foi publicado. **As licenças e avisos do Zig ainda precisam ser
+  revistos antes de qualquer publicação**, em especial os cabeçalhos do kernel Linux (GPL-2.0 com a exceção de syscall) e as
+  bibliotecas C dos outros alvos embutidas no Zig. O projeto do Developer ainda não existe no Linux. D-Bus fica para quando
+  houver a máquina que monta o pacote.
+
 ### N9-L L4: filmes e texto no Linux (2026-11-03)
 
 Autorizada pelo mantenedor em 2026-11-03, com a L3 ainda pendente das validações A7, A8 e A9 em Ubuntu nativo. Implementada e provada
@@ -4470,6 +4551,19 @@ Contrato em `docs/N9-0-EDICOES.md`. O mesmo executável roda as duas edições, 
 - **Não feito nesta etapa:** tela de edição (N9.1), preset Remastered (N9.5–N9.8).
 
 ## Revisões independentes (Codex)
+
+### 2026-11-03: N9-L L5. Relatórios `reviews/codex-20261103-105354.md` (5 achados) e `-143212.md` (3 achados, segunda passada)
+
+| Relatório | Achado | Decisão |
+|---|---|---|
+| `105354` | [ALTA] `--versao` do `make_builder_linux.sh` escapava da pasta de saída até um `rm -rf` | **Aceito.** O rótulo é um só componente (`[A-Za-z0-9][A-Za-z0-9._+-]*`, sem `..`) |
+| `105354` | [MÉDIA] descritores acima de 65535 vazavam para os filhos | **Aceito.** `close_range(4, ~0)`, com o laço até `_SC_OPEN_MAX` como recuo; o teste abre o descritor 70000 |
+| `105354` | [MÉDIA] netos sobreviviam quando o filho terminava normalmente | **Aceito.** `waitid(WNOWAIT)` e SIGKILL do grupo sempre antes de colher, como o Job Object do Windows; teste com neto em segundo plano e saída 0 |
+| `105354` | [MÉDIA] `original` do manifesto direto podia apontar para fora de `discDir` | **Aceito.** Um componente, `resolve_case` e `contained()`, guardado só o canônico; testes com absoluto, `..`, subpasta e symlink para fora |
+| `105354` | [MÉDIA] CLI do Windows deixou de ser idêntica | **Aceito.** Opções e linha de uso do Linux só no Linux; uso do Windows com os mesmos bytes (SHA-256 `F851F1…`, código 2) |
+| `143212` | [MÉDIA] `--compilador-sistema` mandava ao CMake caminhos sem a conferência de `;`, `\`, `"` e `$` | **Aceito.** `cmake`, `ninja`, `clang` e `clang++` conferidos um a um; teste com o PATH numa pasta `a;b` |
+| `143212` | [MÉDIA] o cache do Zig (`<raiz>/zig`) não passava pela prova de gravação | **Aceito em parte.** Criado e provado; sem gravação, vai para dentro do cache de compilação (teste com a raiz só leitura). **Rejeitado** sobrescrever `ZIG_GLOBAL_CACHE_DIR`/`ZIG_LOCAL_CACHE_DIR` do usuário: é escolha explícita dele, e o Zig acusa a falta de gravação |
+| `143212` | [BAIXA] `sdl3_linux.sh` com `CMAKE` relativo quebrava depois do `cd` | **Aceito.** Caminho com barra vira absoluto; nome simples continua pelo PATH |
 
 ### 2026-11-03: N9-L L4. Relatórios `reviews/codex-20261103-030426.md` (7 achados) e `-034502.md` (6 achados, segunda passada)
 
