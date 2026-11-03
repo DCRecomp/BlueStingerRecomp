@@ -8,6 +8,7 @@
 #include <map>
 #include <string>
 #include <system_error>
+#include <vector>
 
 namespace bs::builder {
 
@@ -30,8 +31,21 @@ ProcessResult run_process(const std::wstring& commandLine, const std::filesystem
                           const std::atomic<bool>* cancel = nullptr, bool utf16Output = false,
                           unsigned timeoutMs = 0);
 
-// Argumento entre aspas para CreateProcess/CommandLineToArgvW.
+// N9-L (L5): o processo pela lista de argumentos (argv[0] = programa). No Windows vira a linha de comando com quote_arg
+// (a mesma que o Builder montava); no Linux vai direto ao execve, sem shell: nada que venha do usuario e interpretado.
+// Programa sem barra: procurado no PATH do ambiente passado (ou do Builder).
+ProcessResult run_process_argv(const std::vector<std::wstring>& argv, const std::filesystem::path& cwd, const Env& env,
+                               const std::function<void(const std::string&)>& onLine,
+                               const std::atomic<bool>* cancel = nullptr, unsigned timeoutMs = 0);
+// A mesma lista como texto, para o log.
+std::wstring display_command(const std::vector<std::wstring>& argv);
+
+// Argumento entre aspas para CreateProcess/CommandLineToArgvW (Linux: so para exibir).
 std::wstring quote_arg(const std::wstring& a);
+
+// Caminho em texto largo sem passar pela localidade (Linux: UTF-8 -> UTF-32), nativo e com '/'.
+std::wstring path_wide(const std::filesystem::path& p);
+std::wstring path_wide_generic(const std::filesystem::path& p);
 
 std::wstring widen(const std::string& utf8);
 std::string  narrow(const std::wstring& w);

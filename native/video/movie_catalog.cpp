@@ -73,8 +73,20 @@ fs::path contained(const fs::path& base, const fs::path& target) {
     return t;
 }
 
+// O SFD do disco pelo nome original: um nome so (sem pasta, absoluto nem ".."), com a caixa resolvida e o caminho canonico
+// conferido dentro de discDir (revisao Codex 20261103-105354). Vazio: recusado.
+fs::path discFile(const fs::path& discDir, const std::string& original) {
+    if (!safeRelative(original)) return {};
+    const fs::path name(std::u8string(original.begin(), original.end()));
+    if (std::distance(name.begin(), name.end()) != 1) return {};
+    return contained(discDir, resolve_case(discDir, name));
+}
+
 // [[filme]] id, original, arquivo, quadros, fps, largura, altura, sha256, legendas = { pt = "..." }
-void readManifest(const fs::path& path, bool mod, std::map<uint32_t, MovieEntry>& out, std::vector<std::string>& problems) {
+// N9-L (L5): com discDir (quem toca os SFD do disco), o manifesto do Builder pode vir sem `arquivo`: o filme e o
+// SFD do nome original nessa pasta (conferido aqui, nao o MP4 de uma compilacao do Windows). Sem discDir, como antes.
+void readManifest(const fs::path& path, bool mod, std::map<uint32_t, MovieEntry>& out, std::vector<std::string>& problems,
+                  const fs::path& discDir = {}) {
     if (!isFile(path)) return;
     toml::table t;
     try {
@@ -98,6 +110,28 @@ void readManifest(const fs::path& path, bool mod, std::map<uint32_t, MovieEntry>
             MovieEntry e;
             e.id = uint32_t(*id), e.absent = true;
             if (auto o = (*f)["original"].value<std::string>()) e.original = upper(*o);
+            out[e.id] = std::move(e);
+            continue;
+        }
+        const auto original = (*f)["original"].value<std::string>();
+        if (!mod && !file && !discDir.empty() && id && *id >= 0 && original && !original->empty()) {
+            MovieEntry e;
+            e.id                = uint32_t(*id);
+            e.original          = upper(*original);
+            e.file              = discFile(discDir, *original);
+            if (e.file.empty()) {
+                problems.push_back(path.filename().string() + ": filme " + std::to_string(e.id) + " com nome original fora da pasta do disco (recusado): " + *original);
+                continue;
+            }
+            e.frames           = uint32_t((*f)["quadros"].value_or(int64_t(0)));
+            e.width             = uint32_t((*f)["largura"].value_or(int64_t(0)));
+            e.height            = uint32_t((*f)["altura"].value_or(int64_t(0)));
+            e.fps               = (*f)["fps"].value_or(0.0);
+            e.sha256            = (*f)["fonte_sha256"].value_or(std::string());
+            e.videoEnd100ns     = (*f)["fim_video_100ns"].value_or(int64_t(0));
+            e.audioEnd100ns     = (*f)["fim_audio_100ns"].value_or(int64_t(0));
+            e.audioDelaySamples = 0;
+            if (!isFile(e.file)) problems.push_back(path.filename().string() + ": filme " + std::to_string(e.id) + " sem o arquivo " + *original + " no disco");
             out[e.id] = std::move(e);
             continue;
         }
@@ -148,10 +182,16 @@ void readManifest(const fs::path& path, bool mod, std::map<uint32_t, MovieEntry>
 
 MovieCatalog MovieCatalog::load(const CatalogOptions& o) {
     MovieCatalog c;
-    readManifest(o.dataDir / "manifest.toml", false, c.byId_, c.problems_);
+    readManifest(o.dataDir / "manifest.toml", false, c.byId_, c.problems_, o.discDir);
     if (!o.discDir.empty())
-        for (auto& [id, e] : c.byId_)
-            if (!e.absent && !e.original.empty()) e.file = o.discDir / e.original, e.audioDelaySamples = 0;
+        for (auto& [id, e] : c.byId_) {
+            if (e.absent || e.original.empty()) continue;
+            if (fs::path f = discFile(o.discDir, e.original); !f.empty()) e.file = std::move(f), e.audioDelaySamples = 0;
+            else {  // nome que sai da pasta do disco: o filme fica ausente (um mod ainda pode fornece-lo)
+                c.problems_.push_back("manifest.toml: filme " + std::to_string(id) + " com nome original fora da pasta do disco (recusado): " + e.original);
+                e.absent = true, e.file.clear();
+            }
+        }
     if (o.modsDir.empty()) return c;
     readManifest(resolve_case(o.modsDir, "manifest.toml"), true, c.byId_, c.problems_);
     // mod pelo nome do original (sem manifesto): mods\video\<NOME>.mp4 e <NOME>.<idioma>.srt/.vtt

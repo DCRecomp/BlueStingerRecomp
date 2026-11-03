@@ -1,24 +1,40 @@
 # Builder: do CDI do usuario ao BlueStinger.exe nativo (extracao, analise, geracao,
 # compilacao com o compilador do usuario, verificacao e instalacao). Nao contem nada do jogo.
 # N5: leitura dos filmes do disco (demux do SFD e ADX) para a conversao em MP4
-add_library(bs_video_convert STATIC ${CMAKE_SOURCE_DIR}/native/video/sfd_media.cpp video/sfd_convert.cpp video/movie_build.cpp
-            ${CMAKE_SOURCE_DIR}/native/video/pl_mpeg_impl.c)
-target_include_directories(bs_video_convert PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} PRIVATE ${CMAKE_SOURCE_DIR}/third_party/pl_mpeg)
+# N9-L (L5): o mesmo nucleo no Linux (bs-builder; as janelas sao so do Windows). O que muda por sistema fica nos
+# arquivos <nome>_win.cpp e <nome>_posix.cpp (BS_PLAT).
+add_library(bs_video_convert STATIC video/sfd_source.cpp video/movie_manifest_disc.cpp)
+if(WIN32)
+  target_sources(bs_video_convert PRIVATE ${CMAKE_SOURCE_DIR}/native/video/sfd_media.cpp ${CMAKE_SOURCE_DIR}/native/video/pl_mpeg_impl.c
+                 video/sfd_convert.cpp video/movie_build.cpp)
+else()
+  # o demux, o ADX e o pl_mpeg ja estao no bs_native_video do Linux (o jogo toca os SFD)
+  target_sources(bs_video_convert PRIVATE video/movie_build_posix.cpp)
+endif()
+target_include_directories(bs_video_convert PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/third_party/pl_mpeg)
 target_link_libraries(bs_video_convert PUBLIC bs_native_video PRIVATE bs_disc tomlplusplus::tomlplusplus)
 target_compile_features(bs_video_convert PUBLIC cxx_std_20)
-add_executable(bs-video-probe video/probe_main.cpp)  # desenvolvimento: confere os SFD do disco
-add_executable(bs-musica audio/musica_main.cpp)  # desenvolvimento (N6 fase F): toca uma musica do disco em WAV
-target_link_libraries(bs-musica PRIVATE bs_native_audio_core)
-target_link_libraries(bs-video-probe PRIVATE bs_video_convert bs_disc)
-target_include_directories(bs-video-probe PRIVATE ${CMAKE_SOURCE_DIR}/third_party/pl_mpeg)
+if(WIN32)
+  add_executable(bs-video-probe video/probe_main.cpp)  # desenvolvimento: confere os SFD do disco
+  add_executable(bs-musica audio/musica_main.cpp)  # desenvolvimento (N6 fase F): toca uma musica do disco em WAV
+  target_link_libraries(bs-musica PRIVATE bs_native_audio_core)
+  target_link_libraries(bs-video-probe PRIVATE bs_video_convert bs_disc)
+  target_include_directories(bs-video-probe PRIVATE ${CMAKE_SOURCE_DIR}/third_party/pl_mpeg)
+endif()
 
-add_library(bs_builder_core STATIC builder_core.cpp toolchain.cpp child_process.cpp project_export.cpp resource_inspect.cpp)
+add_library(bs_builder_core STATIC builder_core.cpp builder_platform_${BS_PLAT}.cpp toolchain_${BS_PLAT}.cpp
+            child_process_${BS_PLAT}.cpp project_export.cpp resource_inspect.cpp)
 target_include_directories(bs_builder_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(bs_builder_core PUBLIC bs_recomp_lib bs_runtime bs_runtime_cdi bs_native PRIVATE bs_video_convert bs_native_video tomlplusplus::tomlplusplus)
 
-add_executable(bs-builder main_cli.cpp builder.manifest)
+if(WIN32)
+  add_executable(bs-builder main_cli.cpp builder.manifest)
+else()
+  add_executable(bs-builder main_cli.cpp)
+endif()
 target_link_libraries(bs-builder PRIVATE bs_builder_core)
 
+if(WIN32)
 # Textos da interface simples por chave (pt-BR, en-US; um arquivo por idioma)
 add_library(bs_builder_ui STATIC ui/i18n.cpp ui/lang_pt_br.cpp ui/lang_en_us.cpp)
 target_include_directories(bs_builder_ui PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
@@ -31,3 +47,4 @@ add_executable(BlueStinger-Recompiler WIN32 main_recompiler.cpp builder.manifest
 target_link_libraries(BlueStinger-Recompiler PRIVATE bs_builder_core bs_builder_ui bs_native comctl32)
 add_executable(BlueStinger-Developer WIN32 main_developer.cpp builder.manifest)
 target_link_libraries(BlueStinger-Developer PRIVATE bs_builder_core bs_builder_ui tomlplusplus::tomlplusplus comctl32)
+endif()

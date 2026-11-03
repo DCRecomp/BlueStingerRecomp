@@ -17,9 +17,7 @@ namespace bs::builder::video {
 
 namespace fs = std::filesystem;
 
-const char* const kMovieNames[17] = {"OPENING.SFD", "NEWGAME.SFD", "E017.SFD",  "E001.SFD",  "E107.SFD",   "E179.SFD",
-                                     "E180.SFD",    "E185A.SFD",   "E185B.SFD", "E193.SFD",  "E195.SFD",   "E200A.SFD",
-                                     "E200B.SFD",   "ENDING.SFD",  "E016.SFD",  "E134.SFD",  "ENDING2.SFD"};
+// (kMovieNames: movie_manifest_disc.cpp, comum aos dois sistemas)
 
 namespace {
 
@@ -74,11 +72,17 @@ bool replaceFile(const fs::path& from, const fs::path& to) {
 
 } // namespace
 
-bool clear_movies(const fs::path& outDir, std::string* err) {
-    std::error_code ec;
-    fs::remove_all(outDir, ec);  // pacotes anteriores ficam intactos: tem hard links proprios
-    if (ec) return fail(err, "nao foi possivel apagar " + outDir.string() + " (" + ec.message() + ")");
-    return true;
+// (clear_movies: movie_manifest_disc.cpp, comum aos dois sistemas)
+
+bool prepare_movies(const fs::path& bsdata, const fs::path& outDir, const MovieBuildOptions& o, MovieBuildResult& r, std::string* err) {
+    return build_movies(bsdata, outDir, o, r, err);
+}
+
+const char* movie_failure_prefix() { return "falha ao converter os filmes: "; }
+
+std::string movie_summary(const MovieBuildResult& r) {
+    return "filmes: " + std::to_string(r.converted) + " convertidos, " + std::to_string(r.reused) + " reaproveitados, " +
+           std::to_string(r.absent.size()) + " ausentes no disco";
 }
 
 bool build_movies(const fs::path& bsdata, const fs::path& outDir, const MovieBuildOptions& o, MovieBuildResult& r, std::string* err) {

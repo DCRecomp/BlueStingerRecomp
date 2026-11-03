@@ -112,8 +112,8 @@ endif()
 # Executavel nativo e seu nucleo (app/); o executavel so com BS_BUILD_GAME=ON.
 add_subdirectory(app)
 
-# Builder (CDI -> BlueStinger.exe na maquina do usuario); no Linux, a partir da L5 do N9-L
-if(BS_BUILD_TOOLS AND WIN32)
+# Builder (CDI -> BlueStinger.exe na maquina do usuario); no Linux desde a L5 do N9-L (so o bs-builder)
+if(BS_BUILD_TOOLS)
   add_subdirectory(builder)
 endif()
 

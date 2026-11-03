@@ -2,12 +2,9 @@
 
 #include "video/mf_movie.h"
 #include "video/sfd_media.h"
+#include "video/sfd_source.h"  // N9-L (L5): Mpeg1 e o arredondamento dos fins, comuns com o manifesto do Linux
 
 #include <cstdio>
-extern "C" {
-#include "pl_mpeg.h"
-plm_frame_t* bs_plm_video_flush(plm_video_t* self);  // pl_mpeg_impl.c
-}
 
 #include <algorithm>
 #include <cmath>
@@ -32,24 +29,6 @@ bool readFile(const fs::path& p, std::vector<uint8_t>& d) {
     d.assign(std::istreambuf_iterator<char>(f), {});
     return true;
 }
-
-// Decodificador MPEG-1 (pl_mpeg) sobre o elementary stream ja separado pelo demux.
-struct Mpeg1 {
-    std::vector<uint8_t> es;
-    plm_video_t*         v = nullptr;
-    explicit Mpeg1(std::vector<uint8_t> bytes) : es(std::move(bytes)) {
-        plm_buffer_t* b = plm_buffer_create_with_memory(es.data(), es.size(), 0);
-        plm_buffer_signal_end(b);
-        v = plm_video_create_with_buffer(b, 1);
-    }
-    ~Mpeg1() {
-        if (v) plm_video_destroy(v);
-    }
-    plm_frame_t* next() {
-        plm_frame_t* f = plm_video_decode(v);
-        return f ? f : bs_plm_video_flush(v);  // os ultimos quadros (defeitos de fim do pl_mpeg)
-    }
-};
 
 void toNv12(const plm_frame_t* f, std::vector<uint8_t>& out) {
     const uint32_t w = f->width, h = f->height;
@@ -143,9 +122,9 @@ bool convert_sfd(const fs::path& sfd, const fs::path& mp4, const ConvertOptions&
     if (ap < pcm.size() && !w.write_audio(std::span<const int16_t>(pcm.data() + ap, pcm.size() - ap), err)) return false;
     r.encoderNotes = w.notes();
     if (!w.finish(err)) return false;
-    r.videoEnd100ns = int64_t(std::llround(r.frames * 1e7 / r.fps));
+    r.videoEnd100ns = video_end_100ns(r.frames, r.fps);
     r.sampleRate = a.sampleRate, r.channels = a.channels, r.audioSamples = a.totalSamples;
-    r.audioEnd100ns = int64_t(a.totalSamples) * 10'000'000 / a.sampleRate;
+    r.audioEnd100ns = audio_end_100ns(a.totalSamples, a.sampleRate);
     return true;
 }
 

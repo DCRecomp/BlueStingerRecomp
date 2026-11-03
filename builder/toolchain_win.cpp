@@ -134,6 +134,11 @@ Toolchain find_toolchain(const ToolchainOptions& opt, const std::function<void(c
     }
     if (tc.crtDir.empty()) throw std::runtime_error("runtime redistribuivel do MSVC (Microsoft.VC*.CRT) nao encontrado");
     say("MSVC " + tc.msvcVersion + ", SDK do Windows " + tc.sdkVersion);
+    // N9-L (L5): o que o fluxo comum usa, com os mesmos valores de antes (argumentos, marca do build e VERSAO.txt)
+    tc.cmakeArgs   = {L"-DCMAKE_C_COMPILER=cl", L"-DCMAKE_CXX_COMPILER=cl"};
+    tc.stamp       = path_text(tc.installRoot) + "\n" + tc.msvcVersion;
+    tc.description = "Compilador: MSVC " + tc.msvcVersion + ", SDK do Windows " + tc.sdkVersion + "\nRuntime do MSVC: " +
+                     path_text(tc.crtDir.filename()) + "\n";
     say("cmake: " + path_text(tc.cmake));
     say("ninja: " + path_text(tc.ninja));
     return tc;

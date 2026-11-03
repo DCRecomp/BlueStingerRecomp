@@ -1,5 +1,6 @@
 #pragma once
-// Builder: do CDI do usuario ao BlueStinger.exe nativo, na maquina do usuario.
+// Builder: do CDI do usuario ao BlueStinger.exe nativo, na maquina do usuario. N9-L (L5): o mesmo fluxo gera o
+// executavel Linux (BlueStinger) com o compilador portatil; o que muda por sistema fica em builder_platform_*.cpp.
 //
 // Etapas: valida as entradas -> localiza o compilador -> le o CDI e confere o hash do
 // executavel -> extrai IP.BIN/1ST_READ.BIN -> analisa e gera o C++ -> configura (CMake) ->
@@ -47,6 +48,9 @@ struct Request {
     std::filesystem::path kitDir;  // fontes do runtime + jogo (MIT/zlib), config e textos
     std::filesystem::path sdl3Dir; // fontes do SDL3; vazio = <kit>\third_party\SDL3
     std::filesystem::path vswhere, vcvars;  // localizacao do compilador (vazio = automatica)
+    // N9-L (L5), Linux: pasta do compilador portatil (vazio = <Builder>/toolchain) ou, a pedido, o do sistema
+    std::filesystem::path toolchainDir;
+    bool                  systemToolchain = false;
     unsigned              verifyVblanks = 120;  // boot headless na verificacao
     bool                  clean         = false;  // apaga o build incremental antes
     // N5: converte os filmes do disco (SFD) em data\video\*.mp4 + manifest.toml. Sem eles o jogo

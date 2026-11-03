@@ -19,6 +19,14 @@ endif()
 # Executavel nativo: so com o codigo gerado (do executavel do proprio usuario) e a pedido.
 # O SDL3 (zlib) fica restrito a este alvo: o runtime e as ferramentas nao dependem dele.
 if(BS_BUILD_GAME AND TARGET bs_generated)
+  # N9-L (L5, D-L2): no kit do Linux o SDL3 vem pre-compilado (third_party/SDL3-linux, feito por
+  # tools/dist/linux/sdl3_linux.sh com as mesmas opcoes abaixo): compilar o SDL3 na maquina do usuario exigiria os
+  # cabecalhos de X11, Wayland, PipeWire e PulseAudio do sistema. Vazio: as fontes, como sempre.
+  set(BS_SDL3_PREBUILT "" CACHE PATH "SDL3 pre-compilado (prefixo de instalacao com lib/cmake/SDL3)")
+  if(BS_SDL3_PREBUILT)
+    find_package(SDL3 3.2 REQUIRED CONFIG COMPONENTS SDL3-static PATHS "${BS_SDL3_PREBUILT}" NO_DEFAULT_PATH)
+    message(STATUS "SDL3 pre-compilado: ${BS_SDL3_PREBUILT} (${SDL3_VERSION})")
+  else()
   include(FetchContent)
   set(SDL_SHARED       OFF CACHE BOOL "" FORCE)
   set(SDL_STATIC       ON  CACHE BOOL "" FORCE)
@@ -32,6 +40,7 @@ if(BS_BUILD_GAME AND TARGET bs_generated)
     GIT_TAG        release-3.2.30
     GIT_SHALLOW    TRUE)
   FetchContent_MakeAvailable(SDL3)
+  endif()
 
   # Identificacao da compilacao: commit (com -dirty se houver mudancas) e data.
   # No kit do Builder nao ha .git: a versao vem de BS_VERSION_OVERRIDE (arquivo VERSION do kit).

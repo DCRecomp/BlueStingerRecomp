@@ -6,15 +6,13 @@
 //   bs-builder --de-projeto <pasta> --out <pasta> [--disc <cdi>]   compila um projeto editado
 //   bs-builder --disc <cdi> --out <recursos> --projeto <pasta> --somente-exportar
 //              so exporta (sem compilador, compilacao nem instalacao); [--tipo Release|Debug] no build
+//   Linux (N9-L L5): [--compilador <pasta>] (padrao <Builder>/toolchain) ou --compilador-sistema (clang, cmake e ninja
+//   do sistema, fora do compilador portatil da D-L2); o projeto C++ editavel so existe no Windows nesta versao.
 // Codigo de saida: 0 = BlueStinger.exe instalado e verificado; 1 = falha; 2 = uso;
-// 3 = cancelado (Ctrl+C).
+// 3 = cancelado (Ctrl+C; no Linux tambem SIGTERM e SIGHUP).
 #include "builder_core.h"
+#include "builder_platform.h"
 #include "child_process.h"
-
-#define WIN32_LEAN_AND_MEAN
-#define NOMINMAX
-#include <windows.h>
-#include <shellapi.h>
 
 #include <atomic>
 #include <cstdio>
@@ -28,11 +26,6 @@ namespace {
 
 std::atomic<bool> g_cancel{false};
 
-BOOL WINAPI onCtrl(DWORD) {
-    g_cancel = true;
-    return TRUE;
-}
-
 void out(const std::string& s) {  // UTF-8 no console e em pipes
     std::fwrite(s.data(), 1, s.size(), stdout);
     std::fflush(stdout);
@@ -45,42 +38,35 @@ bool parseEdition(const std::wstring& v, Request& req) {
     return true;
 }
 
-fs::path exeDir() {
-    std::wstring b(32768, L'\0');
-    b.resize(GetModuleFileNameW(nullptr, b.data(), DWORD(b.size())));
-    return fs::path(b).parent_path();
-}
-
 } // namespace
 
-int main() {
-    SetConsoleOutputCP(CP_UTF8);
-    int     argc = 0;
-    wchar_t** wv = CommandLineToArgvW(GetCommandLineW(), &argc);
-    std::vector<std::wstring> args(wv, wv + argc);
-    LocalFree(wv);
+int main(int argc, char** argv) {
+    const std::vector<std::wstring> args = plat::cli_args(argc, argv);
+    auto P = [](const std::wstring& w) { return plat::to_path(w); };  // caminho do usuario sem passar pela localidade
 
     Request req;
-    req.kitDir = exeDir() / L"kit";
+    req.kitDir = plat::exe_dir() / L"kit";
     for (size_t i = 1; i < args.size(); ++i) {
         const std::wstring& a    = args[i];
         const bool          more = i + 1 < args.size();
-        if (a == L"--disc" && more) req.disc = args[++i];
-        else if (a == L"--out" && more) req.outDir = args[++i];
-        else if (a == L"--kit" && more) req.kitDir = args[++i];
-        else if (a == L"--sdl3" && more) req.sdl3Dir = args[++i];
-        else if (a == L"--vcvars" && more) req.vcvars = args[++i];
-        else if (a == L"--vswhere" && more) req.vswhere = args[++i];
+        if (a == L"--disc" && more) req.disc = P(args[++i]);
+        else if (a == L"--out" && more) req.outDir = P(args[++i]);
+        else if (a == L"--kit" && more) req.kitDir = P(args[++i]);
+        else if (a == L"--sdl3" && more) req.sdl3Dir = P(args[++i]);
+        else if (a == L"--vcvars" && more) req.vcvars = P(args[++i]);
+        else if (a == L"--vswhere" && more) req.vswhere = P(args[++i]);
         else if (a == L"--verify-vblanks" && more) req.verifyVblanks = unsigned(std::stoul(args[++i]));
         else if (a == L"--name" && more) req.installName = args[++i];
         else if (a == L"--version-label" && more) req.versionLabel = narrow(args[++i]);
-        else if (a == L"--projeto" && more) req.exportProject = args[++i];
-        else if (a == L"--de-projeto" && more) req.fromProject = args[++i];
+        else if (a == L"--projeto" && more) req.exportProject = P(args[++i]);
+        else if (a == L"--de-projeto" && more) req.fromProject = P(args[++i]);
         else if (a == L"--clean") req.clean = true;
         else if (a == L"--sem-filmes") req.movies = false;
         else if (a == L"--edicao" && more && parseEdition(args[i + 1], req)) ++i;
         else if (a == L"--somente-exportar") req.exportOnly = true;
         else if (a == L"--tipo" && more) req.buildType = narrow(args[++i]);
+        else if (plat::cli_toolchain_options() && a == L"--compilador" && more) req.toolchainDir = P(args[++i]);  // so Linux
+        else if (plat::cli_toolchain_options() && a == L"--compilador-sistema") req.systemToolchain = true;
         else {
             std::fprintf(stderr,
                          "uso: bs-builder --disc <imagem.cdi> --out <pasta> [--kit <pasta>] [--sdl3 <pasta>]\n"
@@ -90,7 +76,8 @@ int main() {
                          "  bs-builder --de-projeto <pasta> --out <pasta> [--disc <cdi>]   compila o projeto (mods)\n"
                          "                [--verify-vblanks N] [--sem-filmes] [--tipo Release|Debug]\n"
                          "  bs-builder --disc <cdi> --out <recursos> --projeto <pasta> --somente-exportar   so exporta\n"
-                         "                (valida, prepara os dados em <recursos>, gera o C++ e exporta; sem compilador)\n");
+                         "                (valida, prepara os dados em <recursos>, gera o C++ e exporta; sem compilador)\n%s",
+                         plat::cli_usage_extra());
             return 2;
         }
     }
@@ -98,7 +85,7 @@ int main() {
         std::fprintf(stderr, "uso: bs-builder --disc <imagem.cdi> --out <pasta> (veja --help)\n");
         return 2;
     }
-    SetConsoleCtrlHandler(onCtrl, TRUE);
+    plat::cli_on_interrupt(&g_cancel);
 
     Callbacks cb;
     cb.cancel   = &g_cancel;
@@ -111,7 +98,7 @@ int main() {
             lastPct = pct, lastStep = s;
         }
     };
-    const bool verbose = GetEnvironmentVariableW(L"BS_BUILDER_VERBOSE", nullptr, 0) > 0;
+    const bool verbose = plat::env_present(L"BS_BUILDER_VERBOSE");
     cb.log = [&](const std::string& l) {
         if (verbose || l.rfind("== ", 0) == 0 || l.rfind("ERRO", 0) == 0 || l.rfind("OK:", 0) == 0) out(l + "\n");
     };

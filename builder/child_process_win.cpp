@@ -28,6 +28,21 @@ std::string narrow(const std::wstring& w) {
 
 std::string path_text(const std::filesystem::path& p) { return narrow(p.native()); }
 
+std::wstring path_wide(const std::filesystem::path& p) { return p.native(); }
+std::wstring path_wide_generic(const std::filesystem::path& p) { return p.generic_wstring(); }
+
+std::wstring display_command(const std::vector<std::wstring>& argv) {
+    std::wstring s;
+    for (const auto& a : argv) s += (s.empty() ? L"" : L" ") + quote_arg(a);
+    return s;
+}
+
+ProcessResult run_process_argv(const std::vector<std::wstring>& argv, const std::filesystem::path& cwd, const Env& env,
+                               const std::function<void(const std::string&)>& onLine, const std::atomic<bool>* cancel,
+                               unsigned timeoutMs) {
+    return run_process(display_command(argv), cwd, env, onLine, cancel, false, timeoutMs);
+}
+
 std::wstring quote_arg(const std::wstring& a) {
     if (!a.empty() && a.find_first_of(L" \t\n\v\"") == std::wstring::npos) return a;
     // regras do CommandLineToArgvW: barras antes de aspas (e antes da aspa final) dobram

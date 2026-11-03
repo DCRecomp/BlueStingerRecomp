@@ -41,4 +41,19 @@ bool build_movies(const std::filesystem::path& bsdata, const std::filesystem::pa
 // Sem filmes (--sem-filmes): apaga os de uma compilacao anterior, para o pacote nao leva-los.
 bool clear_movies(const std::filesystem::path& outDir, std::string* err = nullptr);
 
+// N9-L (L5): manifesto dos filmes que o jogo toca direto do disco (Linux: native/video/movie_decoder_posix.cpp). Nada e
+// convertido nem copiado: para cada SFD, os mesmos campos que o conversor do Windows grava sobre a fonte (quadros, fps,
+// tamanho, amostras e os fins arredondados de sfd_source.h) e o SHA-256 da fonte, sem `arquivo` (o catalogo usa o SFD
+// pelo nome original). Reaproveita a entrada anterior com a mesma fonte e a mesma marca.
+inline constexpr const char* kDiscManifestTag = "n9l-sfd-direto-1";
+bool build_disc_manifest(const std::filesystem::path& bsdata, const std::filesystem::path& outDir, const MovieBuildOptions& o,
+                         MovieBuildResult& r, std::string* err = nullptr);
+
+// O passo de filmes do Builder nesta plataforma (Windows: build_movies; Linux: build_disc_manifest), o prefixo da
+// mensagem de falha e a linha do log.
+bool        prepare_movies(const std::filesystem::path& bsdata, const std::filesystem::path& outDir, const MovieBuildOptions& o,
+                           MovieBuildResult& r, std::string* err = nullptr);
+const char* movie_failure_prefix();
+std::string movie_summary(const MovieBuildResult& r);
+
 } // namespace bs::builder::video

@@ -3,6 +3,7 @@
 #include "app/recomp.h"
 #include "boot/disc_boot.h"
 #include "boot/native_boot.h"
+#include "builder_platform.h"
 #include "child_process.h"
 #include "project_export.h"
 #include "disc/cdi_image.h"
@@ -10,10 +11,6 @@
 #include "toolchain.h"
 #include "video/movie_build.h"
 #include "platform/install_config.h"
-
-#define WIN32_LEAN_AND_MEAN
-#define NOMINMAX
-#include <windows.h>
 
 #include <algorithm>
 #include <cctype>
@@ -127,11 +124,7 @@ std::string randomSuffix() {  // 64 bits
     return b;
 }
 
-uint64_t nowTicks() {
-    FILETIME ft;
-    GetSystemTimePreciseAsFileTime(&ft);
-    return (uint64_t(ft.dwHighDateTime) << 32) | ft.dwLowDateTime;
-}
+uint64_t nowTicks() { return plat::now_ticks(); }
 
 // marca de instalacao valida: o instante (FILETIME) gravado por install_swap; 0 = nao e nossa
 uint64_t installMarker(const fs::path& dir) {
@@ -140,9 +133,13 @@ uint64_t installMarker(const fs::path& dir) {
     return (in >> v) ? v : 0;
 }
 
-std::wstring lower(std::wstring s) {
-    CharLowerBuffW(s.data(), DWORD(s.size()));
-    return s;
+std::wstring lower(const std::wstring& s) { return plat::fold_name(s); }
+
+// `p` com um sufixo ASCII no nome (".tmp", ".anterior"...), sem converter o resto do caminho
+fs::path withSuffix(const fs::path& p, const wchar_t* suffix) {
+    fs::path r = p;
+    r += suffix;
+    return r;
 }
 
 void writeFileAtomic(const fs::path& p, const std::vector<uint8_t>& data) {
@@ -153,7 +150,7 @@ void writeFileAtomic(const fs::path& p, const std::vector<uint8_t>& data) {
             if (old == data) return;  // mesmo conteudo: preserva a data (build incremental)
         }
     }
-    const fs::path tmp = p.string<wchar_t>() + L".tmp";
+    const fs::path tmp = withSuffix(p, L".tmp");
     {
         std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
         out.write(reinterpret_cast<const char*>(data.data()), std::streamsize(data.size()));
@@ -170,79 +167,40 @@ std::string readText(const fs::path& p) {
     return s;
 }
 
-std::wstring cmakePath(const fs::path& p) {
-    std::wstring s = p.native();
-    for (auto& c : s)
-        if (c == L'\\') c = L'/';
-    return s;
-}
+std::wstring cmakePath(const fs::path& p) { return plat::cmake_path(p); }
 
-bool isPackage(const fs::path& rel) {
-    const std::wstring first = rel.begin() == rel.end() ? L"" : rel.begin()->native();
-    auto               ieq   = [](const std::wstring& a, const wchar_t* b) {
-        return CompareStringOrdinal(a.c_str(), int(a.size()), b, -1, TRUE) == CSTR_EQUAL;
-    };
-    if (ieq(first, L"BlueStinger.exe") || ieq(first, L"LEIA-ME.txt") || ieq(first, L"VERSAO.txt") ||
-        ieq(first, L"licencas"))
-        return true;
-    std::wstring ext = rel.extension().native();
-    return std::distance(rel.begin(), rel.end()) == 1 && ieq(ext, L".dll");
-}
+bool isPackage(const fs::path& rel) { return plat::is_package_file(rel); }
 
 // teste de gravacao real (ACL de negacao nao aparece nos atributos)
 void probeWritable(const fs::path& dir) {
-    const fs::path p = dir / (L".bs-probe-" + widen(randomSuffix()));
-    HANDLE h = CreateFileW(p.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW, FILE_FLAG_DELETE_ON_CLOSE, nullptr);
-    if (h == INVALID_HANDLE_VALUE) {
-        const DWORD e = GetLastError();
-        throw StepError(kindOf(std::error_code(int(e), std::system_category()), ErrorKind::NoPermission),
-                        "sem permissao de gravacao em " + path_text(dir) + " (erro " + std::to_string(e) +
+    if (const std::error_code e = plat::probe_writable(dir))
+        throw StepError(kindOf(e, ErrorKind::NoPermission),
+                        "sem permissao de gravacao em " + path_text(dir) + " (erro " + std::to_string(e.value()) +
                         "). Escolha outra pasta de saida.");
-    }
-    CloseHandle(h);
 }
 
 constexpr wchar_t kStageMarker[] = L".bs-stage";  // pasta de pacote temporario criada por nos
-constexpr size_t kMaxOutPath = 200;  // o jogo instalado e o trabalho (sem compilacao) ficam ali
-constexpr size_t kMaxCachePath = 90;  // objetos do SDL3 somam ~160 caracteres ao cache
-constexpr size_t kMaxDirectKit = 90;  // kit mais longo que isso e copiado para o cache
-
-std::wstring envVar(const wchar_t* name) {
-    wchar_t     b[MAX_PATH];
-    const DWORD n = GetEnvironmentVariableW(name, b, MAX_PATH);
-    return n && n < MAX_PATH ? std::wstring(b, n) : std::wstring();
-}
+// Windows: o jogo instalado e o trabalho (sem compilacao) ficam na saida (200); objetos do SDL3 somam ~160 caracteres ao
+// cache (90); kit mais longo que isso e copiado para o cache (90). Linux: sem limite pratico (builder_platform_posix.cpp)
+const size_t kMaxOutPath   = plat::max_out_path();
+const size_t kMaxCachePath = plat::max_cache_path();
+const size_t kMaxDirectKit = plat::max_direct_kit();
 
 // Cache de compilacao, um por pasta de saida: <raiz>\build\<hash da saida>. Tudo o que o
 // Ninja ve fica ali (build do CMake, C++ gerado e, se preciso, uma copia do kit): caminho
 // curto (limite de 260 do MSVC) e representavel na pagina ANSI (o Ninja usa as APIs "A").
 fs::path cacheDir(const fs::path& out, const fs::path& work) {
-    std::wstring key = out.native();
-    CharLowerBuffW(key.data(), DWORD(key.size()));
-    uint32_t h = 2166136261u;  // FNV-1a
-    for (wchar_t c : key) h = (h ^ uint32_t(c)) * 16777619u;
-    wchar_t name[16];
-    swprintf(name, 16, L"%08x", h);
-    std::vector<fs::path> roots;
-    if (const auto v = envVar(L"BS_BUILDER_CACHE"); !v.empty()) roots.push_back(v);  // testes
-    if (const auto v = envVar(L"LOCALAPPDATA"); !v.empty()) roots.push_back(fs::path(v) / L"BlueStingerRecomp");
-    if (const auto v = envVar(L"ProgramData"); !v.empty()) roots.push_back(fs::path(v) / L"BlueStingerRecomp");
-    roots.push_back(work);
-    for (const auto& r : roots) {
+    char name[16];
+    std::snprintf(name, sizeof name, "%08x", plat::cache_key(out));
+    for (const auto& r : plat::cache_roots(work)) {
         const fs::path c = r / L"build" / name;
-        if (!ansi_safe(c) || c.native().size() > kMaxCachePath) continue;
+        if (!plat::build_path_ok(c) || c.native().size() > kMaxCachePath) continue;
         std::error_code ec;
         fs::create_directories(c, ec);
         if (ec) continue;
-        try {
-            probeWritable(c);
-            return c;
-        } catch (const StepError&) {
-        }
+        if (!plat::probe_writable(c)) return c;
     }
-    throw StepError("nenhuma pasta de cache de compilacao utilizavel (o caminho precisa ser curto e so ter "
-                    "caracteres da pagina de codigo do Windows). Defina BS_BUILDER_CACHE com uma pasta como "
-                    "C:\\BSCache.");
+    throw StepError(plat::cache_hint());
 }
 
 // Parte do kit que a compilacao usa: kKitEntries (project_export.cpp).
@@ -259,57 +217,18 @@ void syncTree(const fs::path& from, const fs::path& to) {
     }
 }
 
-// Um .ico que o compilador de recursos aceita: cabecalho (0, tipo 1, n > 0) e cada imagem dentro do arquivo (revisao
-// Codex 2026-10-23: um arquivo vazio passava como kit completo).
-bool ico_valid(const fs::path& p) {
-    std::ifstream in(p, std::ios::binary);
-    const std::string b((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-    auto u16 = [&](size_t o) { return uint32_t(uint8_t(b[o])) | uint32_t(uint8_t(b[o + 1])) << 8; };
-    auto u32 = [&](size_t o) { return u16(o) | u16(o + 2) << 16; };
-    if (b.size() < 6 || u16(0) != 0 || u16(2) != 1 || u16(4) == 0 || b.size() < 6 + 16 * size_t(u16(4))) return false;
-    for (size_t i = 0; i < u16(4); ++i) {
-        const uint64_t size = u32(6 + 16 * i + 8), off = u32(6 + 16 * i + 12);
-        if (size == 0 || off < 6 + 16 * uint64_t(u16(4)) || off + size > b.size()) return false;
-    }
-    return true;
-}
-
 } // namespace
 
+// arquivos obrigatorios e icones (Windows), SDL3 em fontes (Windows) ou pre-compilado (Linux): builder_platform_*.cpp
 std::string check_kit(const fs::path& kit, const fs::path& sdl3) {
     std::error_code ec;
-    for (const wchar_t* f : {L"CMakeLists.txt", L"LICENSE", L"config/bluestinger_us.toml", L"app/CMakeLists.txt",
-                             L"app/bluestinger.rc.in", L"app/res/bluestinger.ico",  // icone do executavel
-                             L"runtime/CMakeLists.txt", L"tools/extractor/CMakeLists.txt", L"tools/dist/LEIA-ME.txt",
-                             L"tools/dcmap/CMakeLists.txt", L"native/CMakeLists.txt", L"legacy/CMakeLists.txt",
-                             L"tools/build/msvc_srcdeps.cmake",
-                             L"transitional/CMakeLists.txt"})
-        if (!fs::is_regular_file(kit / f, ec)) return "kit de fontes incompleto: falta " + path_text(kit / f);
-    for (const wchar_t* f : {L"app/res/bluestinger.ico", L"icone-local/bluestinger.ico"})  // o local e opcional
-        if (fs::exists(kit / f, ec) && !ico_valid(kit / f)) return "icone invalido no kit: " + path_text(kit / f);
-    if (!fs::is_regular_file(sdl3 / L"CMakeLists.txt", ec))
-        return "fontes do SDL3 nao encontradas em " + path_text(sdl3);
+    if (std::string p = plat::check_kit_platform(kit, sdl3); !p.empty()) return p;
     if (const fs::path toml = toml_dir(kit, sdl3); !fs::is_regular_file(toml / L"CMakeLists.txt", ec))
         return "fontes do toml++ nao encontradas em " + path_text(toml);
     return {};
 }
 
-ErrorKind error_kind_of(const std::error_code& ec, ErrorKind otherwise) {
-    // codigos do Windows primeiro: o MSVC equipara ERROR_SHARING_VIOLATION (arquivo em uso, o jogo aberto) a
-    // permission_denied, e isso nao e falta de permissao
-    if (ec.category() == std::system_category()) {
-        switch (ec.value()) {
-        case ERROR_DISK_FULL:
-        case ERROR_HANDLE_DISK_FULL: return ErrorKind::NoSpace;
-        case ERROR_ACCESS_DENIED:
-        case ERROR_WRITE_PROTECT: return ErrorKind::NoPermission;
-        default: return otherwise;
-        }
-    }
-    if (ec == std::errc::no_space_on_device) return ErrorKind::NoSpace;
-    if (ec == std::errc::permission_denied || ec == std::errc::read_only_file_system) return ErrorKind::NoPermission;
-    return otherwise;
-}
+ErrorKind error_kind_of(const std::error_code& ec, ErrorKind otherwise) { return plat::error_kind_of(ec, otherwise); }
 
 const char* error_key(ErrorKind k) {
     switch (k) {
@@ -335,8 +254,8 @@ const char* error_key(ErrorKind k) {
 InstallInfo inspect_install(const fs::path& outDir, const std::wstring& installName) {
     InstallInfo     i;
     std::error_code ec;
-    i.dir      = outDir / installName;
-    i.previous = outDir / (installName + L".anterior");
+    i.dir      = outDir / plat::to_path(installName);
+    i.previous = outDir / plat::to_path(installName + L".anterior");
     i.exists   = fs::is_directory(i.dir, ec) && fs::directory_iterator(i.dir, ec) != fs::directory_iterator();
     if (!i.exists) return i;
     i.ours     = installMarker(i.dir) != 0;
@@ -360,8 +279,8 @@ fs::path uniqueArchiveName(const fs::path& parent, const fs::path& dest) {
     std::strftime(ts, sizeof ts, "%Y%m%d-%H%M%S", std::localtime(&t));
     std::error_code ec;
     for (;;) {
-        const fs::path p = parent / (dest.filename().native() + L".anterior-" + widen(ts) + L"-" +
-                                     widen(randomSuffix().substr(0, 6)));
+        const fs::path p = parent / withSuffix(dest.filename(), (L".anterior-" + widen(ts) + L"-" +
+                                                                 widen(randomSuffix().substr(0, 6))).c_str());
         if (!fs::exists(p, ec)) return p;
     }
 }
@@ -372,11 +291,11 @@ fs::path uniqueArchiveName(const fs::path& parent, const fs::path& dest) {
 // dizendo onde a versao anterior ficou (revisao Codex 2026-10-15: o erro era ignorado).
 void archivePrevious(const fs::path& parent, const fs::path& dest, const fs::path& backup) {
     std::error_code ec;
-    fs::path        prev = parent / (dest.filename().native() + L".anterior");
+    fs::path        prev = parent / withSuffix(dest.filename(), L".anterior");
     fs::path        aside;
     if (fs::exists(prev, ec)) {
         if (installMarker(prev)) {
-            aside = parent / (dest.filename().native() + L".anterior-descartar-" + widen(randomSuffix()));
+            aside = parent / withSuffix(dest.filename(), (L".anterior-descartar-" + widen(randomSuffix())).c_str());
             fs::rename(prev, aside, ec);
             if (ec) prev = uniqueArchiveName(parent, dest), aside.clear();  // nao deu para tirar: outro nome
         } else {
@@ -386,7 +305,7 @@ void archivePrevious(const fs::path& parent, const fs::path& dest, const fs::pat
     fs::rename(backup, prev, ec);
     if (ec) {
         std::error_code ec2;
-        if (!aside.empty()) fs::rename(aside, parent / (dest.filename().native() + L".anterior"), ec2);
+        if (!aside.empty()) fs::rename(aside, parent / withSuffix(dest.filename(), L".anterior"), ec2);
         throw ArchiveError("a versao nova foi instalada, mas a anterior nao pode ser guardada em " +
                                  path_text(prev) + " (" + error_text(ec) + "); ela continua em " + path_text(backup));
     }
@@ -407,7 +326,7 @@ void install_swap(const fs::path& stage, const fs::path& dest, const std::functi
                   const std::atomic<bool>* cancel) {
     std::error_code    ec;
     const fs::path     parent = dest.parent_path();
-    const std::wstring base   = dest.filename().native() + L".old-";
+    const auto         base   = withSuffix(dest.filename(), L".old-").native();
     // backups de instalacoes anteriores: so pastas com a nossa marca (revisao Codex 2026-10-14)
     std::vector<std::pair<uint64_t, fs::path>> backups;
     for (const auto& e : fs::directory_iterator(parent, ec))
@@ -431,8 +350,8 @@ void install_swap(const fs::path& stage, const fs::path& dest, const std::functi
         std::vector<std::wstring> files;
         for (const auto& e : fs::recursive_directory_iterator(stage))
             // instalacao.toml fica fora da lista: e da instalacao (preservado numa troca sem escolha de modo)
-            if (e.is_regular_file() && lower(fs::relative(e.path(), stage).generic_wstring()) != lower(native::install::kConfigFile))
-                files.push_back(fs::relative(e.path(), stage).generic_wstring());
+            if (e.is_regular_file() && lower(path_wide_generic(fs::relative(e.path(), stage))) != lower(native::install::kConfigFile))
+                files.push_back(path_wide_generic(fs::relative(e.path(), stage)));
         std::ofstream m(stage / kPackageManifest, std::ios::binary | std::ios::trunc);
         for (const auto& f : files) m << narrow(f) << "\n";
         m << narrow(kPackageManifest) << "\n" << narrow(kInstallMarker) << "\n";
@@ -458,7 +377,7 @@ void install_swap(const fs::path& stage, const fs::path& dest, const std::functi
                 if (!hasList && isPkg && isPkg(rel)) it.disable_recursion_pending();
                 continue;
             }
-            if (hasList ? oldPkg.count(lower(rel.generic_wstring())) > 0 : (isPkg && isPkg(rel))) continue;
+            if (hasList ? oldPkg.count(lower(path_wide_generic(rel))) > 0 : (isPkg && isPkg(rel))) continue;
             const fs::path to = stage / rel;
             fs::create_directories(to.parent_path());
             if (!fs::exists(to)) fs::copy_file(it->path(), to);
@@ -467,7 +386,7 @@ void install_swap(const fs::path& stage, const fs::path& dest, const std::functi
 
     // ponto sem volta: cancelamento so vale ate aqui
     if (cancel && cancel->load()) throw SwapCancelled("cancelado antes da troca");
-    const fs::path backup = parent / (base + widen(randomSuffix()));
+    const fs::path backup = parent / withSuffix(fs::path(base), widen(randomSuffix()).c_str());
     const bool     hadOld = fs::exists(dest, ec);
     try {
         if (hadOld) fs::rename(dest, backup);
@@ -478,7 +397,7 @@ void install_swap(const fs::path& stage, const fs::path& dest, const std::functi
         if (hadOld) {
             std::error_code ec2;
             if (!fs::exists(dest, ec2) && fs::exists(backup, ec2)) fs::rename(backup, dest, ec2);
-            if (!fs::exists(dest / L"BlueStinger.exe", ec2))  // a restauracao tambem falhou: dizer onde esta
+            if (!fs::exists(dest / plat::game_binary_installed(), ec2))  // a restauracao tambem falhou: dizer onde esta
                 throw SwapError("nao foi possivel trocar a versao instalada (" + why +
                                          ") nem restaurar a anterior. A versao anterior esta em " + path_text(backup) +
                                          (installMarker(backup) ? " e volta sozinha na proxima execucao do Builder."
@@ -500,18 +419,13 @@ Result build(const Request& req, const Callbacks& cb) {
     // de um projeto editavel: o proprio projeto e o kit (fontes, SDL3, C++ gerado e mods)
     const bool     fromProject = !req.fromProject.empty();
     const fs::path kit   = fs::absolute(fromProject ? req.fromProject : req.kitDir, ec);
-    const fs::path sdl3  = req.sdl3Dir.empty() || fromProject ? kit / L"third_party" / L"SDL3" : fs::absolute(req.sdl3Dir, ec);
+    const fs::path sdl3  = req.sdl3Dir.empty() || fromProject ? plat::default_sdl3(kit) : fs::absolute(req.sdl3Dir, ec);
     const fs::path work  = out / L".bs-build";
-    res.installDir       = out / req.installName;
-    res.exe              = res.installDir / L"BlueStinger.exe";
+    res.installDir       = out / plat::to_path(req.installName);
+    res.exe              = res.installDir / plat::game_binary_installed();
     res.logFile          = work / L"builder.log";
 
-    struct LockFile {  // trava da pasta de saida durante a execucao
-        HANDLE h = INVALID_HANDLE_VALUE;
-        ~LockFile() {
-            if (h != INVALID_HANDLE_VALUE) CloseHandle(h);
-        }
-    } lock;
+    plat::DirLock lock;  // trava da pasta de saida durante a execucao
     std::mutex    logMutex;
     std::ofstream logFile;
     LogTail       tail;
@@ -533,13 +447,15 @@ Result build(const Request& req, const Callbacks& cb) {
         log(std::string("== ") + step_name(s));
         progress(0, step_name(s));
     };
-    auto run = [&](const std::wstring& cmd, const fs::path& cwd, const Env& env,
+    // N9-L (L5): pela lista de argumentos (Windows: a mesma linha de comando de antes; Linux: execve, sem shell)
+    auto run = [&](const std::vector<std::wstring>& argv, const fs::path& cwd, const Env& env,
                    const std::function<void(const std::string&)>& extra, unsigned timeoutMs = 0) {
+        const std::wstring cmd = display_command(argv);
         log("> " + narrow(cmd));
-        const auto r = run_process(cmd, cwd, env, [&](const std::string& l) {
+        const auto r = run_process_argv(argv, cwd, env, [&](const std::string& l) {
             log(l);
             if (extra) extra(l);
-        }, cb.cancel, false, timeoutMs);
+        }, cb.cancel, timeoutMs);
         if (r.cancelled) throw Cancelled{};
         if (!r.started) throw StepError("nao foi possivel iniciar: " + narrow(cmd));
         if (r.timedOut) throw StepError("tempo esgotado: " + narrow(cmd));
@@ -559,15 +475,18 @@ Result build(const Request& req, const Callbacks& cb) {
         if (!req.outDir.empty()) {
             for (const fs::path& pr : {fromProject ? kit : fs::path(), req.exportProject.empty() ? fs::path() : fs::absolute(req.exportProject, ec)}) {
                 if (pr.empty()) continue;
-                for (const fs::path& own : {out / req.installName, out / L".bs-build"}) {
+                for (const fs::path& own : {out / plat::to_path(req.installName), out / L".bs-build"}) {
                     std::error_code rec;
                     const auto      rel = fs::relative(pr, own, rec);
-                    if (!rec && !rel.empty() && rel.native().rfind(L"..", 0) != 0)
+                    if (!rec && !rel.empty() && path_wide(rel).rfind(L"..", 0) != 0)
                         throw StepError("a pasta do projeto nao pode ficar dentro de " + path_text(own) +
                                         " (o Builder troca ou apaga essa pasta)");
                 }
             }
         }
+        if ((fromProject || !req.exportProject.empty() || req.exportOnly) && !plat::supports_project())
+            throw StepError(ErrorKind::MissingInput, "o projeto C++ editavel (exportar ou compilar a partir dele) so existe no "
+                            "Builder do Windows nesta versao");
         if (fromProject)
             if (const std::string p = check_project(kit); !p.empty()) throw StepError(p);
         if (fromProject && !req.exportProject.empty())
@@ -583,11 +502,13 @@ Result build(const Request& req, const Callbacks& cb) {
             throw StepError("o Builder esta numa pasta com caminho longo demais (maximo " + std::to_string(kMaxOutPath) +
                             " caracteres). Mova a pasta do Builder para um caminho mais curto.");
         if (const std::string k = check_kit(kit, sdl3); !k.empty()) throw StepError(k + " (reinstale o Builder)");
+        for (const fs::path& p : {kit, sdl3})  // Linux: caminhos que o CMake nao aceita (no Windows o kit e copiado)
+            if (const std::string m = plat::build_path_problem(p); !m.empty()) throw StepError(ErrorKind::PathTooLong, m);
         // a compilacao acontece no cache (caminho curto); na saida ficam o jogo e o trabalho
         if (out.native().size() > kMaxOutPath)
             throw StepError(ErrorKind::PathTooLong, "o caminho da pasta de saida e longo demais (" + std::to_string(out.native().size()) +
                             " caracteres; maximo " + std::to_string(kMaxOutPath) + "). Escolha uma pasta mais curta, "
-                            "por exemplo C:\\Jogos\\BlueStinger.");
+                            "por exemplo " + std::string(plat::example_out_dir()) + ".");
         fs::create_directories(out, ec);
         if (ec || !fs::is_directory(out, ec))
             throw StepError(kindOf(ec, ErrorKind::NoPermission), "nao foi possivel criar a pasta de saida " + path_text(out) + " (" + error_text(ec) + ")");
@@ -595,13 +516,11 @@ Result build(const Request& req, const Callbacks& cb) {
         fs::create_directories(work, ec);
         if (ec) throw StepError(kindOf(ec, ErrorKind::NoPermission), "nao foi possivel criar " + path_text(work) + " (" + error_text(ec) + ")");
         // uma execucao por pasta de saida (o cache, o pacote e a troca sao dela)
-        lock.h = CreateFileW((work / L".bs-lock").c_str(), GENERIC_WRITE, 0, nullptr, OPEN_ALWAYS,
-                             FILE_FLAG_DELETE_ON_CLOSE, nullptr);
-        if (lock.h == INVALID_HANDLE_VALUE)
+        if (!lock.acquire(work / L".bs-lock"))
             throw StepError(ErrorKind::Busy, "outra execucao do Builder esta usando " + path_text(out) + "; espere ela terminar");
         // pacotes temporarios de uma execucao interrompida (so os marcados por nos)
         for (const auto& e : fs::directory_iterator(out, ec))
-            if (e.is_directory() && e.path().filename().native().rfind(req.installName + L".new-", 0) == 0 &&
+            if (e.is_directory() && e.path().filename().native().rfind(plat::to_path(req.installName + L".new-").native(), 0) == 0 &&
                 fs::exists(e.path() / kStageMarker))
                 fs::remove_all(e.path(), ec);
         logFile.open(res.logFile, std::ios::trunc);
@@ -620,13 +539,16 @@ Result build(const Request& req, const Callbacks& cb) {
 
         // 2. compilador
         if (!req.exportOnly) enter(Step::Toolchain);
-        const Toolchain tc = req.exportOnly ? Toolchain{} : [&] {
+        Toolchain tc = req.exportOnly ? Toolchain{} : [&] {
             try {
-                return find_toolchain({req.vswhere, req.vcvars}, log);
+                return find_toolchain({req.vswhere, req.vcvars, req.toolchainDir, req.systemToolchain}, log);
             } catch (const std::runtime_error& e) {
                 throw StepError(ErrorKind::Toolchain, e.what());
             }
         }();
+        if (!req.exportOnly)
+            if (const std::string m = plat::build_path_problem(tc.installRoot); !m.empty()) throw StepError(ErrorKind::PathTooLong, m);
+        if (!req.exportOnly) plat::toolchain_env(tc.env, cache);  // Linux: o cache do Zig ao lado do cache de compilacao
 
         // 3. disco: hash do executavel e extracao dos arquivos de boot
         enter(Step::Extract);
@@ -704,7 +626,7 @@ Result build(const Request& req, const Callbacks& cb) {
             // a marca libera futuras compilacoes sem CDI: gravada por troca e conferida
             // (revisao Codex 2026-10-15: falha na gravacao passava despercebida)
             {
-                const fs::path tmp = dataStamp.native() + L".tmp";
+                const fs::path tmp = withSuffix(dataStamp, L".tmp");
                 std::ofstream  st(tmp, std::ios::binary | std::ios::trunc);
                 st << stampText;
                 st.close();
@@ -724,12 +646,12 @@ Result build(const Request& req, const Callbacks& cb) {
             mo.cancel   = cb.cancel;
             video::MovieBuildResult mr;
             std::string             merr;
-            if (!video::build_movies(dataDir / L"disc" / L"BSDATA", dataDir / L"video", mo, mr, &merr)) {
+            // Windows: MP4 pelo Media Foundation; Linux (N9-L L5): so o manifesto, os SFD tocam direto do disco
+            if (!video::prepare_movies(dataDir / L"disc" / L"BSDATA", dataDir / L"video", mo, mr, &merr)) {
                 if (cb.cancel && cb.cancel->load()) throw Cancelled{};
-                throw StepError("falha ao converter os filmes: " + merr);
+                throw StepError(std::string(video::movie_failure_prefix()) + merr);
             }
-            log("filmes: " + std::to_string(mr.converted) + " convertidos, " + std::to_string(mr.reused) +
-                " reaproveitados, " + std::to_string(mr.absent.size()) + " ausentes no disco");
+            log(video::movie_summary(mr));
         } else {
             // os de uma compilacao anterior nesta saida tambem saem (o pacote copia data\ inteiro)
             std::string merr;
@@ -826,8 +748,7 @@ Result build(const Request& req, const Callbacks& cb) {
             log("mods em C++: " + std::to_string(n));
         }
         const fs::path    buildDir = cache / (req.buildType == "Debug" ? L"cmake-debug" : L"cmake");
-        const std::string stamp    = path_text(kit) + "\n" + path_text(sdl3) + "\n" + path_text(toml) + "\n" +
-                                  path_text(tc.installRoot) + "\n" + tc.msvcVersion;
+        const std::string stamp    = path_text(kit) + "\n" + path_text(sdl3) + "\n" + path_text(toml) + "\n" + tc.stamp;
         if (req.clean || readText(buildDir / L".bs-kit") != stamp) {
             if (fs::exists(buildDir, ec)) log("build incremental descartado (kit, compilador ou pedido)");
             fs::remove_all(buildDir, ec);
@@ -835,18 +756,19 @@ Result build(const Request& req, const Callbacks& cb) {
         }
         fs::create_directories(buildDir);
         {
-            std::wstring cmd = quote_arg(tc.cmake.native()) + L" -S " + quote_arg(srcKit.native()) + L" -B " +
-                               quote_arg(buildDir.native()) + L" -G Ninja" +
-                               L" " + quote_arg(L"-DCMAKE_MAKE_PROGRAM=" + cmakePath(tc.ninja)) +
-                               L" -DCMAKE_BUILD_TYPE=" + widen(req.buildType) + L" -DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=cl" +
-                               L" -DBS_BUILD_TOOLS=OFF -DBS_BUILD_TESTS=OFF -DBS_BUILD_GAME=ON" +
-                               L" " + quote_arg(L"-DBS_GENERATED_DIR=" + cmakePath(cache / L"generated")) +
-                               L" " + quote_arg(L"-DFETCHCONTENT_SOURCE_DIR_SDL3=" + cmakePath(srcSdl3)) +
-                               L" " + quote_arg(L"-DFETCHCONTENT_SOURCE_DIR_TOMLPLUSPLUS=" + cmakePath(srcToml)) +
-                               L" -DFETCHCONTENT_FULLY_DISCONNECTED=ON" +
-                               L" " + quote_arg(L"-DBS_VERSION_OVERRIDE=" + widen(version)) +
-                               (fromProject ? L" -DBS_MODS=ON " + quote_arg(L"-DBS_MODS_DIR=" + cmakePath(modsSrc))
-                                            : std::wstring(L" -DBS_MODS=OFF -DBS_MODS_DIR="));
+            // (no Windows, a mesma linha de comando de antes: escolha do compilador pelo toolchain e dependencias pela
+            // plataforma, nas mesmas posicoes)
+            std::vector<std::wstring> cmd = {path_wide(tc.cmake), L"-S", path_wide(srcKit), L"-B", path_wide(buildDir),
+                                             L"-G", L"Ninja", L"-DCMAKE_MAKE_PROGRAM=" + cmakePath(tc.ninja),
+                                             L"-DCMAKE_BUILD_TYPE=" + widen(req.buildType)};
+            cmd.insert(cmd.end(), tc.cmakeArgs.begin(), tc.cmakeArgs.end());
+            for (const wchar_t* a : {L"-DBS_BUILD_TOOLS=OFF", L"-DBS_BUILD_TESTS=OFF", L"-DBS_BUILD_GAME=ON"}) cmd.push_back(a);
+            cmd.push_back(L"-DBS_GENERATED_DIR=" + cmakePath(cache / L"generated"));
+            for (auto& a : plat::dependency_args(srcKit, srcSdl3, srcToml)) cmd.push_back(std::move(a));
+            cmd.push_back(L"-DFETCHCONTENT_FULLY_DISCONNECTED=ON");
+            cmd.push_back(L"-DBS_VERSION_OVERRIDE=" + widen(version));
+            if (fromProject) cmd.push_back(L"-DBS_MODS=ON"), cmd.push_back(L"-DBS_MODS_DIR=" + cmakePath(modsSrc));
+            else cmd.push_back(L"-DBS_MODS=OFF"), cmd.push_back(L"-DBS_MODS_DIR=");
             if (run(cmd, buildDir, tc.env, nullptr) != 0)
                 throw StepError(ErrorKind::Build, "a configuracao do CMake falhou:\n" + tail.summary());
             std::ofstream(buildDir / L".bs-kit", std::ios::binary | std::ios::trunc) << stamp;  // binario: sem \r
@@ -855,8 +777,7 @@ Result build(const Request& req, const Callbacks& cb) {
         // 6. compilacao: progresso pelas linhas "[n/m]" do ninja
         enter(Step::Compile);
         {
-            const std::wstring cmd = quote_arg(tc.cmake.native()) + L" --build " + quote_arg(buildDir.native()) +
-                                     L" --target bluestinger";
+            const std::vector<std::wstring> cmd = {path_wide(tc.cmake), L"--build", path_wide(buildDir), L"--target", L"bluestinger"};
             const int rc = run(cmd, buildDir, tc.env, [&](const std::string& l) {
                 unsigned n = 0, m = 0;
                 if (l.size() > 2 && l[0] == '[' && std::sscanf(l.c_str(), "[%u/%u]", &n, &m) == 2 && m)
@@ -865,19 +786,18 @@ Result build(const Request& req, const Callbacks& cb) {
             });
             if (rc != 0) throw StepError(ErrorKind::Build, "a compilacao falhou:\n" + tail.summary());
         }
-        const fs::path built = buildDir / L"app" / L"bluestinger.exe";
+        const fs::path built = buildDir / L"app" / plat::game_binary_built();
         if (!fs::is_regular_file(built, ec)) throw StepError("a compilacao nao produziu " + path_text(built));
 
         // 7. pacote numa pasta temporaria ao lado do destino (mesmo volume: troca por rename)
         enter(Step::Package);
         fs::path stage;
         for (int i = 0; i < 16 && stage.empty(); ++i) {  // criacao exclusiva: nunca reaproveita uma pasta
-            const fs::path s = out / (req.installName + L".new-" + widen(randomSuffix()));
-            if (CreateDirectoryW(s.c_str(), nullptr)) stage = s;
-            else if (const DWORD le = GetLastError(); le != ERROR_ALREADY_EXISTS) {
-                const std::error_code c(int(le), std::system_category());
+            const fs::path  s = out / plat::to_path(req.installName + L".new-" + widen(randomSuffix()));
+            std::error_code c;
+            if (plat::create_dir_exclusive(s, c)) stage = s;
+            else if (c)
                 throw StepError(kindOf(c, ErrorKind::Other), "nao foi possivel criar o pacote em " + path_text(out) + " (" + error_text(c) + ")");
-            }
         }
         if (stage.empty()) throw StepError("nao foi possivel criar uma pasta de pacote exclusiva");
         std::ofstream(stage / kStageMarker, std::ios::binary) << "pacote temporario do Blue Stinger Builder\n";
@@ -889,15 +809,19 @@ Result build(const Request& req, const Callbacks& cb) {
             }
         } guard{stage};
         fs::create_directories(stage / L"licencas");
-        fs::copy_file(built, stage / L"BlueStinger.exe");
-        for (const auto& e : fs::directory_iterator(tc.crtDir))
-            if (e.path().extension() == L".dll") fs::copy_file(e.path(), stage / e.path().filename());
-        fs::copy_file(kit / L"tools" / L"dist" / L"LEIA-ME.txt", stage / L"LEIA-ME.txt");
+        fs::copy_file(built, stage / plat::game_binary_installed());
+        plat::make_executable(stage / plat::game_binary_installed());
+        if (!tc.crtDir.empty())  // runtime do MSVC ao lado do jogo (Linux: nada, o C++ vai ligado no executavel)
+            for (const auto& e : fs::directory_iterator(tc.crtDir))
+                if (e.path().extension() == L".dll") fs::copy_file(e.path(), stage / e.path().filename());
+        fs::copy_file(kit / plat::readme_in_kit(), stage / L"LEIA-ME.txt");
         fs::copy_file(kit / L"LICENSE", stage / L"licencas" / L"BlueStingerRecompiled-MIT.txt");
         if (fs::is_regular_file(sdl3 / L"LICENSE.txt", ec))
             fs::copy_file(sdl3 / L"LICENSE.txt", stage / L"licencas" / L"SDL3-zlib.txt");
         if (fs::is_regular_file(toml / L"LICENSE", ec))  // N3-1: o jogo le controles.toml com o toml++
             fs::copy_file(toml / L"LICENSE", stage / L"licencas" / L"tomlplusplus-MIT.txt");
+        for (const auto& [from, name] : plat::extra_licenses(kit, sdl3))  // Linux: FreeType, Noto Sans, pl_mpeg...
+            if (fs::is_regular_file(from, ec)) fs::copy_file(from, stage / L"licencas" / name);
         // edicao e local dos saves escolhidos (sem escolha: o instalacao.toml anterior fica, como
         // arquivo do usuario). Nao faz parte da lista do pacote: nunca e apagado por uma troca.
         if (req.portableSaves || req.edition) {
@@ -921,6 +845,9 @@ Result build(const Request& req, const Callbacks& cb) {
                     fs::create_directories(to);
                     continue;
                 }
+                // a ordem da listagem e a do sistema de arquivos (no ext4, a do hash: um arquivo da raiz pode vir antes
+                // de qualquer pasta); a pasta do arquivo e criada antes dele (N9-L L5, B10)
+                fs::create_directories(to.parent_path());
                 std::error_code le;
                 fs::create_hard_link(e.path(), to, le);
                 if (le) fs::copy_file(e.path(), to), ++copied;
@@ -965,7 +892,7 @@ Result build(const Request& req, const Callbacks& cb) {
         enter(Step::Verify);
         std::string verLine;
         {
-            const std::wstring cmd = quote_arg((stage / L"BlueStinger.exe").native()) + L" --version";
+            const std::vector<std::wstring> cmd = {path_wide(stage / plat::game_binary_installed()), L"--version"};
             int rc = 0;
             // codigo 0 sem a linha de versao: era a stdout perdida no fim de um processo curto,
             // corrigida no main do jogo (N8.8, test_builder confere 400 execucoes seguidas).
@@ -985,14 +912,14 @@ Result build(const Request& req, const Callbacks& cb) {
         }
         progress(0.1, "conferindo os dados do pacote");
         {
-            const std::wstring cmd = quote_arg((stage / L"BlueStinger.exe").native()) + L" --verify-data";
+            const std::vector<std::wstring> cmd = {path_wide(stage / plat::game_binary_installed()), L"--verify-data"};
             const int          rc  = run(cmd, stage, {}, nullptr, 600000);
             if (rc != 0) throw StepError(ErrorKind::Verify, "os dados do pacote nao conferem:\n" + tail.summary());
         }
         progress(0.4, "boot de teste (sem o CDI)");
         {
             const std::wstring n   = std::to_wstring(req.verifyVblanks);
-            const std::wstring cmd = quote_arg((stage / L"BlueStinger.exe").native()) + L" --headless " + n;
+            const std::vector<std::wstring> cmd = {path_wide(stage / plat::game_binary_installed()), L"--headless", n};
             bool       reached = false;
             const int  rc      = run(cmd, stage, {}, [&](const std::string& l) {
                 if (l.rfind("VBlanks: " + std::to_string(req.verifyVblanks) + ";", 0) == 0) reached = true;
@@ -1007,8 +934,7 @@ Result build(const Request& req, const Callbacks& cb) {
             std::strftime(ts, sizeof ts, "%Y-%m-%d %H:%M", std::localtime(&t));
             std::ofstream v(stage / L"VERSAO.txt", std::ios::trunc);
             v << verLine << "\nDistribuicao: compilada pelo Blue Stinger Builder (uso local; nao publicar)\n"
-              << "Montada em: " << ts << "\nCompilador: MSVC " << tc.msvcVersion << ", SDK do Windows "
-              << tc.sdkVersion << "\nRuntime do MSVC: " << path_text(tc.crtDir.filename()) << "\n";
+              << "Montada em: " << ts << "\n" << tc.description;
         }
 
         // 9. projeto C++ editavel (opcional), antes da troca: uma falha aqui nao instala nada

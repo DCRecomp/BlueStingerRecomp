@@ -3,6 +3,7 @@
 #include "platform/install_config.h"
 #include "runtime_data.h"
 #include "video/movie_catalog.h"
+#include "video/movie_decoder.h"
 
 #include <toml++/toml.hpp>
 
@@ -40,7 +41,9 @@ void movie_rows(ResourceReport& r, const fs::path& videoDir, const fs::path& mod
         r.rows.push_back(m);
         return;
     }
-    const auto cat = native::video::MovieCatalog::load({videoDir, modDir});
+    // N9-L (L5): onde o jogo toca os SFD do disco, o manifesto aponta para eles (data/disc/BSDATA)
+    const auto cat = native::video::MovieCatalog::load(
+        {videoDir, modDir, native::video::plays_disc_movies() ? videoDir.parent_path() / L"disc" / L"BSDATA" : fs::path()});
     for (const auto& p : cat.problems()) r.issues.push_back({InspectProblem::ManifestError, p});
     for (const auto& [id, e] : cat.all()) {
         ResourceRow m;
