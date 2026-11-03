@@ -80,6 +80,7 @@ add_library(bs_native_render STATIC render/texture_convert.cpp render/render_ir.
             render/frame_prep.cpp           # N7b: o que o rasterizador decide por triangulo, para a GPU
             render/post_shader.cpp          # N7c: pacotes e validacao dos shaders de pos-processamento
             render/soft/soft_raster.cpp     # N8.7: rasterizador de referencia em software (o recuo do Vulkan)
+            render/soft/soft_parallel_${BS_PLAT}.cpp  # N9-L: linhas em paralelo (backend de plataforma)
             render/soft/soft_device.cpp)    # N8.7: o renderizador em software sobre a IR
 # (N8.8: o contrato do Kamui com os enderecos do guest saiu daqui para runtime/kamui, a biblioteca bs_kamui)
 target_link_libraries(bs_native_render PUBLIC bs_native_api PRIVATE tomlplusplus::tomlplusplus)

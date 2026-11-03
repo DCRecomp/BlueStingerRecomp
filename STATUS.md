@@ -4325,9 +4325,57 @@ não por uma única bateria contínua** (decisão do mantenedor, 2026-11-02).
 - **Pendências:** H9; D-N8-4 no gate pós-N9; ressalva do 7.1 e D-K1(a); limite de 3 h de `n6_h` no executor, defeito a
   corrigir antes de uma futura integral, sem enfraquecer os testes. N9 e N10 não iniciados.
 
+### N9-L L3: janela, áudio SDL3 e raster paralelo (2026-11-03)
+
+Implementado e provado no WSL. A porta de saída da L3 (sessão jogável em Ubuntu nativo; A7, A8 e A9 parciais) **não foi
+cumprida**: depende da máquina do mantenedor (D-L1).
+
+- **Áudio:** `app/audio_output_sdl.cpp`, o mesmo contrato da saída XAudio2: teto da fila, reserva de 66 ms, descarte e reabertura
+  a cada segundo no modo de seguir a saída padrão, e eventos do `BS_TRAVAS`. O SDL3 fica restrito ao `app`, então a saída se
+  registra por fábrica (`set_system_output_factory`); sem ela, a saída do sistema continua sendo a nula. `bs_audio_sdl_tests`
+  (ctest `audio_sdl`, preset novo `linux-sdl`) tem 8 testes no driver `disk` do SDL: conteúdo e ordem, pausa e descarte,
+  reserva/teto/falta, duas saídas, abrir e fechar em paralelo sem parar a outra, recuperação de abertura que falhou.
+- **Raster:** as linhas vão a `for_each_row` (`soft_parallel.h`): `std::execution::par` no Windows, como antes, e pool próprio
+  no POSIX (até 16 threads, sem TBB). `BS_RENDER_SEQ` sem mudança. Testes em `test_render_parallel.cpp`.
+- **Provas de mutação (WSL):** os testes falham com cada correção desfeita: M1 seguir só com `lost_`, M2 descarte sem ajustar
+  os escritos, M3 pool sem zerar o índice, M4 pool sem workers. Restaurado, tudo passa.
+- **Linux (árvore `9e726c940f`, clang 18.1.3):** `ctest` linux-debug 21/21 (5 ignorados por desenho), `audio_sdl` e `render` no
+  linux-sdl; referências do N8.0 16/16 (179 exceções) e do N8.7 16/16, com `--filmes-outra-fonte`.
+- **Windows (árvore suja sobre `6119652879`, `soft_raster.cpp` mudou nos dois):** Release e Debug ok; `ctest` 27, 100 %, com o
+  disco, `boot_trace` ignorado; Builder; Preview; `test_builder` 24/0; `test_edicao` 11/0; C8 0 falhas; referências do N8.0
+  16/16 com 179 exceções (nenhuma nova); referências do N8.7 16/16. `known_versions.h` do HEAD durante os passos e o
+  particular restaurado depois (hash conferido).
+- **Janela no WSLg (fumaça, não é portão):** Vulkan no llvmpipe, saída de áudio SDL em uso, SIGTERM limpo. 1241 VBlanks em
+  45 s (4,65 campos/s, GPU em software); 183 faltas de áudio, explicadas pela cadência baixa. Não vale como A7 nem A8.
+- **Não feito:** sessão jogável em Ubuntu nativo, troca de dispositivo de áudio de ouvido (A8), controles reais (A9). L4 não
+  iniciada.
+
+### N9-L L2: prova de fidelidade no Linux (2026-11-02)
+
+Executável Linux `eb5931f1…` (clang 18.1.3, WSL2 Ubuntu 24.04) sobre o commit `6119652879`, dados preparados no Windows.
+
+- **A3:** referências do N8.0 16/16 (179 exceções, nenhuma nova) e do N8.7 16/16: estado por passo, VBlanks, LOAD/SAVE, saves
+  e quadros. No Windows, no mesmo commit, Preview `B8D57036`: 16/16 com 179 exceções (2635 s) e 16/16 no N8.7 (3491 s).
+- **Ressalva dos filmes, aceita pelo mantenedor em 2026-11-03:** no Linux os filmes tocam os SFD originais (D-L3), e as referências
+  do Windows foram gravadas com os MP4. Com `--filmes-outra-fonte`, a comparação de quadros pula só os passos em que um filme
+  toca, e só se os filmes forem os mesmos (arquivos, passos, fim lógico e número de quadros); estado, VBlanks e saves continuam
+  comparados nesses passos. Foram 218 260 trocas de quadro comparadas, todas iguais, e 112 602 excluídas: dois passos por rota
+  com filme (NEWGAME.SFD + E001.SFD, ou E016/E017), cerca de um terço das trocas. No SFD há 64 trocas a menos por rota dentro
+  desses passos, não investigado. A3 fala em "quadros do modo fiel"; esta leitura exclui a imagem dos filmes.
+- **Testes do comparador:** `TestFilmesOutraFonte`, 5 casos (filme diferente não exclui, quadro fora do filme e estado no passo
+  do filme continuam acusados); `test_n8_referencias` 46/46.
+- **Negativo no Linux:** `BS_RAM_MUTACAO=3000:8C24FBCC` dá rc=1, com estado diferente no passo 1481 de
+  `passo_load_opcoes_nativo` e no passo 1031 de `passo_newgame_area1_nativo`.
+
+### N9-L L0 e L1 (2026-11-02)
+
+Plano aprovado pelo mantenedor com as recomendações D-L1 a D-L5. Commits locais `f94a6e1` (L0: CMake por plataforma, presets
+Linux, kit sempre com o `known_versions.h` do commit), `14ef885`, `7790d6b`, `3515368` e `6119652` (L1: backends POSIX, testes
+portáveis, executável `--headless` no WSL até o gameplay por roteiro). Nada publicado.
+
 ### N9-L: auditoria de portabilidade (2026-11-02)
 
-Plano em `docs/N9-L-PLANO.md`, aguardando aprovação. Sonda com `g++ 13.3 -fsyntax-only` no Ubuntu 24.04 do WSL, sem mudar código: dos 151
+Plano em `docs/N9-L-PLANO.md`. Sonda com `g++ 13.3 -fsyntax-only` no Ubuntu 24.04 do WSL, sem mudar código: dos 151
 arquivos do jogo, 134 passam, 13 têm dependência real e 4 ficaram inconclusivos pelo `known_versions.h` particular. `funcs_003.cpp` compilou
 com `g++ -O2 -ffp-contract=off` (16 s, 530 MB). Nada foi ligado nem executado no Linux.
 
@@ -4353,6 +4401,15 @@ Contrato em `docs/N9-0-EDICOES.md`. O mesmo executável roda as duas edições, 
 - **Não feito nesta etapa:** tela de edição (N9.1), preset Remastered (N9.5–N9.8).
 
 ## Revisões independentes (Codex)
+
+### 2026-11-02: N9-L L3 (áudio SDL3 e pool do raster). Relatório `reviews/codex-20261102-223850.md` (4 achados)
+
+| Achado | Decisão |
+|---|---|
+| [ALTA] No modo de seguir, a saída nunca se recuperava se a primeira abertura falhasse | **Aceito.** Reabre com `lost_` ou sem fluxo; taxa e canais guardados antes de abrir. Teste `seguir_recupera_abertura_que_falhou`; a mutação M1 o derruba |
+| [MÉDIA] `played_frames` não tem a semântica do `SamplesPlayed` do XAudio2 | **Aceito em parte.** O SDL3 não expõe cursor de reprodução; conta o que saiu para o dispositivo, adiantado em até um bloco. Documentado no código; sincronia a conferir de ouvido em hardware real (A8) |
+| [MÉDIA] Os testes de duas saídas não exercitavam a concorrência | **Aceito.** Teste de abrir e fechar em 4 threads com outra saída tocando, e conferência de que a outra continua |
+| [BAIXA] Testes do pool só olhavam um total | **Aceito.** Contador por pedido, congelado depois do retorno, e conferência de mais de uma thread |
 
 ### 2026-11-02: N9.0. Relatório `reviews/codex-20261102-115056.md` (4 achados)
 

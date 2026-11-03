@@ -1,6 +1,9 @@
 # N9-L: suporte nativo a Linux
 
-**Situação: auditoria feita em 2026-11-02, plano aguardando aprovação do mantenedor. Nada foi implementado.**
+**Situação (2026-11-03):** plano aprovado em 2026-11-02 com D-L1 a D-L5 como recomendados. L0 e L1 feitas. L2 feita: A3 16/16 e
+16/16 no Linux (WSL), com a ressalva dos filmes do `STATUS.md`, aceita pelo mantenedor em 2026-11-03. L3 implementada e provada no WSL
+(áudio SDL3, raster paralelo, Windows sem regressão); falta a porta de saída em Ubuntu nativo, na máquina do mantenedor. L4 em
+diante não iniciadas. Detalhes e evidências no `STATUS.md`.
 
 N9-L é um marco intermediário provisório, sem alterar a numeração N0–N10. Vem depois do N9.0 e antes do N9.1 e do N9.2, que ficam
 bloqueados até a portabilidade ser validada. O alvo inicial é Linux x86-64, Ubuntu e SteamOS, sem Wine nem Proton.

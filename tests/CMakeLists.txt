@@ -84,10 +84,13 @@ add_executable(bs_render_tests unit/main.cpp unit/test_render_native.cpp unit/te
                unit/test_render_texture_heap.cpp
                unit/test_render_display_service.cpp unit/test_render_event_status.cpp
                unit/test_render_channel_dma.cpp unit/test_render_area4_entry.cpp
-               unit/test_render_pass.cpp unit/test_render_system_block.cpp)
+               unit/test_render_pass.cpp unit/test_render_system_block.cpp unit/test_render_parallel.cpp)
 target_include_directories(bs_render_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/unit)
 target_link_libraries(bs_render_tests PRIVATE bs_native_render bs_native_render_vk bs_kamui)
 add_test(NAME render COMMAND bs_render_tests)
+if(TARGET bs_audio_sdl_tests)  # N9-L: saida de audio do Linux; o alvo fica em app/, onde o SDL3 e permitido (preset linux-sdl)
+  add_test(NAME audio_sdl COMMAND bs_audio_sdl_tests)
+endif()
 add_test(NAME unit COMMAND bs_unit_tests)
 if(BS_VALIDACAO)
   # N8.7 3c: negativo do servico de exibicao em sombra (revisao Codex 20261029-071855): com os campos trocados na

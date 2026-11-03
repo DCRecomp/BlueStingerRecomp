@@ -106,6 +106,9 @@ struct XAudio2Hooks {
 std::unique_ptr<IAudioOutput> make_xaudio2_output(uint32_t latency_ms, bool follow_default, XAudio2Hooks hooks);
 // A saida do sistema: XAudio2 no Windows, SDL3 no Linux.
 std::unique_ptr<IAudioOutput> make_system_output(uint32_t latency_ms = 200, bool follow_default = false);
+// So no Linux: o executavel registra a saida do SDL3, que nao pode entrar em native/. Sem registro, a saida do sistema e a nula.
+using SystemOutputFactory = std::unique_ptr<IAudioOutput> (*)(uint32_t latency_ms, bool follow_default);
+void set_system_output_factory(SystemOutputFactory f);
 // Saida nula (headless e dispositivo ausente): aceita e descarta, conta os quadros como tocados.
 std::unique_ptr<IAudioOutput> make_null_output();
 

@@ -325,6 +325,58 @@ class TestComparar(Base):
         self.assertIn("caso c fora do manifesto", n8.comparar_conjunto(["a"], {"a": 1, "c": 1}))
 
 
+class TestFilmesOutraFonte(Base):
+    """N9-L: --filmes-outra-fonte tira da comparacao de quadros so o passo em que um filme toca, e so se os filmes coincidirem."""
+    PASSO = 3
+    FILME = "[video] E001.SFD -> %s (passo 3)\n[video] fim natural: 5000 ms logicos, 150 quadros (0 pulados) (passo 3)\n"
+
+    def quadros(self, troca=()):
+        return ["%d\t%016X\t0\t%d" % (2 * s, s + (0x1000 if s in troca else 0), s) for s in range(0, FIM + 1)]
+
+    def par(self, ref=None, nova=None, saida_nova=None, estado_nova=None):
+        r = self.caso(saida=self.FILME % "E001.mp4", linhas_extra={"quadros": self.quadros(ref or ())})
+        extra = {"quadros": self.quadros(nova or ())}
+        if estado_nova:
+            extra["estado"] = estado_nova
+        x = self.caso(saida=(self.FILME % "E001.SFD") if saida_nova is None else saida_nova, linhas_extra=extra)
+        return r, x
+
+    def dif(self, r, x, flag=True):
+        return n8.comparar(r, x, "passo_cgate_experimental", ROTA, ESP_CGATE, (), flag)[0]
+
+    def test_imagem_do_filme_passa_so_com_a_opcao(self):
+        r, x = self.par(nova=[self.PASSO])
+        self.assertEqual(self.dif(r, x), [])
+        self.assertTrue(any(d.startswith("quadros") for d in self.dif(r, x, False)))
+
+    def test_quadro_fora_do_filme_continua_acusado(self):
+        for passo in (self.PASSO - 1, self.PASSO + 1):
+            r, x = self.par(nova=[passo])
+            self.assertTrue(any(d.startswith("quadros") for d in self.dif(r, x)), passo)
+
+    def test_filme_diferente_acusa_e_nao_tira_quadros(self):
+        for f in ("[video] E002.SFD -> E002.SFD (passo 3)\n[video] fim natural: 5000 ms logicos, 150 quadros (0 pulados) (passo 3)\n",
+                  "[video] E001.SFD -> E001.SFD (passo 4)\n[video] fim natural: 5000 ms logicos, 150 quadros (0 pulados) (passo 4)\n",
+                  "[video] E001.SFD -> E001.SFD (passo 3)\n[video] fim natural: 5033 ms logicos, 150 quadros (0 pulados) (passo 3)\n",
+                  "[video] E001.SFD -> E001.SFD (passo 3)\n[video] fim natural: 5000 ms logicos, 149 quadros (0 pulados) (passo 3)\n",
+                  "[video] E001.SFD -> E001.SFD (passo 3)\n[video] fim natural: 5000 ms logicos, 150 quadros (1 pulados) (passo 3)\n",
+                  ""):
+            r, x = self.par(nova=[self.PASSO], saida_nova=f)
+            d = self.dif(r, x)
+            self.assertTrue(any(y.startswith("filmes diferentes") for y in d), f)
+            self.assertTrue(any(y.startswith("quadros") for y in d), f)
+
+    def test_estado_no_passo_do_filme_continua_acusado(self):
+        est = ["%d\t%d\t%016X\t100\t0\t0\t0" % (s, 2 * s, s + (7 if s == self.PASSO else 0)) for s in range(1, FIM + 1)]
+        r, x = self.par(nova=[self.PASSO], estado_nova=est)
+        self.assertTrue(any(d.startswith("estado") for d in self.dif(r, x)))
+
+    def test_sem_filme_nada_sai_da_comparacao(self):
+        r = self.caso(linhas_extra={"quadros": self.quadros()})
+        x = self.caso(linhas_extra={"quadros": self.quadros([self.PASSO])})
+        self.assertTrue(any(d.startswith("quadros") for d in self.dif(r, x)))
+
+
 class TestMatriz(unittest.TestCase):
     def test_sessoes_sem_tempo_duplicado(self):
         self.assertEqual(n8.sem_tempo("--audio nativo --tempo nativo --x"), ["--audio", "nativo", "--x"])

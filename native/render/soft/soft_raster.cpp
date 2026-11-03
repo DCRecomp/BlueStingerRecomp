@@ -2,6 +2,7 @@
 // movidas do rasterizador do legado (pvr_render.cpp) sem mudanca; so a origem dos texels passou para a TexelSource.
 // Documentacao de comportamento: KallistiOS (pvr_regs, pvr_internal); Flycast so como referencia, nenhum codigo copiado.
 #include "render/soft/soft_raster.h"
+#include "render/soft/soft_parallel.h"
 
 #include <algorithm>
 #include <atomic>
@@ -9,7 +10,6 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <execution>
 #include <span>
 #include <xmmintrin.h>
 #include <vector>
@@ -102,7 +102,7 @@ public:
             }
         };
         if (seqOnly) std::for_each(rows.begin(), rows.end(), body);
-        else std::for_each(std::execution::par, rows.begin(), rows.end(), body);
+        else for_each_row(rows.data(), rows.size(), body);
     }
     std::vector<Frag> sorted_;
 
