@@ -39,6 +39,17 @@ o jogo procura, nesta ordem:
 - **Legendas:** SRT ou WebVTT em UTF-8. Itálico, negrito, cores e posições são ignorados; o texto
   sai branco com contorno, centralizado embaixo e proporcional à altura do vídeo.
 
+### No Linux (N9-L)
+
+- Os filmes originais tocam direto dos SFD do disco (MPEG-1 e ADX), sem conversão.
+- Um mod MPEG-1 (SFD ou MPEG-PS com áudio ADX) toca sem nada instalado. Qualquer outro formato (MP4 etc.) toca pelo `ffmpeg` e
+  `ffprobe` do sistema (`sudo apt install ffmpeg` no Ubuntu; no SteamOS vêm com o sistema). Sem eles, ou se o `ffmpeg` não
+  decodificar o vídeo do mod, o jogo toca o filme original e registra no log:
+  `mods de video: <arquivo> sem decodificador neste sistema (instale o ffmpeg): toca o filme original`.
+- Nomes de arquivos e pastas valem sem diferenciar maiúsculas, como no Windows (`Mods/Video/e001.MP4`, `PT-BR`, `Manifest.toml`).
+- Diferença conhecida para o Windows: num MP4 cuja edit list corta o fim do vídeo, o `ffmpeg` respeita o corte e o Media Foundation
+  do Windows não (o último quadro aparece só no Windows). Um MP4 sem esse corte toca igual nas duas plataformas.
+
 ## Legendas por idioma
 
 `mods\video\<NOME>.<idioma>.srt` ou `.vtt`, por exemplo `NEWGAME.pt.srt` ou `E001.en.vtt`. O jogo usa

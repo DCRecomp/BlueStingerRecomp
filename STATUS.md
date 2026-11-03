@@ -4325,6 +4325,75 @@ não por uma única bateria contínua** (decisão do mantenedor, 2026-11-02).
 - **Pendências:** H9; D-N8-4 no gate pós-N9; ressalva do 7.1 e D-K1(a); limite de 3 h de `n6_h` no executor, defeito a
   corrigir antes de uma futura integral, sem enfraquecer os testes. N9 e N10 não iniciados.
 
+### N9-L L4: filmes e texto no Linux (2026-11-03)
+
+Autorizada pelo mantenedor em 2026-11-03, com a L3 ainda pendente das validações A7, A8 e A9 em Ubuntu nativo. Implementada e provada
+no WSL e no Windows. A parte que depende de GPU, áudio e controles reais fica para a sessão única em Ubuntu nativo
+(`docs/N9-L-ROTEIRO-UBUNTU.md`), junto com a da L3.
+
+- **Formato real dos SFD (`sfd_identify`, os 16 do disco):** "Sofdec Stream" + cabeçalho de 8192 bytes, MPEG-1 Program Stream com
+  código de fim; vídeo MPEG-1 320x240 a 30 fps (código 5); NEWGAME e ENDING com taxa variável (marca 0x3FFFF), os outros de
+  1,6 a 3,6 Mbit/s; GOPs abertos (só o primeiro fechado); quadros I/P/B nos filmes de 1,6 Mbit/s e NEWGAME/ENDING, só I/P nos outros;
+  áudio ADX estéreo a 44,1 kHz; primeiro PTS de vídeo e áudio em 0. O SHA-256 de cada SFD bate com o `fonte_sha256` do manifesto.
+- **Decodificação, Linux × Windows:** o `pl_mpeg` compilado com clang no Linux e com MSVC no Windows dá imagem (RGB24) e PCM idênticos
+  bit a bit nos 16 filmes (`sfd_disc_conteudo` contra `tools/dev/sfd_referencia_windows.ps1`). Quadros, amostras e fins de vídeo e
+  áudio iguais aos do manifesto do Builder.
+- **Decodificação independente (`tools/dev/sfd_oraculo.py`, `pl_mpeg` × `ffmpeg`):** 16/16 com o mesmo número de quadros; PSNR
+  mínimo de 45,15 a 48,13 dB, médio de 47,4 a 54,8 dB, diferença média de 0,24 a 0,64 nível e máxima de 9 a 15. O MPEG-1 não
+  exige IDCT exata; limites fixados: PSNR mínimo 42 dB, média 1,0, máxima 32.
+- **Fim do filme:** com os fins do manifesto, o mesmo passo do Windows nos 16. Só com os fins do próprio SFD (tempo do quadro
+  truncado), NEWGAME, E193 e ENDING2 acabariam um passo (16,7 ms) antes. O jogo usa o manifesto; **o Builder do Linux (L5) tem de
+  gravar os fins como o do Windows**.
+- **Decodificador escolhido pelo conteúdo** (`movie_decoder_posix.cpp`): Sofdec/MPEG-PS com ADX pelo `pl_mpeg`; o resto pelo `ffmpeg`
+  e `ffprobe` do sistema como processos separados (`ffmpeg_movie.cpp`), decisão do mantenedor de 2026-11-03 no lugar da libav por
+  `dlopen`. Tempos de cada quadro pelo `ffprobe` (sem os pacotes descartados), áudio na linha de tempo do arquivo
+  (`aresample=async=1:first_pts=0`), código de saída conferido, prazo de 10 s sem dados, parada com SIGTERM e SIGKILL.
+  `can_decode()` faz a sonda real (o leitor do SFD identifica o arquivo inteiro; o `ffmpeg` decodifica um quadro); sem decodificador,
+  o catálogo mantém o filme original e avisa. No Windows `can_decode()` é sempre verdadeiro.
+- **Texto (`native/text`):** FreeType 2.13.3 (FTL) e Noto Sans 2.015 (OFL 1.1) embutida; o menu e as legendas do Linux com a
+  geometria do Windows. Medida contra o Windows (`tools/dev/texto_geometria.py`, 9 casos): mesmo número de linhas, base e centro com
+  até 1 px de diferença, áreas do mouse do menu idênticas, largura 5 % a 11 % maior (a fonte). Setas do menu desenhadas com as
+  medidas das do Windows (diferença de até 1 px). Sem kerning e sem CJK.
+- **Mods (A11):** caminhos sem diferenciar maiúsculas (`native/core/path_case.h`) no catálogo de filmes, de som, nos pacotes de
+  legendas e na pasta `mods`; no Windows o caminho exato vem primeiro e o resultado é o mesmo. Catálogo de filmes guarda o caminho
+  canônico conferido (manifesto e achados pelo nome), como o de som.
+- **Mod MP4 no jogo, Linux × Windows** (headless, roteiro do NEW GAME, `ffmpeg` real do Windows por interop no WSL):
+  - E017 do Builder como `newgame.MP4`: mesmo passo (1030), mesmo fim (7941 ms, 238 quadros) e o E001 no mesmo passo (2138), nos dois.
+  - Sem o `ffmpeg`, o Linux avisa e toca o original.
+  - MP4 de taxa variável com áudio começando em 0,476 s: o áudio sai na linha de tempo certa (primeira amostra em 477 ms).
+  - O fim difere (Linux 119 quadros e 7874 ms, Windows 120 e 8041 ms): o último pacote tem a marca de descarte da edit list, que o
+    `ffmpeg` respeita e o Media Foundation não. Diferença conhecida, só de mods com esse corte, registrada em `docs/MODS-VIDEO.md`.
+- **Achado do AddressSanitizer no `pl_mpeg`:** com um SFD corrompido, a compensação de movimento lia até uma linha além do último
+  plano (a conferência `max_address` não conta a linha da interpolação vertical). Corrigido sem tocar no cabeçalho, por uma folga
+  zerada nas alocações (`pl_mpeg_impl.c`). 3000 arquivos corrompidos sob ASan e UBSan (GCC 13) sem erro; a decodificação dos 16 SFD
+  é idêntica antes e depois.
+- **Testes novos:**
+  - Linux: `video_linux` (17 casos: identificação, cores, tempos, áudio, fim, interrupção, sincronia, arquivos ruins, PES truncado,
+    escolha do decodificador, mod pelo `ffmpeg` falso com taxa variável, erro, travamento, filho parado, sem codec, links e canônico)
+    e `text` (UTF-8, cobertura de idiomas, layout, quebra, desenho, formas, mistura, threads).
+  - Linux, com os dados do usuário: `sfd_disc` e `sfd_disc_conteudo`.
+  - Windows e Linux: `text_geometry_same_rules_both_platforms` e `mods_case_*` no `unit`; no Windows,
+    `video_sfd_demux_truncated_pes_headers` no `video`.
+- **Provas de mutação (WSL):** 17 mutações, cada uma derruba o teste que a guarda; M16 e M17 só aparecem sob ASan, como deviam. Restaurado,
+  tudo passa.
+- **Baterias finais (2026-11-03, árvore da L4 sobre cc0d917):**
+  - Windows (`gate_win`, `known_versions.h` do HEAD durante os passos e o particular restaurado com o hash conferido):
+    - builds release e debug;
+    - `geom` 360/0 e `video` 46/0;
+    - ctest 27/27 (`boot_trace` pulado de propósito);
+    - Builder e Preview (SHA-256 9F83052D…9CBE4);
+    - `test_builder` 24/0, `test_edicao` 11/0, C8 0 falha;
+    - referências N8.0 16/16 iguais, com as 179 exceções já listadas e provadas;
+    - referências N8.7 16/16 iguais, sem exceção.
+  - Linux (WSL, Ubuntu clang 18.1.3, árvore b6f7728724):
+    - builds `linux-debug`, `linux-release` e `linux-sdl`;
+    - fontes embutidas iguais às de `third_party`;
+    - ctest 24/24 com `BS_DATA_DIR` e `BS_SFD_REF`, inclusive `sfd_disc` e `sfd_disc_conteudo` (5 pulados de propósito);
+    - `audio_sdl` 1/1;
+    - referências n80 e n87 16/16 sem diferença.
+- **Não feito:** sessão em Ubuntu nativo (filme com som e legenda em GPU e saída reais, sincronia de ouvido, menu com controle e
+  mouse, `ffmpeg` do próprio Ubuntu); kerning (HarfBuzz) e CJK; Builder do Linux (L5).
+
 ### N9-L L3: janela, áudio SDL3 e raster paralelo (2026-11-03)
 
 Implementado e provado no WSL. A porta de saída da L3 (sessão jogável em Ubuntu nativo; A7, A8 e A9 parciais) **não foi
@@ -4401,6 +4470,24 @@ Contrato em `docs/N9-0-EDICOES.md`. O mesmo executável roda as duas edições, 
 - **Não feito nesta etapa:** tela de edição (N9.1), preset Remastered (N9.5–N9.8).
 
 ## Revisões independentes (Codex)
+
+### 2026-11-03: N9-L L4. Relatórios `reviews/codex-20261103-030426.md` (7 achados) e `-034502.md` (6 achados, segunda passada)
+
+| Relatório | Achado | Decisão |
+|---|---|---|
+| `030426` | [ALTA] PES curto: `demux_sfd` lia o PTS além do pacote (e do arquivo) | **Aceito.** Cada campo conferido antes de ler; teste de PES de 0 a 9 bytes no fim do arquivo; sem a correção o ASan acusa `readPts` |
+| `030426` | [MÉDIA] tempos do mod sintetizados pela taxa | **Aceito.** Tempo de cada quadro pelo `ffprobe`; áudio na linha de tempo do arquivo |
+| `030426` | [MÉDIA] `can_decode` com falso positivo | **Aceito.** Sonda real e recuo do leitor do SFD para o `ffmpeg` |
+| `030426` | [MÉDIA] erro do `ffmpeg` como fim normal; parada sem prazo | **Aceito.** Código de saída conferido; SIGTERM, 0,5 s e SIGKILL |
+| `030426` | [MÉDIA] catálogo de filmes guardava o caminho não canônico | **Aceito.** Guarda o canônico conferido, como o de som; teste com symlink trocado depois da carga |
+| `030426` | [MÉDIA] testes de oráculo sem asserção do conteúdo | **Aceito.** SHA-256 de imagem e PCM contra o Windows; limites no oráculo do `ffmpeg` |
+| `030426` | [BAIXA] sem kerning | **Rejeitado em parte.** A Noto Sans não tem tabela `kern` (`FT_Get_Kerning` não teria efeito); kerning de GPOS exige shaping (HarfBuzz), dependência nova para o mantenedor decidir. Diferença de largura medida e limitada |
+| `034502` | [MÉDIA] tempos por pacote, não por quadro; lacunas de áudio | **Aceito em parte.** Pacotes descartados (marca D) fora; tempo relativo ao início do contêiner; áudio com `aresample=async=1:first_pts=0` (atraso e lacunas viram silêncio). **Rejeitado** o `-show_frames`: decodifica o filme inteiro duas vezes na abertura (lento para mods em 4K). Limitação registrada |
+| `034502` | [MÉDIA] `can_decode` ainda com falso positivo (sem decodificar; janela de 256 KiB) | **Aceito.** O `ffmpeg` decodifica um quadro na sonda; o MPEG-PS passa pela identificação completa |
+| `034502` | [MÉDIA] leitura parcial do pipe podia bloquear para sempre | **Aceito.** `poll` com prazo de 10 s; teste com meio quadro e o filho parado |
+| `034502` | [MÉDIA] filme e legenda achados pelo nome sem caminho canônico | **Aceito.** Mesma conferência; teste com links para fora |
+| `034502` | [BAIXA] `realloc` sem zerar a folga | **Aceito** |
+| `034502` | [BAIXA] comparação com o Windows opcional no `ctest` | **Aceito.** Teste `sfd_disc_conteudo`, pulado sem a referência |
 
 ### 2026-11-02: N9-L L3 (áudio SDL3 e pool do raster). Relatório `reviews/codex-20261102-223850.md` (4 achados)
 

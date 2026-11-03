@@ -1,9 +1,10 @@
 # N9-L: suporte nativo a Linux
 
-**Situação (2026-11-03):** plano aprovado em 2026-11-02 com D-L1 a D-L5 como recomendados. L0 e L1 feitas. L2 feita: A3 16/16 e
-16/16 no Linux (WSL), com a ressalva dos filmes do `STATUS.md`, aceita pelo mantenedor em 2026-11-03. L3 implementada e provada no WSL
-(áudio SDL3, raster paralelo, Windows sem regressão); falta a porta de saída em Ubuntu nativo, na máquina do mantenedor. L4 em
-diante não iniciadas. Detalhes e evidências no `STATUS.md`.
+**Situação (2026-11-03):** plano aprovado em 2026-11-02 com D-L1 a D-L5 como recomendados (a D-L3 ajustada em 2026-11-03, abaixo).
+L0 e L1 feitas. L2 feita: A3 16/16 e 16/16 no Linux (WSL), com a ressalva dos filmes do `STATUS.md`, aceita pelo mantenedor em
+2026-11-03. L3 implementada e provada no WSL (áudio SDL3, raster paralelo, Windows sem regressão); falta a porta de saída em Ubuntu
+nativo. L4 implementada e provada no WSL e no Windows (seção 6.1); a parte que depende de GPU, áudio e controles reais vai junto
+com a da L3 na mesma sessão em Ubuntu nativo. L5 em diante não iniciadas. Detalhes e evidências no `STATUS.md`.
 
 N9-L é um marco intermediário provisório, sem alterar a numeração N0–N10. Vem depois do N9.0 e antes do N9.1 e do N9.2, que ficam
 bloqueados até a portabilidade ser validada. O alvo inicial é Linux x86-64, Ubuntu e SteamOS, sem Wine nem Proton.
@@ -81,8 +82,8 @@ O código compartilhado não ganha `#ifdef`. Cada dependência fica num `.cpp` d
 | Contexto das threads do jogo | Fibras do Win32 | `sh4_context_switch` em GAS: registradores preservados, MXCSR e palavra de controle x87, pilha de 8 MB com página de guarda |
 | Memória observada | `MEM_WRITE_WATCH` | `mprotect` + `SIGSEGV` com pilha alternativa, por página. Uma interface com a mesma semântica |
 | Saída de áudio | `IAudioOutput` com XAudio2 | `IAudioOutput` com `SDL_AudioStream` |
-| Decodificador de filme | `IMovieDecoder` com Media Foundation | `IMovieDecoder` com `pl_mpeg` (D-L3) |
-| Texto | `ISubtitleRasterizer` com DirectWrite | `ISubtitleRasterizer` com FreeType; o menu passa a usar a mesma interface de texto |
+| Decodificador de filme | `IMovieDecoder` com Media Foundation | `IMovieDecoder` escolhido pelo conteúdo: SFD e MPEG-PS com ADX pelo `pl_mpeg`; outros formatos (MP4 de mod) pelo `ffmpeg` do sistema como processo separado (D-L3) |
+| Texto | `ISubtitleRasterizer` com DirectWrite | `ISubtitleRasterizer` e o menu sobre `native/text` (FreeType 2.13.3 e Noto Sans embutida) |
 | Plataforma | `Win32` em `app/platform_win.cpp` | `app/platform_posix.cpp`: argumentos UTF-8, pasta do executável, XDG, caixas de mensagem pelo SDL |
 | Escrita atômica | `ReplaceFileW` | `rename` + `fsync` do arquivo e da pasta, com a mesma semântica de `.bak` |
 | Pastas | Documentos e `%LOCALAPPDATA%` | Saves em `$XDG_DATA_HOME/DC-Recomp/Blue Stinger/saves`, preferências em `$XDG_CONFIG_HOME`. Modo portátil igual |
@@ -103,7 +104,7 @@ O código compartilhado não ganha `#ifdef`. Cada dependência fica num `.cpp` d
 |---|---|---|---|
 | D-L1 | Onde validar | Uma máquina Ubuntu 24.04 nativa com GPU real e um Steam Deck, operados por você com um roteiro meu | Sem isso, os critérios A5 e A6 não têm como ser cumpridos. Máquina virtual com GPU dedicada serve para Ubuntu, mas não substitui o Deck |
 | D-L2 | Compilador no Linux | Clang e LLD portáteis dentro do pacote, com um sysroot de glibc antiga e o SDL3 pré-compilado | Funciona no SteamOS sem tocar no sistema, e todos compilam com o mesmo compilador, o que torna a prova de fidelidade válida para todos. O pacote fica maior; tamanho a medir na L5 |
-| D-L3 | Filmes no Linux | Tocar os SFD do disco em tempo real com `pl_mpeg` e o ADX que já temos, sem reconverter. `.mp4` de mods por `libav` do sistema carregada em tempo de execução, se existir; sem ela, toca o filme do disco e registra aviso | Sem codec patenteado no pacote, e a imagem é a original, sem perda. Os mods continuam substituíveis no Linux, mas MP4 depende de uma biblioteca do sistema. Alternativa: exigir um formato aberto nos mods, com `dav1d` |
+| D-L3 | Filmes no Linux | Tocar os SFD do disco em tempo real com `pl_mpeg` e o ADX que já temos, sem reconverter. `.mp4` de mods por `libav` do sistema carregada em tempo de execução, se existir; sem ela, toca o filme do disco e registra aviso. **Ajuste aprovado em 2026-11-03:** o MP4 de mod vai pelo **`ffmpeg` e `ffprobe` do sistema como processos separados**, não pela libav por `dlopen` (o jogo teria de ler estruturas da libav, cuja disposição muda entre as versões 59, 60 e 61; sem os cabeçalhos LGPL de cada uma, isso quebraria em silêncio). O resto da decisão fica | Sem codec patenteado no pacote, e a imagem é a original, sem perda. Os mods continuam substituíveis no Linux, mas MP4 depende de um programa do sistema. Alternativa: exigir um formato aberto nos mods, com `dav1d` |
 | D-L4 | Ferramentas no WSL | Autorizar `cmake`, `ninja`, `clang` e bibliotecas de desenvolvimento do X11, Wayland, ALSA e PipeWire no Ubuntu do WSL | A regra do projeto proíbe instalar sem autorização. Sem isso, a L1 não anda |
 | D-L5 | Forma do pacote | `.tar.gz` com o Builder, o kit e `instalar.sh`. Sem AppImage ou Flatpak nesta versão | É o mais simples, e o jogo é gerado na máquina do usuário, como no Windows |
 
@@ -149,6 +150,22 @@ programa de referência durante todo o N9-L.
 | **L8** Publicação | v0.8.0 com os dois pacotes, Preview/pré-lançamento, limitações e hashes | A14, depois da conferência de todos os critérios |
 
 Paralelismo do raster por pool de threads próprio (sem TBB) entra na L3, com prova de que o quadro não muda.
+
+### 6.1 L4: filmes e texto (resultado, 2026-11-03)
+
+- **SFD do disco:** os 16 são "Sofdec Stream" + MPEG-1 Program Stream com vídeo MPEG-1 320x240 a 30 fps e áudio ADX estéreo a
+  44,1 kHz, PTS de vídeo e áudio em 0. No Linux, a imagem (RGB24) e o áudio (PCM) dos 16 são idênticos bit a bit aos do Windows;
+  quadros, amostras e fins batem com o manifesto do Builder. Contra o `ffmpeg` (decodificador independente): mesmo número de quadros
+  e PSNR mínimo de 45,15 dB (o MPEG-1 não exige IDCT exata).
+- **Fim do filme:** pelo manifesto, como no Windows. Sem ele, 3 filmes acabariam um passo (16,7 ms) antes: **o Builder do Linux (L5)
+  tem de gravar os fins `fim_video_100ns`/`fim_audio_100ns` como o do Windows** (arredondados).
+- **Texto:** FreeType e Noto Sans, com a geometria do Windows (tamanhos, margens, alinhamento, quebra, contorno, fundo, painel e áreas
+  do mouse do menu). Medido contra o Windows: mesmo número de linhas, base e centro com até 1 px de diferença, largura 5 % a 11 %
+  maior (a fonte). Sem kerning (HarfBuzz seria uma dependência nova) e sem CJK.
+- **Mods (A11):** nomes sem diferenciar maiúsculas; MP4 pelo `ffmpeg` com os tempos do arquivo; sem decodificador, o filme original
+  com aviso. Diferença conhecida: num MP4 cuja edit list corta o fim, o `ffmpeg` respeita o corte e o Media Foundation não.
+- **Pendente em hardware real (sessão única com a L3, roteiro em `docs/N9-L-ROTEIRO-UBUNTU.md`):** filme com som e legenda em GPU e
+  saída de áudio reais, sincronia de ouvido, menu com teclado, controle e mouse, mod MP4 com o `ffmpeg` do próprio Ubuntu.
 
 ## 7. Publicação da v0.8.0
 
