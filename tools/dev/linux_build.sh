@@ -2,7 +2,8 @@
 # N9-L: compila um commit no Linux a partir do git, nunca da arvore de trabalho. Assim cada resultado fica ligado a um commit
 # e nenhum arquivo particular entra. O codigo gerado (local, do jogo do usuario) e copiado para fora do repositorio.
 #   tools/dev/linux_build.sh <repo> <commit> <preset> [alvo...]
-# Saida: $BS_LINUX_DIR/<commit>/{src,log} (padrao ~/bs-linux). Fontes do SDL3 e do toml++: $BS_LINUX_DIR/deps, se existirem.
+# Saida: $BS_LINUX_DIR/<commit>/{src,log} (padrao ~/bs-linux). Fontes do SDL3, do toml++ e do FreeType: $BS_LINUX_DIR/deps, se
+# existirem (senao o CMake baixa as versoes fixadas).
 set -euo pipefail
 repo=${1:?repositorio}; commit=${2:?commit}; preset=${3:?preset}; shift 3
 base=${BS_LINUX_DIR:-$HOME/bs-linux}
@@ -14,7 +15,7 @@ if [ -d "$repo/generated" ] && [ ! -f "$src/generated/generated.cmake" ]; then
     mkdir -p "$src/generated"
     find "$repo/generated" -maxdepth 1 -type f -exec cp -t "$src/generated" {} +
 fi
-args=(); for d in sdl3 tomlplusplus; do
+args=(); for d in sdl3 tomlplusplus freetype; do
     u=$(echo $d | tr a-z A-Z); [ -d "$base/deps/$d" ] && args+=("-DFETCHCONTENT_SOURCE_DIR_$u=$base/deps/$d")
 done
 cd "$src"

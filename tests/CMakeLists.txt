@@ -40,8 +40,11 @@ add_executable(bs_unit_tests
   unit/test_n84_perifericos.cpp   # N8.4: barramento de perifericos sem dispositivos
   unit/test_n85_filmes.cpp   # N8.5: filme legado e conversor YUV fora do produto
   unit/test_n86_som.cpp   # N8.6: area de som sem AICA
+  unit/test_text_geometry.cpp   # N9-L (L4): as mesmas regras de texto no Windows e no Linux
+  unit/test_mods_case.cpp       # N9-L (L4, A11): mods com nomes em outra caixa
 )
 target_link_libraries(bs_unit_tests PRIVATE bs_translator bs_runtime bs_disc bs_app_core bs_hwscan bs_transitional)
+target_compile_definitions(bs_unit_tests PRIVATE BS_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
 if(WIN32)
   enable_language(ASM_MASM)
   target_sources(bs_unit_tests PRIVATE unit/test_builder.cpp unit/test_n1.cpp
@@ -55,6 +58,21 @@ add_executable(bs_video_tests unit/main.cpp unit/test_video_native.cpp unit/test
 target_include_directories(bs_video_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/unit)
 target_link_libraries(bs_video_tests PRIVATE bs_native_video bs_native_audio bs_video_convert bs_video_mw bs_video_adapter)
 add_test(NAME video COMMAND bs_video_tests)
+else()
+# N9-L (L4): filmes (SFD pelo pl_mpeg, MP4 de mod pelo ffmpeg) e texto (FreeType) do Linux, sem dados do jogo
+add_executable(bs_video_linux_tests unit/main.cpp unit/test_video_linux.cpp unit/test_text.cpp)
+target_include_directories(bs_video_linux_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/unit)
+target_compile_definitions(bs_video_linux_tests PRIVATE BS_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
+target_link_libraries(bs_video_linux_tests PRIVATE bs_native_video)
+add_test(NAME video_linux COMMAND bs_video_linux_tests)
+set_tests_properties(video_linux PROPERTIES TIMEOUT 300)
+# os 16 filmes do disco do usuario contra o manifesto do Builder; SKIP sem BS_DATA_DIR
+add_executable(bs_sfd_disc_test data/test_sfd_disc.cpp)
+target_link_libraries(bs_sfd_disc_test PRIVATE bs_native_video bs_disc_data tomlplusplus::tomlplusplus)
+add_test(NAME sfd_disc COMMAND bs_sfd_disc_test)
+# imagem e audio identicos aos do Windows; SKIP sem BS_SFD_REF (tools/dev/sfd_referencia_windows.ps1)
+add_test(NAME sfd_disc_conteudo COMMAND bs_sfd_disc_test --conteudo)
+set_tests_properties(sfd_disc sfd_disc_conteudo PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 900)
 endif()
 
 # N6: audio de gameplay portavel, sem o jogo nem dispositivo de audio

@@ -80,6 +80,25 @@ BS_TEST(video_sfd_demux_synthetic_ps) {
     BS_CHECK(!bv::demux_sfd(std::vector<uint8_t>(100, 0x55), s, &err));
 }
 
+// N9-L (revisao Codex 20261103-030426, ALTA): PES curto no fim do arquivo, com o primeiro byte de PTS, PTS+DTS, STD ou stuffing:
+// o demux recusa sem ler alem do pacote (o mesmo demux do Builder e, no Linux, do jogo)
+BS_TEST(video_sfd_demux_truncated_pes_headers) {
+    int refused = 0;
+    for (uint8_t first : {uint8_t(0x21), uint8_t(0x31), uint8_t(0x40), uint8_t(0xFF)})
+        for (size_t len = 0; len <= 9; ++len) {
+            std::vector<uint8_t> f = {0, 0, 1, 0xBA, 0x21, 0, 1, 0, 1, 0x80, 0, 1, 0, 0, 1, 0xE0, 0, uint8_t(len)};
+            for (size_t k = 0; k < len; ++k) f.push_back(k == 0 ? first : uint8_t(0x01));
+            const std::vector<uint8_t> exact(f.begin(), f.end());
+            bv::SfdStreams             s;
+            std::string                err;
+            if (!bv::demux_sfd(exact, s, &err)) {
+                ++refused;
+                BS_CHECK(!err.empty());
+            }
+        }
+    BS_CHECK(refused >= 30);
+}
+
 // Bloco montado a mao: escala, nibbles com sinal (alto primeiro) e o preditor de 2 coeficientes,
 // conferidos contra a formula escrita aqui (independente do decodificador).
 BS_TEST(video_adx_block_by_hand) {
