@@ -12,9 +12,14 @@ V1.000) para C++ nativo em Windows x64. Arquitetura e decisões em
   arquitetura, apresentar opções e esperar a escolha do mantenedor.
 - Licença MIT: não copiar código GPL (Flycast, N64ModernRuntime) nem de projetos
   sem licença. Usá-los só como referência de comportamento.
+- **Dependências (regra permanente, 2026-11-03):** nenhuma dependência de compilação, execução ou distribuição pode exigir
+  licença paga, royalties, assinatura, autorização comercial individual ou restrição incompatível com distribuição pública,
+  gratuita e open source. Permissivas (MIT, BSD, Apache-2.0, zlib) são preferidas; GPL, LGPL e MPL valem com as obrigações
+  cumpridas. Conferir também patentes (codecs), marcas e ativos. Não trocar componente funcional só por preferência; toda troca
+  tem análise de impacto, testes dirigidos, revisão Codex e prova de equivalência. Inventário: `docs/N9-L-LICENCAS.md`.
 - `STATUS.md` registra cada verificação com data e método.
 - Commits só quando o mantenedor pedir.
-- **N9 (Remasterização)** foi autorizado em 2026-11-02 (`docs/N9-PLANO.md`). N9.0 fechado (`docs/N9-0-EDICOES.md`). Próximo: **N9-L, Linux nativo** (`docs/N9-L-PLANO.md`), só depois da aprovação do plano; N9.1, N9.2 e N10 bloqueados até lá. Cada subetapa
+- **N9 (Remasterização)** foi autorizado em 2026-11-02 (`docs/N9-PLANO.md`). N9.0 fechado (`docs/N9-0-EDICOES.md`). Próximo: **N9-L, Linux nativo** (`docs/N9-L-PLANO.md`), só depois da aprovação do plano; N9.1, N9.2 e N10 bloqueados até lá. Validação nativa prioritária no **Bazzite** (`docs/N9-L-ROTEIRO-BAZZITE.md`; o roteiro Ubuntu fica como alternativa). Cada subetapa
   passa pelo C8 (`tools/dev/test_campanha.py --casos C8`, seção 14.2) e o N9.5–N9.8 não começa com o N7 aberto. Regras permanentes: um projeto e um núcleo C++ com **duas
   edições** (Original e Remastered), escolhidas pelo Recompiler por um perfil de edição separado das preferências; a
   **edição Original** continua fiel ao Dreamcast e validada contra as referências; na **Remastered a câmera Livre é

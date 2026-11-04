@@ -215,6 +215,35 @@ Autorizada pelo mantenedor em 2026-11-03: preparar a validação conjunta, sem i
   sessão.
 - **Nada aprovado:** A1, A2 (no hardware), A5, A7, A8, A9 e A11 só passam a aprovados com as evidências da sessão.
 
+### 6.4 Bazzite como ambiente prioritário e política de licenças (2026-11-03)
+
+Decisão do mantenedor em 2026-11-03: a validação nativa passa a ser no **Bazzite** (Fedora Atomic), no lugar da sessão em
+Ubuntu, que fica preservada como alternativa.
+
+- **Roteiro:** `docs/N9-L-ROTEIRO-BAZZITE.md`.
+  - Dois modos:
+    - **P, prévia ao vivo**, sem instalar nada. O ambiente ao vivo das ISOs é sempre a imagem base, com outro kernel e sem o
+      driver da NVIDIA, e não valida o Bazzite.
+    - **V, `bazzite-nvidia-open` instalado num SSD externo dedicado**, só com autorização. É o único modo que valida o
+      Bazzite e o que roda o A7.2 no driver da NVIDIA.
+  - Os mesmos scripts, que agora reconhecem o Fedora: `/run/media`, `/var/home`, `rpm`/`rpm-ostree`, SELinux e o nome de
+    máquina `bazzite`.
+  - O A11 trata o `ffmpeg` sem H.264, que pode acontecer no Fedora e derivados.
+  - Game Mode (Feral) como G.1; o modo de jogo do Steam fica na L6.
+- **Ambiente validado:** o Bazzite só passa a validado com as evidências, e só para a imagem e a versão registradas. **O
+  SteamOS não fica validado pelos resultados do Bazzite.**
+- **Política de dependências** (regra permanente; inventário e propostas em `docs/N9-L-LICENCAS.md`): nenhuma dependência de
+  compilação, execução ou distribuição pode exigir pagamento, royalties, assinatura, autorização comercial individual ou
+  restrição incompatível com uma distribuição pública, gratuita e open source.
+  - Propostas que esperam aprovação:
+    - S1: llvm-mingw no Windows;
+    - S2: poda do Zig e textos completos;
+    - S3: SFD pelo pl_mpeg no Windows, opcional;
+    - S4: formatos de mod sem taxa;
+    - S5: CMake com OpenSSL 3.
+  - Nenhuma foi iniciada.
+- **A release v0.8.0** depende também das obrigações de distribuição (pendências da seção 7 de `N9-L-LICENCAS.md`).
+
 ## 7. Publicação da v0.8.0
 
 Autorizada antecipadamente, condicionada a todos os critérios acima:

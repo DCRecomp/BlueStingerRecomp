@@ -4325,6 +4325,78 @@ não por uma única bateria contínua** (decisão do mantenedor, 2026-11-02).
 - **Pendências:** H9; D-N8-4 no gate pós-N9; ressalva do 7.1 e D-K1(a); limite de 3 h de `n6_h` no executor, defeito a
   corrigir antes de uma futura integral, sem enfraquecer os testes. N9 e N10 não iniciados.
 
+### N9-L: Bazzite como ambiente prioritário e política de licenças (2026-11-03/04)
+
+Decisão do mantenedor: a validação nativa passa ao **Bazzite**; o roteiro do Ubuntu fica preservado. Regra permanente nova:
+nenhuma dependência paga, com royalties ou incompatível com distribuição pública, gratuita e open source (`CLAUDE.md`).
+Autorizados só a auditoria, o planejamento e os roteiros. **Nada foi substituído, nenhum critério de hardware foi executado,
+nada foi aprovado, sem commit.**
+
+- **Roteiro** `docs/N9-L-ROTEIRO-BAZZITE.md`. Dois modos:
+  - **P, prévia ao vivo**, sem instalar nada.
+  - **V, `bazzite-nvidia-open` instalado num SSD externo dedicado**, só com autorização. É o único modo que valida o Bazzite e
+    roda o A7.2 no driver da NVIDIA.
+  - Motivo: o ambiente ao vivo das ISOs é a imagem base, com outro kernel e sem o driver da NVIDIA (README do
+    `ublue-os/bazzite`), e a documentação pede para não jogar nele. Achado do Codex, conferido nas duas fontes.
+- **Scripts** (os mesmos do Ubuntu, `tools/dist/linux/ubuntu/`):
+  - `comum.sh`:
+    - nomes de máquina padrão (`ubuntu`, `bazzite`, `fedora`, `localhost`, `localhost-live`) não são tirados do texto
+      (`bazzite` é também o `ID` do `os-release`);
+    - `/var/home/<usuário>` vira `~`;
+    - `BS_TRAB` padrão em `/run/media`.
+  - `coletar.sh`:
+    - `rpm -q`, `rpm-ostree status --booted` (com os pacotes acrescentados, prova de sistema intacto), `getenforce`,
+      `gamemoded -v`;
+    - os decodificadores do `ffmpeg`, os módulos `xone`/`hid_steam` e se o Steam está aberto.
+  - `filmes.sh`: com um `ffmpeg` sem H.264, novo caso `A11.mod-ffmpeg-sem-codec`: o jogo tem de tocar o original e avisar.
+  - `jogar.sh`: `BS_PREFIXO=<programa>` para o `gamemoderun`, validado (só um nome, procurado no `PATH`).
+- **Simulação no WSL** (pasta de troca de teste, `rpm`, `rpm-ostree`, `getenforce`, `gamemoded` e `ffmpeg` simulados):
+  - filtro e varredura: `ID=bazzite` fica; um nome de máquina próprio sai (`<maquina>`) e bloqueia o pacote na varredura;
+  - `/run/media/<usuário>` e `/var/home/<usuário>` saem, com `HOME=/home/…` e com `HOME=/var/home/…`;
+  - retrato com os blocos novos;
+  - `BS_PREFIXO` com `;` recusado; programa ausente, recusado.
+  - `filmes.sh mods` com o jogo real e um `ffmpeg` sem H.264:
+    - `A11.mod-sem-decodificador` ok;
+    - `A11.mod-ffmpeg-sem-codec` ok: o catálogo diz `NEWGAME.MP4 sem decodificador neste sistema (instale o ffmpeg): toca o
+      filme original`, e o NEWGAME termina em 452 785 ms contra 452 766 do manifesto;
+    - `A11.mod-mp4-ffmpeg` fica `nao-feito`, com o motivo;
+    - mod apagado no fim.
+  - Os casos de mod vazio e truncado (código sem mudança) não foram repetidos.
+- **Defeitos achados e corrigidos:**
+  - a primeira montagem do teste copiou o jogo sem `data/`, e o caso esperou numa caixa de erro (montagem do teste, não do
+    script);
+  - `/var/home/<usuário>` virava `/var~` quando a `HOME` era `/home/<usuário>`;
+  - o `rpm-ostree` filtrava as linhas `LayeredPackages`, que provam que o sistema está como veio.
+- **Licenças** (`docs/N9-L-LICENCAS.md`, reescrito: política, matriz de Windows, Linux, sistema, opcionais e desenvolvimento,
+  propostas S1–S5, textos exigidos). Nenhum componente distribuído pede pagamento.
+  - Em análise:
+    - **MSVC e Windows SDK** (proprietários, não redistribuíveis) e o runtime do MSVC copiado no Builder: S1, llvm-mingw;
+    - 13 fontes da glibc compiladas sem a exceção de ligação.
+  - Achados novos sem texto no pacote: o CMake 3.30.5 embute **OpenSSL 1.1.1v** (licença OpenSSL/SSLeay, fora de suporte),
+    jsoncpp, bzip2 e cppdap.
+  - HEVC no Windows pode exigir pacote pago: os mods precisam de documentação (S4).
+- **Poda do Zig medida** numa cópia, sem tocar no pacote:
+  - 15 373 → 4 176 arquivos, 309 → 209 MB, `tar.gz` do Zig 74,4 → 60,2 MB (pacote ~90,9 → ~76,7 MB);
+  - `zig c++` (libc++, `std::thread`, `std::filesystem`) e `zig cc` (libm) compilam e rodam com cache vazio;
+  - os 979 cabeçalhos do kernel continuam, então a GPL-2.0 com a syscall-note continua obrigatória.
+- **Codex** `reviews/codex-20261103-234239.md`: 5 achados; 4 aceitos, 1 rejeitado com prova (tabela em "Revisões
+  independentes").
+- **Estado:**
+  - HEAD `03dfad2`, 17 commits locais sem push;
+  - `known_versions.h` particular com `C4AD9E1A…`;
+  - o `preparar_pendrive.ps1` recusa ferramentas sem commit, então a sessão precisa de um commit autorizado antes;
+  - pastas de teste (`bazzite-teste`, `zigpoda-teste`) apagadas.
+- **Commit autorizado (2026-11-04):** o mantenedor autorizou commits locais separados (roteiro; licenças; scripts; `CLAUDE.md`,
+  `STATUS.md` e plano), sem push. Antes:
+  - varredura de publicação das mudanças (as funções do `varre_publicacao.py` sobre o diff): 10 arquivos, 0 achados; depois,
+    a faixa `origin/master..master`;
+  - `bash -n` nos 7 scripts e o analisador do PowerShell no `preparar_pendrive.ps1`: sem erros;
+  - `ctest --preset msvc-debug`: 28/28 sem o disco e 28/28 com a imagem real (nenhum código C++ mudou);
+  - fora dos commits: `known_versions.h` (particular, `C4AD9E1A…` conferido), `docs/DISTRIBUICAO-COMPILADOR.md`
+    (particular), `_bs-extract.exe` e `tools/extractor/build/`.
+  - A pasta do repositório passou a pertencer a `BUILTIN\Administradores`: o git recusa sem `safe.directory`. Usado só por
+    comando (`-c safe.directory`), sem configuração global; a troca do dono aguarda a confirmação do mantenedor.
+
 ### N9-L: preparação da sessão em Ubuntu nativo de L3, L4 e L5 (2026-11-03)
 
 Autorizada pelo mantenedor em 2026-11-03, depois de considerar concluída a implementação técnica da L5. Só prepara: **nenhum
@@ -4611,6 +4683,16 @@ Contrato em `docs/N9-0-EDICOES.md`. O mesmo executável roda as duas edições, 
 - **Não feito nesta etapa:** tela de edição (N9.1), preset Remastered (N9.5–N9.8).
 
 ## Revisões independentes (Codex)
+
+### 2026-11-03: N9-L, Bazzite e licenças. Relatório `reviews/codex-20261103-234239.md` (5 achados)
+
+| Achado | Decisão |
+|---|---|
+| ALTA: o ambiente ao vivo das ISOs é a imagem base (sem driver da NVIDIA, outro kernel) e não valida o `bazzite-nvidia-open` | **aceito**, conferido no README do `ublue-os/bazzite` e no guia de instalação: roteiro com modo P (prévia) e modo V (instalado, com autorização); só o V valida o Bazzite e roda o A7.2 na NVIDIA |
+| MÉDIA: `/run/media/<usuário>` não seria anonimizado | **rejeitado com prova**: as expressões de `/media/<usuário>/` casam dentro de `/run/media/…`; a simulação mostra `/run/media/<usuario>/BS-TROCA` |
+| BAIXA: "nada é instalado" não bate com o `instalar.sh` na HOME | **aceito**: o texto diz agora que nada entra na imagem do sistema e que o Builder fica só na pasta pessoal da sessão |
+| BAIXA: `lib/tsan` fora da matriz | **aceito**: linha nova (análise ou poda) |
+| BAIXA: "HEVC exige pacote pago" absoluto demais | **aceito**: "pode exigir um pacote opcional pago e não está garantido em toda instalação" |
 
 ### 2026-11-03: N9-L, preparação da sessão em Ubuntu nativo. Relatório `reviews/codex-20261103-210454.md` (5 achados)
 
