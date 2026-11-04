@@ -4381,6 +4381,20 @@ posterior. Sem N9.1, N9.2 e N10; a publicação não valida L3–L6 nem substitu
 - **Codex:** `reviews/codex-20261104-103026.md` (5 achados) e `reviews/codex-20261104-115430.md` (4 achados): tabelas em
   "Revisões independentes".
 
+- **Publicação (2026-11-04):**
+  - `master` enviado (`2261327..22396c1`, fast-forward, sem force); varredura `origin/master..master`: 28 commits, 0 achados;
+    `known_versions.h` e `DISTRIBUICAO-COMPILADOR.md` sem mudança na faixa.
+  - Tag anotada `v0.8.0` (objeto `ef21a5e8`) em `22396c1`; nenhuma tag existente foi alterada.
+  - Release **Pre-release** https://github.com/DCRecomp/BlueStingerRecomp/releases/tag/v0.8.0, com:
+    - `BlueStinger-Builder-v0.8.0-win-x64.zip`, 10 049 316 B, `5da28203…ece62`;
+    - `BlueStinger-Builder-v0.8.0-linux-x86_64.tar.gz`, 90 915 196 B, `a4ebfc69…436710d`;
+    - `SHA256SUMS-v0.8.0.txt`.
+  - Os três baixados de volta do GitHub conferem com o `SHA256SUMS`.
+  - Ensaio no WSL do fluxo do usuário, como uid 1000 numa HOME nova, com o pacote baixado do GitHub: `sha256sum -c` ok;
+    `instalar.sh --atalho` instala em `~/.local/share` sem root; `--verificar` confere 18 274 arquivos; o atalho `bs-builder`
+    responde com o código 2.
+  - **Não valida** L3–L6 nem os critérios A1 e A5–A12: a release existe para os testes no Bazzite.
+
 ### N9-L: Bazzite como ambiente prioritário e política de licenças (2026-11-03/04)
 
 Decisão do mantenedor: a validação nativa passa ao **Bazzite**; o roteiro do Ubuntu fica preservado. Regra permanente nova:
