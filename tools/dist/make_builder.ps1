@@ -125,9 +125,11 @@ if (-not $version) { $version = "desconhecida" }
 if ($Versao) {
     if ($Versao -notmatch '^v[0-9]+\.[0-9]+\.[0-9]+[A-Za-z0-9.+-]*$') { Fail "rotulo de versao invalido: $Versao" }
     if ($locais) { Fail "-Versao (release) nao aceita -LegendasLocais nem -IconeLocal" }
-    # a arvore inteira igual ao commit (o proprio script, o sdl3_avisos.py, os textos e o kit), menos o known_versions.h
-    # particular, que o kit sempre le do commit; arquivos nao rastreados nao entram (o kit usa so os rastreados)
-    $sujos = @(git -C $repo status --porcelain --untracked-files=no | Where-Object { $_ -notmatch ' tools/extractor/known_versions\.h$' })
+    # a arvore inteira igual ao commit (o proprio script, o sdl3_avisos.py, os textos e o kit), menos os dois arquivos
+    # particulares do mantenedor: o known_versions.h (o kit sempre le o do commit; o build ja foi conferido acima) e o
+    # docs/DISTRIBUICAO-COMPILADOR.md (fora do kit). Arquivos nao rastreados nao entram (o kit usa so os rastreados)
+    $sujos = @(git -C $repo status --porcelain --untracked-files=no |
+               Where-Object { $_ -notmatch ' (tools/extractor/known_versions\.h|docs/DISTRIBUICAO-COMPILADOR\.md)$' })
     if ($sujos) { Fail ("-Versao exige o kit igual ao commit; mudancas: " + ($sujos -join '; ')) }
     $version = "$Versao (" + (git -C $repo rev-parse --short=10 HEAD).Trim() + ")"
 }
