@@ -92,6 +92,10 @@ printf '%s\n' "$versao" > "$stage/kit/VERSION"
 copia_fontes "$deps/tomlplusplus" "$stage/kit/third_party/tomlplusplus"
 copia_fontes "$deps/freetype" "$stage/kit/third_party/freetype"
 mkdir -p "$stage/kit/third_party/SDL3-linux"; cp -a "$sdl3/." "$stage/kit/third_party/SDL3-linux/"
+# o sdl3.pc grava o prefixo da maquina que compilou o SDL3 (caminho e nome de usuario): relativo a ele mesmo. O jogo usa o
+# pacote CONFIG do CMake (app/CMakeLists.txt), nao o pkg-config
+pc=$stage/kit/third_party/SDL3-linux/lib/pkgconfig/sdl3.pc
+[ -f "$pc" ] && sed -i 's|^prefix=.*|prefix=${pcfiledir}/../..|' "$pc"
 
 passo "licencas e textos"
 L=$stage/licencas; K=$stage/kit
@@ -163,10 +167,13 @@ else
     echo "aviso: sem --game-data; conferencia so por nomes"
 fi
 # nenhum caminho do ambiente de desenvolvimento nos binarios nossos (o bs-builder e o SDL3 pre-compilado)
-for p in "$repo" "$HOME" "$work"; do
+for p in "$repo" "$HOME" "$work" "$sdl3"; do
     for bin in "$stage/bs-builder" "$stage/kit/third_party/SDL3-linux/lib/libSDL3.a"; do
         if grep -qaF -- "$p" "$bin"; then falha "$(basename "$bin") contem o caminho '$p'"; fi
     done
+    # e em qualquer outro arquivo do pacote (texto do pkg-config, CMake gerado...): v0.8.0, o sdl3.pc levava o HOME
+    achou=$(grep -rlaF -- "$p" "$stage" | head -3 || true)
+    [ -z "$achou" ] || falha "caminho de desenvolvimento '$p' em: $achou"
 done
 # dependencias dinamicas: so a base do sistema (glibc e o carregador)
 deps_bin=$(readelf -d "$stage/bs-builder" | sed -n 's/.*Shared library: \[\(.*\)\]/\1/p' | sort -u | tr '\n' ' ')
