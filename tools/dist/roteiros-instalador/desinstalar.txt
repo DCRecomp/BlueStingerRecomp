@@ -1,0 +1,8 @@
+# N9.1: desinstalacao pela tela do desinstalador, so pelo teclado (sem janela). O botao Desinstalar nao e o padrao da tela
+# (acao destrutiva): Tab ate ele. Ordem: caixa do trabalho, Cancelar, Desinstalar.
+confere desinstalar
+tecla Tab 3
+tecla Enter
+espera desinstalar-fim 600
+estado des.ok 1
+captura desinstalar-fim

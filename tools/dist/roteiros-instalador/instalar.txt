@@ -1,0 +1,29 @@
+# N9.1: instalacao limpa da edicao Remastered so pelo teclado (test_instalador.ps1, I1). @CDI@ e @PASTA@ sao trocados.
+confere boas-vindas
+estado encontradas 0
+tecla Enter
+espera edicao 10
+tecla Tab
+tecla Direita
+estado edicao remastered
+tecla Enter
+espera cdi 10
+tecla Tab
+tecla SelecionarTudo
+texto @CDI@
+repete Enter ate componentes 120
+tecla Enter
+espera pasta 10
+tecla Tab
+tecla SelecionarTudo
+texto @PASTA@
+captura pasta
+tecla Enter
+espera progresso 10
+captura progresso
+espera conclusao 3600
+captura conclusao
+estado res.ok 1
+estado atalhos 1
+estado recuos 0
+estado encontradas 1

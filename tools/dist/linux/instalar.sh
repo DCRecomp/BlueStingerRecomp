@@ -7,7 +7,8 @@
 #
 # Regras:
 # - So escreve no destino e em pastas temporarias ao lado dele (<destino>.novo-*, <destino>.troca, <destino>.anterior).
-#   --atalho e o unico passo fora disso: um link em ~/.local/bin/bs-builder (nunca substitui um arquivo que nao e nosso).
+#   --atalho e o unico passo fora disso: um link em ~/.local/bin/bs-builder (nunca substitui um arquivo que nao e nosso) e,
+#   desde o N9.1, o instalador grafico no menu de aplicativos (~/.local/share/applications/bluestinger-recompiler.desktop).
 # - O pacote e conferido (SHA256SUMS.txt) antes de qualquer mudanca; a copia nova e conferida de novo no destino.
 # - A troca e por rename: uma interrupcao deixa a instalacao anterior ou a nova, nunca uma mistura. Uma troca
 #   interrompida no meio e desfeita na proxima execucao.
@@ -197,6 +198,19 @@ if [ "$atalho" = 1 ]; then
         fi
     else
         info "aviso: $alvo ja existe e nao e um link; nao foi mudado"
+    fi
+    # N9.1: o instalador grafico no menu de aplicativos (so o nosso arquivo, por nome fixo)
+    if [ -x "$destino/BlueStinger-Recompiler" ]; then
+        apps=${XDG_DATA_HOME:-$HOME/.local/share}/applications
+        mkdir -p "$apps"
+        esc=$(printf '%s' "$destino/BlueStinger-Recompiler" | sed 's/[\\"`$]/\\&/g')
+        {
+            echo "[Desktop Entry]"; echo "Type=Application"; echo "Version=1.5"
+            echo "Name=Blue Stinger Recompiler"; echo "Comment=Instala o Blue Stinger a partir da sua copia do jogo"
+            echo "Exec=\"$esc\""; echo "Terminal=false"; echo "Categories=Game;"
+        } > "$apps/bluestinger-recompiler.desktop.tmp"
+        mv -f "$apps/bluestinger-recompiler.desktop.tmp" "$apps/bluestinger-recompiler.desktop"
+        info "menu de aplicativos: $apps/bluestinger-recompiler.desktop"
     fi
 fi
 

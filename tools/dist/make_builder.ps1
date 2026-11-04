@@ -55,12 +55,13 @@ if (-not $NoBuild) {
     try {
         cmake --preset msvc-release | Out-Null
         if ($LASTEXITCODE -ne 0) { Fail "configuracao do CMake falhou" }
-        cmake --build --preset msvc-release --target BlueStinger-Recompiler BlueStinger-Developer bs-builder
+        cmake --build --preset msvc-release --target BlueStinger-Recompiler BlueStinger-Desinstalar BlueStinger-Developer bs-builder
         if ($LASTEXITCODE -ne 0) { Fail "compilacao falhou" }
     } finally { Pop-Location }
 }
 $sdl = Join-Path $build "_deps\sdl3-src"
-foreach ($f in "builder\BlueStinger-Recompiler.exe", "builder\BlueStinger-Developer.exe", "builder\bs-builder.exe", "_deps\sdl3-src\CMakeLists.txt", "_deps\tomlplusplus-src\LICENSE") {
+# N9.1: o BlueStinger-Desinstalar.exe fica ao lado do instalador, que o leva para o pacote de cada jogo instalado
+foreach ($f in "builder\BlueStinger-Recompiler.exe", "builder\BlueStinger-Desinstalar.exe", "builder\BlueStinger-Developer.exe", "builder\bs-builder.exe", "_deps\sdl3-src\CMakeLists.txt", "_deps\tomlplusplus-src\LICENSE") {
     if (-not (Test-Path (Join-Path $build $f))) { Fail "falta $build\$f" }
 }
 
@@ -69,6 +70,7 @@ if (Test-Path -LiteralPath $stage) { Remove-Item -Recurse -Force -LiteralPath $s
 New-Item -ItemType Directory -Force -Path $stage, "$stage\licencas", "$stage\kit" | Out-Null
 Step "montando $stage"
 Copy-Item (Join-Path $build "builder\BlueStinger-Recompiler.exe") $stage
+Copy-Item (Join-Path $build "builder\BlueStinger-Desinstalar.exe") $stage
 Copy-Item (Join-Path $build "builder\BlueStinger-Developer.exe") $stage
 Copy-Item (Join-Path $build "builder\bs-builder.exe") $stage
 $crt = Get-ChildItem -Directory (Join-Path $env:VCToolsRedistDir "x64") -Filter "Microsoft.VC*.CRT" | Select-Object -First 1
@@ -172,7 +174,7 @@ if ($LASTEXITCODE -ne 0) { Fail "third_party\licencas\SDL3-avisos-terceiros.txt 
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot "LEIA-ME-BUILDER.txt") -Destination "$stage\LEIA-ME.txt"
 
 # dependencias dos executaveis
-foreach ($exe in "BlueStinger-Recompiler.exe", "BlueStinger-Developer.exe", "bs-builder.exe") {
+foreach ($exe in "BlueStinger-Recompiler.exe", "BlueStinger-Desinstalar.exe", "BlueStinger-Developer.exe", "bs-builder.exe") {
     $deps = (dumpbin /nologo /dependents (Join-Path $stage $exe)) | Where-Object { $_ -match '^\s+(\S+\.dll)\s*$' } | ForEach-Object { $Matches[1] }
     foreach ($d in $deps) {
         if ($d -match '^api-ms-win-' -or (Test-Path (Join-Path $stage $d))) { continue }

@@ -62,9 +62,10 @@ copia_fontes() {  # <origem> <destino>
     else mkdir -p "$2"; cp -a "$1/." "$2/"; rm -rf "$2/.git"; fi
 }
 
-passo "compilando o bs-builder (Release)"
+passo "compilando o bs-builder e o instalador (Release)"
+# N9.1: o instalador grafico (BlueStinger-Recompiler) e o desinstalador saem do SDL3 pre-compilado do kit, estatico
 args=(-S "$work/src" -B "$work/build" -G Ninja -DCMAKE_BUILD_TYPE=Release -DBS_BUILD_TESTS=OFF -DBS_BUILD_GAME=OFF
-      -DBS_BUILD_TOOLS=ON -DFETCHCONTENT_FULLY_DISCONNECTED=ON
+      -DBS_BUILD_TOOLS=ON -DFETCHCONTENT_FULLY_DISCONNECTED=ON -DBS_SDL3_PREBUILT="$sdl3"
       -DFETCHCONTENT_SOURCE_DIR_TOMLPLUSPLUS="$deps/tomlplusplus" -DFETCHCONTENT_SOURCE_DIR_FREETYPE="$deps/freetype")
 if [ -n "$toolchain" ]; then
     args+=(-DCMAKE_TOOLCHAIN_FILE="$toolchain/bs-toolchain.cmake"); cmakebin=$toolchain/cmake/bin/cmake
@@ -79,9 +80,12 @@ args+=(-DCMAKE_C_FLAGS="-ffile-prefix-map=$work/src=bs -ffile-prefix-map=$deps=d
 # "-" na pasta atual, em vez da saida padrao; fora dela ele apareceria em quem chamou o script
 mkdir -p "$work/build"
 (cd "$work/build" && "$cmakebin" "${args[@]}") > "$work/configure.txt" 2>&1 || { tail -30 "$work/configure.txt"; falha "configuracao do CMake"; }
-"$cmakebin" --build "$work/build" --target bs-builder > "$work/build.txt" 2>&1 || { grep -E 'error|FAILED' "$work/build.txt" | head -30; falha "compilacao"; }
-cp "$work/build/builder/bs-builder" "$stage/bs-builder"
-strip --strip-unneeded "$stage/bs-builder" 2>/dev/null || true
+binarios=(bs-builder BlueStinger-Recompiler BlueStinger-Desinstalar)
+"$cmakebin" --build "$work/build" --target "${binarios[@]}" > "$work/build.txt" 2>&1 || { grep -E 'error|FAILED' "$work/build.txt" | head -30; falha "compilacao"; }
+for b in "${binarios[@]}"; do
+    cp "$work/build/builder/$b" "$stage/$b"
+    strip --strip-unneeded "$stage/$b" 2>/dev/null || true
+done
 
 passo "kit de fontes"
 entradas=(CMakeLists.txt LICENSE app runtime tools/extractor tools/dist/LEIA-ME.txt config tools/dcmap native legacy transitional
@@ -118,7 +122,7 @@ sdlv=$(sed -n 's/^set(PACKAGE_VERSION "\([0-9.]*\)").*/\1/p' "$sdl3/lib/cmake/SD
 avv=$(sed -n '1s/^Avisos de terceiros dentro do SDL3 \([0-9.]*\) .*/\1/p' "$T/SDL3-avisos-terceiros.txt")
 [ -n "$sdlv" ] && [ "$sdlv" = "$avv" ] || falha "SDL3 pre-compilado $sdlv, avisos de terceiros do SDL3 $avv"
 cp "$work/src/tools/dist/linux/LEIA-ME-BUILDER.txt" "$stage/LEIA-ME.txt"
-cp "$work/src/tools/dist/linux/instalar.sh" "$stage/instalar.sh"; chmod 755 "$stage/instalar.sh" "$stage/bs-builder"
+cp "$work/src/tools/dist/linux/instalar.sh" "$stage/instalar.sh"; chmod 755 "$stage/instalar.sh" "$stage/bs-builder" "$stage/BlueStinger-Recompiler" "$stage/BlueStinger-Desinstalar"
 if [ -n "$toolchain" ]; then
     passo "compilador portatil"
     mkdir -p "$stage/toolchain"; cp -a "$toolchain/." "$stage/toolchain/"
@@ -168,25 +172,34 @@ else
 fi
 # nenhum caminho do ambiente de desenvolvimento nos binarios nossos (o bs-builder e o SDL3 pre-compilado)
 for p in "$repo" "$HOME" "$work" "$sdl3" "$deps" "$out" ${toolchain:+"$toolchain"} "${TMPDIR:-/tmp}/bs-"; do
-    for bin in "$stage/bs-builder" "$stage/kit/third_party/SDL3-linux/lib/libSDL3.a"; do
+    for bin in "$stage/bs-builder" "$stage/BlueStinger-Recompiler" "$stage/BlueStinger-Desinstalar" "$stage/kit/third_party/SDL3-linux/lib/libSDL3.a"; do
         if grep -qaF -- "$p" "$bin"; then falha "$(basename "$bin") contem o caminho '$p'"; fi
     done
     # e em qualquer outro arquivo do pacote (texto do pkg-config, CMake gerado...): v0.8.0, o sdl3.pc levava o HOME
     achou=$(grep -rlaF -- "$p" "$stage" | head -3 || true)
     [ -z "$achou" ] || falha "caminho de desenvolvimento '$p' em: $achou"
 done
-# dependencias dinamicas: so a base do sistema (glibc e o carregador)
-deps_bin=$(readelf -d "$stage/bs-builder" | sed -n 's/.*Shared library: \[\(.*\)\]/\1/p' | sort -u | tr '\n' ' ')
-for d in $deps_bin; do
-    case "$d" in libc.so.6|libm.so.6|libdl.so.2|libpthread.so.0|librt.so.1|ld-linux-x86-64.so.2) ;;
-        libstdc++.so.6|libgcc_s.so.1) [ -z "$toolchain" ] || falha "bs-builder depende de $d (o compilador portatil liga o C++ estatico)" ;;
-        *) falha "bs-builder depende de $d, fora da base do sistema" ;;
-    esac
+# dependencias dinamicas: so a base do sistema (glibc e o carregador). N9.1: o SDL3 do instalador abre X11, Wayland e o
+# portal com dlopen, so ao abrir a janela; a glibc minima de cada binario e a do alvo (2.31)
+for b in "${binarios[@]}"; do
+    db=$(readelf -d "$stage/$b" | sed -n 's/.*Shared library: \[\(.*\)\]/\1/p' | sort -u | tr '\n' ' ')
+    for d in $db; do
+        case "$d" in libc.so.6|libm.so.6|libdl.so.2|libpthread.so.0|librt.so.1|ld-linux-x86-64.so.2) ;;
+            libstdc++.so.6|libgcc_s.so.1) [ -z "$toolchain" ] || falha "$b depende de $d (o compilador portatil liga o C++ estatico)" ;;
+            *) falha "$b depende de $d, fora da base do sistema" ;;
+        esac
+    done
+    [ "$b" = bs-builder ] && deps_bin=$db
+    g=$(objdump -T "$stage/$b" | sed -n 's/.*GLIBC_\([0-9.]*\).*/\1/p' | sort -t. -k1,1n -k2,2n -u | tail -1)
+    [ -z "$toolchain" ] || [ "$(printf '%s\n2.31\n' "$g" | sort -t. -k1,1n -k2,2n | tail -1)" = 2.31 ] || falha "$b precisa da glibc $g (o alvo e 2.31)"
 done
 glibc=$(objdump -T "$stage/bs-builder" | sed -n 's/.*GLIBC_\([0-9.]*\).*/\1/p' | sort -t. -k1,1n -k2,2n -u | tail -1)
 # responde como esperado (sem argumentos: uso, codigo 2)
 set +e; "$stage/bs-builder" > /dev/null 2>&1; rc=$?; set -e
 [ "$rc" = 2 ] || falha "bs-builder montado nao respondeu (codigo $rc)"
+# o instalador grafico sem janela: as capturas de todas as telas, sem texto cortado (saida 0)
+set +e; BS_INSTALADOR_TESTE_RAIZ="$work/raiz-capturas" "$stage/BlueStinger-Recompiler" --captura "$work/capturas" --escalas 100,200 > "$work/capturas.txt" 2>&1; rc=$?; set -e
+[ "$rc" = 0 ] || { tail -5 "$work/capturas.txt"; falha "instalador grafico montado: capturas com codigo $rc"; }
 
 passo "VERSAO.txt e SHA256SUMS.txt"
 kitn=$(find "$stage/kit" -type f | wc -l); kitmb=$(du -sm "$stage/kit" | cut -f1)

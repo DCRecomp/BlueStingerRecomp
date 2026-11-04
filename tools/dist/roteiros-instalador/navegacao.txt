@@ -1,0 +1,38 @@
+# N9.1: navegacao so pelo teclado por todas as telas, sem instalar (volta da pasta ate as boas-vindas com Esc).
+# Variaveis (o test_instalador.ps1 troca): @CDI@ e @PASTA@.
+confere boas-vindas
+captura 01-boas-vindas
+tecla Enter
+espera edicao 10
+tecla Tab
+tecla Direita
+estado edicao remastered
+tecla Esquerda
+estado edicao original
+tecla Direita
+captura 02-edicao
+tecla Enter
+espera cdi 10
+tecla Tab
+tecla SelecionarTudo
+texto @CDI@
+repete Enter ate componentes 120
+estado cdi ok
+captura 03-componentes
+tecla Tab
+tecla Baixo
+tecla Espaco
+tecla Enter
+espera pasta 10
+tecla Tab
+tecla SelecionarTudo
+texto @PASTA@
+captura 04-pasta
+tecla Esc
+espera componentes 10
+tecla Esc
+espera cdi 10
+tecla Esc
+espera edicao 10
+tecla Esc
+espera boas-vindas 10

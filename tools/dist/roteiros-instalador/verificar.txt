@@ -1,0 +1,11 @@
+# N9.1: verificacao pela tela de boas-vindas, so pelo teclado (test_instalador.ps1, I5). @ESPERADO@: 1 (integra) ou 0.
+confere boas-vindas
+estado encontradas 1
+# idioma 1, idioma 2, Atualizar, Verificar
+tecla Tab 4
+tecla Enter
+espera verificar 10
+aguarda ver.ok @ESPERADO@ 900
+captura verificar-@ESPERADO@
+tecla Esc
+espera boas-vindas 10
