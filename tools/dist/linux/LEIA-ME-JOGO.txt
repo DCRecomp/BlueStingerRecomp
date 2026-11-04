@@ -75,3 +75,8 @@ Requisitos
 ----------
 Linux x86-64 com glibc 2.31 ou mais nova (Ubuntu 20.04+, SteamOS 3), Vulkan ou nada (software),
 PipeWire, PulseAudio ou ALSA. A versao, a data e o compilador da compilacao estao em VERSAO.txt.
+
+Licencas
+--------
+Textos em licencas/. Portions of this software are copyright (C) 2024 The FreeType Project
+(www.freetype.org). All rights reserved.

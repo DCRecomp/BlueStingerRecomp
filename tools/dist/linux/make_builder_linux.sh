@@ -104,12 +104,21 @@ cp "$K/third_party/pl_mpeg/LICENSE" "$L/pl_mpeg-MIT.txt"
 cp "$K/third_party/dr_libs/LICENSE" "$L/dr_flac-MIT0.txt"
 cp "$K/third_party/xiph/libogg/COPYING" "$L/libogg-BSD.txt"; cp "$K/third_party/xiph/libvorbis/COPYING" "$L/libvorbis-BSD.txt"
 cp "$K/third_party/vulkan/Apache-2.0.txt" "$L/Vulkan-Headers-Apache-2.0.txt"
+# v0.8.0 (docs/N9-L-LICENCAS.md, secao 7): avisos de terceiros do SDL3, HIDAPI, yuv2rgb, creditos e procedencia
+T=$work/src/third_party/licencas
+for f in AVISOS.txt SDL3-avisos-terceiros.txt HIDAPI-LICENSE.txt HIDAPI-LICENSE-bsd.txt yuv2rgb-BSD-3.txt; do
+    [ -f "$T/$f" ] || falha "falta third_party/licencas/$f"; cp "$T/$f" "$L/$f"
+done
 cp "$work/src/tools/dist/linux/LEIA-ME-BUILDER.txt" "$stage/LEIA-ME.txt"
 cp "$work/src/tools/dist/linux/instalar.sh" "$stage/instalar.sh"; chmod 755 "$stage/instalar.sh" "$stage/bs-builder"
 if [ -n "$toolchain" ]; then
     passo "compilador portatil"
     mkdir -p "$stage/toolchain"; cp -a "$toolchain/." "$stage/toolchain/"
     mkdir -p "$L/compilador"; cp -a "$toolchain/licencas/." "$L/compilador/"
+    # textos que o toolchain nao traz (kernel GPL-2.0 com a syscall-note, LGPL-2.1, APSL-2.0, componentes do CMake):
+    # do repositorio, com a procedencia; o toolchain/ fica como foi testado
+    for f in "$T"/compilador/*.txt; do cp "$f" "$L/compilador/$(basename "$f")"; done
+    [ -f "$L/compilador/GPL-2.0.txt" ] && [ -f "$L/compilador/Linux-syscall-note.txt" ] || falha "faltam os textos do kernel"
 fi
 
 passo "conferencias"

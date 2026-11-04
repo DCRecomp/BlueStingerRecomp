@@ -84,3 +84,10 @@ Problemas comuns
 - Antivirus: alguns analisam cada arquivo compilado e deixam a compilacao bem mais lenta.
 
 A versao e a data desta distribuicao estao em VERSAO.txt.
+
+Licencas
+--------
+O projeto e MIT. Os textos de licenca, os avisos de terceiros (SDL3, HIDAPI, yuv2rgb, fdlibm), os
+termos do Microsoft C++ e do runtime ao lado dos executaveis e a procedencia de cada componente estao
+em licencas\ (comece por licencas\AVISOS.txt). O Visual Studio Build Tools e instalado e aceito por
+voce, nos termos da Microsoft; ele nao faz parte desta distribuicao.

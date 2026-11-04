@@ -16,8 +16,9 @@ publique.
 
 Requisitos
 ----------
-- Linux x86-64 (Ubuntu 22.04 ou mais novo, SteamOS 3). Nada para instalar no sistema quando o
-  pacote traz o compilador (pasta toolchain/; veja VERSAO.txt).
+- Linux x86-64 (Ubuntu 22.04 ou mais novo, SteamOS 3; Bazzite e Fedora em validacao). Nada para
+  instalar no sistema quando o pacote traz o compilador (pasta toolchain/; veja VERSAO.txt). Nao
+  precisa de root, Wine, Proton nem de pacotes do sistema (no Bazzite: nada de rpm-ostree).
 - A imagem CDI do Blue Stinger NTSC-U (V1.000). Outras versoes sao recusadas.
 - Cerca de 1,5 GB livres (dados do jogo, jogo compilado e cache de compilacao) e 4 GB de memoria.
 
@@ -70,4 +71,21 @@ Problemas comuns
 - Pasta montada sem execucao (noexec): o instalador avisa; instale em outra pasta.
 - Detalhes de qualquer falha: <saida>/.bs-build/builder.log.
 
+Diagnostico
+-----------
+- Antes de instalar: sha256sum -c BlueStinger-Builder-<versao>-linux-x86_64.tar.gz.sha256
+- Instalacao: ./instalar.sh --verificar (SHA-256 de cada arquivo instalado).
+- Builder: <saida>/.bs-build/builder.log; BS_BUILDER_VERBOSE=1 mostra tudo no terminal.
+- Jogo: bluestinger.log (veja o LEIA-ME do jogo). Para a GPU: vulkaninfo --summary; para escolher uma
+  GPU, BS_VULKAN_GPU=<parte do nome>.
+- Ao relatar um problema, anexe os logs e o VERSAO.txt; nunca anexe o CDI, a pasta data/ ou saves.
+
 O projeto C++ editavel (mods em C++) existe so no Builder do Windows nesta versao.
+
+Licencas
+--------
+Os textos de licenca, os avisos de terceiros (SDL3, HIDAPI, yuv2rgb, fdlibm, OpenSSL do CMake), os
+cabecalhos do kernel (GPL-2.0 com a Linux-syscall-note), a glibc (LGPL-2.1) e a procedencia de cada
+componente estao em licencas/ (comece por licencas/AVISOS.txt).
+Portions of this software are copyright (C) 2024 The FreeType Project (www.freetype.org). All rights
+reserved.

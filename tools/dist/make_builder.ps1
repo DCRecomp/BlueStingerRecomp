@@ -18,7 +18,9 @@ param(
     [string]$Out = "",
     [switch]$NoBuild,
     [switch]$LegendasLocais,
-    [switch]$IconeLocal
+    [switch]$IconeLocal,
+    # rotulo de uma release (ex.: v0.8.0): so com o kit e os textos iguais ao commit (sem mudancas na arvore de trabalho)
+    [string]$Versao = ""
 )
 $ErrorActionPreference = 'Stop'
 $repo = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
@@ -111,6 +113,14 @@ if ($IconeLocal) {
 }
 $version = (git -C $repo describe --always --dirty --abbrev=7 2>$null)
 if (-not $version) { $version = "desconhecida" }
+if ($Versao) {
+    if ($Versao -notmatch '^v[0-9]+\.[0-9]+\.[0-9]+[A-Za-z0-9.+-]*$') { Fail "rotulo de versao invalido: $Versao" }
+    if ($locais) { Fail "-Versao (release) nao aceita -LegendasLocais nem -IconeLocal" }
+    $sujos = @(git -C $repo status --porcelain -- @kitEntries "tools/dist/LEIA-ME-BUILDER.txt" "third_party/licencas" "third_party/pl_mpeg" |
+               Where-Object { $_ -notmatch 'tools/extractor/known_versions\.h$' })
+    if ($sujos) { Fail ("-Versao exige o kit igual ao commit; mudancas: " + ($sujos -join '; ')) }
+    $version = "$Versao (" + (git -C $repo rev-parse --short=10 HEAD).Trim() + ")"
+}
 [IO.File]::WriteAllText((Join-Path $kit "VERSION"), "$version`n")
 $sdlKit = Join-Path $kit "third_party\SDL3"
 New-Item -ItemType Directory -Force -Path $sdlKit | Out-Null
@@ -138,6 +148,15 @@ Copy-Item -LiteralPath (Join-Path $repo "third_party\dr_libs\LICENSE") -Destinat
 Copy-Item -LiteralPath (Join-Path $repo "third_party\xiph\libogg\COPYING") -Destination "$stage\licencas\libogg-BSD.txt"  # N6: OGG de mods
 Copy-Item -LiteralPath (Join-Path $repo "third_party\xiph\libvorbis\COPYING") -Destination "$stage\licencas\libvorbis-BSD.txt"
 Copy-Item -LiteralPath (Join-Path $repo "third_party\vulkan\Apache-2.0.txt") -Destination "$stage\licencas\Vulkan-Headers-Apache-2.0.txt"  # N7b
+# v0.8.0 (docs/N9-L-LICENCAS.md, secao 7): avisos de terceiros do SDL3, HIDAPI, yuv2rgb, creditos e procedencia
+foreach ($f in "AVISOS.txt", "SDL3-avisos-terceiros.txt", "HIDAPI-LICENSE.txt", "HIDAPI-LICENSE-bsd.txt", "yuv2rgb-BSD-3.txt") {
+    $src = Join-Path $repo "third_party\licencas\$f"
+    if (-not (Test-Path -LiteralPath $src)) { Fail "falta third_party\licencas\$f" }
+    Copy-Item -LiteralPath $src -Destination "$stage\licencas\$f"
+}
+# os avisos do SDL3 tem de ser os das fontes que o kit leva (mesma versao)
+& python (Join-Path $repo "tools\dist\sdl3_avisos.py") $sdl (Join-Path $repo "third_party\licencas\SDL3-avisos-terceiros.txt") --conferir | Out-Null
+if ($LASTEXITCODE -ne 0) { Fail "third_party\licencas\SDL3-avisos-terceiros.txt nao corresponde as fontes do SDL3 do kit" }
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot "LEIA-ME-BUILDER.txt") -Destination "$stage\LEIA-ME.txt"
 
 # dependencias dos executaveis

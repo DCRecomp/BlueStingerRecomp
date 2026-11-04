@@ -36,6 +36,11 @@ o jogo procura, nesta ordem:
 - **Conversão do Builder:** MP4 com H.264 (qualidade máxima do codificador do Windows) e AAC a
   192 kbit/s. Esse teto do AAC é do codificador que o Builder usa, não da arquitetura: um mod pode
   trazer áudio em qualquer formato aceito acima.
+- **Codecs e custos (S4, `docs/N9-L-LICENCAS.md`):** nenhum formato exige que o projeto pague algo; o decodificador é sempre
+  do sistema do jogador. Mas o **HEVC (H.265)** no Windows pode depender de uma extensão opcional **paga** da Microsoft Store e
+  não está garantido em toda instalação, e o **H.264** em algumas distribuições Linux (Fedora, Bazzite) depende do `ffmpeg` do
+  sistema com esse decodificador. Para um mod que toque em qualquer instalação, prefira **H.264 + AAC** no Windows e
+  **MPEG-1** (SFD ou MPEG-PS com ADX) no Linux; evite HEVC. Áudio de mods: OGG Vorbis, FLAC ou WAV (livres de royalties).
 - **Legendas:** SRT ou WebVTT em UTF-8. Itálico, negrito, cores e posições são ignorados; o texto
   sai branco com contorno, centralizado embaixo e proporcional à altura do vídeo.
 

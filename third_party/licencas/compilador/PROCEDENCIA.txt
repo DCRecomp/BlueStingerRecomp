@@ -1,0 +1,8 @@
+f6b78c087c3ebdf0f3c13415070dd480a3f35d8fc76f3d02180a407c1c812f79  GPL-2.0.txt  https://raw.githubusercontent.com/torvalds/linux/v6.3/LICENSES/preferred/GPL-2.0
+8e378ab93586eb55135d3bc119cce787f7324f48394777d00c34fa3d0be3303f  Linux-syscall-note.txt  https://raw.githubusercontent.com/torvalds/linux/v6.3/LICENSES/exceptions/Linux-syscall-note
+dc626520dcd53a22f727af3ee42c770e56c97a64fe3adb063799d8ab032fe551  glibc-COPYING.LIB.txt  https://raw.githubusercontent.com/bminor/glibc/glibc-2.38/COPYING.LIB
+e5881019d8766c1e88a5fe1dbca4ba40c78011d41fcb18f6e9f50df60182685b  APSL-2.0.txt  https://raw.githubusercontent.com/apple-oss-distributions/xnu/main/APPLE_LICENSE
+cec0db5f6d7ed6b3a72647bd50aed02e13c3377fd44382b96dc2915534c042ad  CMake-jsoncpp-LICENSE.txt  https://raw.githubusercontent.com/Kitware/CMake/v3.30.5/Utilities/cmjsoncpp/LICENSE
+c6dbbf828498be844a89eaa3b84adbab3199e342eb5cb2ed2f0d4ba7ec0f38a3  CMake-bzip2-LICENSE.txt  https://raw.githubusercontent.com/Kitware/CMake/v3.30.5/Utilities/cmbzip2/LICENSE
+cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30  CMake-cppdap-LICENSE.txt  https://raw.githubusercontent.com/Kitware/CMake/v3.30.5/Utilities/cmcppdap/LICENSE
+c32913b33252e71190af2066f08115c69bc9fddadf3bf29296e20c835389841c  OpenSSL-1.1.1v-LICENSE.txt  https://raw.githubusercontent.com/openssl/openssl/OpenSSL_1_1_1v/LICENSE
