@@ -4361,8 +4361,10 @@ posterior. Sem N9.1, N9.2 e N10; a publicação não valida L3–L6 nem substitu
   - Corrigido em `14f4905`: prefixo relativo (`${pcfiledir}/../..`) e conferência de caminhos de desenvolvimento em todos os
     arquivos do pacote. O jogo usa o pacote CONFIG do CMake, não o pkg-config. Prova negativa: a conferência nova acha o
     caminho no pacote anterior.
-- **Pacote Linux final** (`14f4905`): duas montagens iguais, `60a63505…eb2445851`, 90 915 735 B. Em relação ao que passou nos
-  108 casos, diferem só o `sdl3.pc`, o `VERSAO.txt` e o `SHA256SUMS.txt`.
+- **Pacote Linux final:** `23689d3`, depois da varredura ampliada (`$deps`, `$out`, `$toolchain`, `TMPDIR`). Duas montagens
+  iguais: `a4ebfc69…436710d`, 90 915 196 B.
+  - Em relação ao `14f4905` (`60a63505…`), diferem só o `VERSAO.txt` (o commit) e o `SHA256SUMS.txt`.
+  - Em relação ao que passou nos 108 casos (`8898b1f`), diferem só o `sdl3.pc`, o `VERSAO.txt` e o `SHA256SUMS.txt`.
 - **Pacote Windows final** (`8898b1f`, `make_builder.ps1 -Versao v0.8.0`; o `known_versions.h` público durante o build e o
   particular restaurado com o hash conferido):
   - a troca do `known_versions.h` muda a data do arquivo, e o MSVC (sem `/Brepro`) religa os exes com outra data e outro GUID;
