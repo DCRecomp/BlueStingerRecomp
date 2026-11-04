@@ -4346,13 +4346,38 @@ posterior. Sem N9.1, N9.2 e N10; a publicação não valida L3–L6 nem substitu
   - nenhuma versão particular nos exes; hashes do pacote testado em `n9-l9ad8f3606\hashes_pacote_testado.txt`.
   - A primeira tentativa (`1bd6973`) foi recusada pela guarda nova do `-Versao`: `tools/extractor/build/`, pasta solta e não
     ignorada, entraria no kit. Corrigido em `71ad8f3`: na release o kit leva só os arquivos rastreados.
-- **Linux** (`wsl_final.sh 1bd6973 v0.8.0`): suíte B1–B14 **interrompida** no B8 pelo Claude Code por falta de memória no
-  Windows, com 70 ok e 0 falhas até ali.
+- **Linux, primeira tentativa** (`wsl_final.sh 1bd6973 v0.8.0`): a suíte B1–B14 foi **interrompida** no B8 pelo Claude Code
+  por falta de memória no Windows, com 70 ok e 0 falhas até ali.
   - A VM do WSL tinha 12 GB de cache (`vmmemWSL` 13,2 GB, 4 GB livres no Windows).
-  - A vigia de cache não estava rodando: lançada com `nohup` numa sessão `wsl.exe` que terminou, morreu junto. Cache esvaziado
-    depois (autorização de 2026-11-03).
-  - A repetição espera a autorização do mantenedor.
-- **Codex** `reviews/codex-20261104-103026.md`: 5 achados (tabela em "Revisões independentes").
+  - A vigia de cache não estava rodando: lançada com `nohup` numa sessão `wsl.exe` que terminou, morreu junto.
+  - Cache esvaziado (autorização de 2026-11-03); repetição autorizada pelo mantenedor.
+- **Linux, repetição** (`8898b1f`, vigia como tarefa própria, paralelismo 4):
+  - pacote reprodutível: duas montagens, `474f9de2…`;
+  - **B1–B14: 108 ok, 0 falha**, em 2211 s; no máximo 1576 MB usados no WSL; a vigia esvaziou o cache 3 vezes.
+  - Em relação ao `l5zig6` (o da A3: N8.0 16/16 e N8.7 16/16), o `bs-builder`, o `instalar.sh` e o `toolchain/` são
+    idênticos byte a byte. Diferem só os textos (LEIA-ME, licenças novas, `VERSAO`), então a A3 não se repete.
+  - A varredura de dados pessoais achou o `sdl3.pc` do SDL3 pré-compilado com o prefixo da máquina de montagem (pasta e nome
+    de usuário do WSL); a conferência só olhava os binários.
+  - Corrigido em `14f4905`: prefixo relativo (`${pcfiledir}/../..`) e conferência de caminhos de desenvolvimento em todos os
+    arquivos do pacote. O jogo usa o pacote CONFIG do CMake, não o pkg-config. Prova negativa: a conferência nova acha o
+    caminho no pacote anterior.
+- **Pacote Linux final** (`14f4905`): duas montagens iguais, `60a63505…eb2445851`, 90 915 735 B. Em relação ao que passou nos
+  108 casos, diferem só o `sdl3.pc`, o `VERSAO.txt` e o `SHA256SUMS.txt`.
+- **Pacote Windows final** (`8898b1f`, `make_builder.ps1 -Versao v0.8.0`; o `known_versions.h` público durante o build e o
+  particular restaurado com o hash conferido):
+  - a troca do `known_versions.h` muda a data do arquivo, e o MSVC (sem `/Brepro`) religa os exes com outra data e outro GUID;
+    por isso as suítes foram refeitas sobre o pacote final: `test_builder` 24/0 e `test_edicao` 11/0, com o pacote igual antes
+    e depois;
+  - ZIP `5da28203…ece62` (10 049 316 B): extraído, os 2 113 arquivos são iguais aos do pacote testado; o `bs-builder.exe`
+    responde com o código 2 sem elevação;
+  - entre `8898b1f` e `14f4905` só mudou `tools/dist/linux/make_builder_linux.sh`, que não entra no pacote do Windows.
+  - As guardas novas do `-Versao` recusam: `known_versions.h` particular na árvore (antes de compilar), `-NoBuild` e árvore
+    suja (o `DISTRIBUICAO-COMPILADOR.md` particular foi acusado e passou a ser excluído nominalmente).
+- **Varredura de dados pessoais nos dois pacotes:** nenhum caminho local, nome de usuário, CDI, SFD, MP4, ADX, VMS ou
+  `1ST_READ` (só os falsos positivos dos autores "Rodriguez" em cabeçalhos do kernel e o `INSTALL.VMS` da FreeType, que é
+  documentação).
+- **Codex:** `reviews/codex-20261104-103026.md` (5 achados) e `reviews/codex-20261104-115430.md` (4 achados): tabelas em
+  "Revisões independentes".
 
 ### N9-L: Bazzite como ambiente prioritário e política de licenças (2026-11-03/04)
 
@@ -4725,6 +4750,15 @@ Contrato em `docs/N9-0-EDICOES.md`. O mesmo executável roda as duas edições, 
 - **Não feito nesta etapa:** tela de edição (N9.1), preset Remastered (N9.5–N9.8).
 
 ## Revisões independentes (Codex)
+
+### 2026-11-04: v0.8.0, correções posteriores. Relatório `reviews/codex-20261104-115430.md` (4 achados)
+
+| Achado | Decisão |
+|---|---|
+| MÉDIA: SDL3, toml++, FreeType e o toolchain vêm de árvores externas, fora da garantia "só arquivos rastreados" | **aceito como pendência (v0.8.1 ou L8)**: montar com `git archive` de commits fixos ou validar um manifesto de nomes e hashes. Para a v0.8.0: as árvores do SDL3 e do toml++ estão limpas no git, e a varredura dos dois pacotes prontos não achou dado pessoal, caminho local nem mídia do jogo |
+| MÉDIA: a guarda do Linux prova só a versão declarada do SDL3, não as fontes dos avisos | **aceito**: o `N9-L-LICENCAS.md` agora diz que a conferência contra as fontes (`deps/sdl3`, `f5e5f658`) foi manual; registrar o commit no pré-compilado e conferi-lo fica como pendência |
+| BAIXA: a varredura de caminhos não incluía `$deps`, `$out`, `$toolchain` nem o `TMPDIR` | **aceito**: incluídos; o pacote remontado continua `60a63505…` |
+| BAIXA: as guardas do `-Versao` não têm teste versionado (as provas foram manuais, pelo `gate_v080_win.ps1` local) | **aceito como pendência**: teste de montagem em repositório temporário para a v0.8.1 ou a L8 |
 
 ### 2026-11-04: v0.8.0, licenças nos pacotes. Relatório `reviews/codex-20261104-103026.md` (5 achados)
 

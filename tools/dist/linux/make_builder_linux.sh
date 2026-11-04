@@ -167,7 +167,7 @@ else
     echo "aviso: sem --game-data; conferencia so por nomes"
 fi
 # nenhum caminho do ambiente de desenvolvimento nos binarios nossos (o bs-builder e o SDL3 pre-compilado)
-for p in "$repo" "$HOME" "$work" "$sdl3"; do
+for p in "$repo" "$HOME" "$work" "$sdl3" "$deps" "$out" ${toolchain:+"$toolchain"} "${TMPDIR:-/tmp}/bs-"; do
     for bin in "$stage/bs-builder" "$stage/kit/third_party/SDL3-linux/lib/libSDL3.a"; do
         if grep -qaF -- "$p" "$bin"; then falha "$(basename "$bin") contem o caminho '$p'"; fi
     done
