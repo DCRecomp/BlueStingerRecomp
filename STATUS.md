@@ -4325,6 +4325,66 @@ não por uma única bateria contínua** (decisão do mantenedor, 2026-11-02).
 - **Pendências:** H9; D-N8-4 no gate pós-N9; ressalva do 7.1 e D-K1(a); limite de 3 h de `n6_h` no executor, defeito a
   corrigir antes de uma futura integral, sem enfraquecer os testes. N9 e N10 não iniciados.
 
+### N9-L: preparação da sessão em Ubuntu nativo de L3, L4 e L5 (2026-11-03)
+
+Autorizada pelo mantenedor em 2026-11-03, depois de considerar concluída a implementação técnica da L5. Só prepara: **nenhum
+critério de hardware (A1, A2 no hardware, A5, A7, A8, A9, A11) foi executado nem aprovado.** L6, L7 e L8 não foram iniciadas.
+Nada foi publicado.
+
+- **Estado inicial conferido:**
+  - HEAD `653e929`, 15 commits locais sem push;
+  - `known_versions.h` particular com o hash do backup (`C4AD9E1A…`);
+  - as 17 evidências da L5 preservadas em `n9-l\L5-provas`.
+- **Roteiro** `docs/N9-L-ROTEIRO-UBUNTU.md`, reescrito:
+  - Ubuntu 24.04 do pendrive, sem instalar e sem tocar nos discos internos, na BIOS ou no Windows;
+  - disco de troca USB exFAT, com o trabalho num ext4 dentro de um arquivo (`trabalho.img`), que não é partição;
+  - requisitos desta máquina e matriz por critério;
+  - a nota da RTX 5080: sem o NVK no Live, o segundo driver do A7 fica `nao-feito`, com o motivo, até decisão sua.
+- **Scripts** em `tools/dist/linux/ubuntu/`: `preparar_pendrive.ps1`, `preparar_sessao.sh`, `a1_a2.sh`, `a2_comparar.py`,
+  `jogar.sh`, `filmes.sh`, `anotar.sh` e `coletar.sh`, com as funções comuns em `comum.sh`.
+- **Filmes no hardware:**
+  - as rotas gravadas só alcançam 4 dos 16 filmes (E001, NEWGAME, E016 e E017);
+  - o `filmes.sh` toca cada SFD no lugar do NEWGAME, como `mods/video/NEWGAME.MP4`. O Linux escolhe o decodificador pelo
+    conteúdo, então é o mesmo caminho do filme original, com a janela e a saída de áudio reais;
+  - o resultado de cada filme é conferido pelo log: fim natural no tempo do manifesto, quadros, pulados e áudio perdido.
+- **Simulação no WSL** (pasta de troca montada pelo próprio `preparar_pendrive.ps1 -Teste`, HOME de teste separada):
+  - `preparar_pendrive.ps1`: 1610 MB e 2166 arquivos conferidos;
+  - `preparar_sessao.sh`:
+    - SHA-256 de tudo ok;
+    - `mkfs.ext4` num arquivo, com a raiz do usuário e sem root;
+    - o pedido de `sudo` recusado nada executa;
+  - `a1_a2.sh original`: A1 ok (Builder 152 s, `--verify-data` rc=0, 0 bibliotecas de Wine/Proton, Zig do pacote no log, CDI
+    inalterado) e A2 ok (2095 arquivos de dados, 14 de C++ e 16 filmes iguais aos do Windows);
+  - a prova negativa do A2 (um `.cpp` alterado) é acusada;
+  - `a1_a2.sh remastered` e depois `original`: o jogo lê `perfil remastered` com `modo livre` e depois `perfil original`, e
+    os 3 arquivos do usuário (save, mod e `controles.toml`) ficam iguais por SHA-256;
+  - `filmes.sh um E017.SFD`, sem janela e sem som (`offscreen`/`dummy`): mod tocado, fim em 7941 ms contra 7933 ms, 238
+    quadros, 0 pulados, cópia apagada no fim;
+  - `jogar.sh`: log, bibliotecas e aviso de `llvmpipe`;
+  - `coletar.sh final`: pacote de 34 entradas, 0 ocorrências do nome de usuário; um `.SFD` posto nas evidências impede o
+    pacote.
+- **Defeitos achados na simulação e corrigidos antes do commit:**
+  - o `bs-builder` não tem `--version`;
+  - o `check()` do `a2_comparar.py` não devolvia o resultado e pulava a comparação do C++;
+  - o filtro de privacidade (`sed`) segurava as linhas do log que o `filmes.sh` acompanha;
+  - o `env` com `PATH` sem ffmpeg não achava o `stdbuf`;
+  - a segunda rodada do `filmes.sh mods` sobrescrevia os logs da primeira.
+- **Achado para o A7:**
+  - o carregador do Vulkan abre todos os drivers instalados no processo: o `libvulkan_radeon.so` aparece mesmo quando o
+    dispositivo é o `llvmpipe`. A prova do driver passa a ser o nome do dispositivo no log, ligado ao driver pelo `vulkaninfo`;
+  - sem `BS_VULKAN_GPU`, o jogo pegou o `llvmpipe` no WSL, e o roteiro fixa a GPU em todas as execuções.
+- **Codex** `reviews/codex-20261103-210454.md`: 5 achados, todos aceitos e corrigidos, com prova (tabela em "Revisões
+  independentes").
+- **Licenças:** auditoria preliminar em `docs/N9-L-LICENCAS.md`, sem declarar conformidade.
+  - Faltam no pacote:
+    - o texto da GPL-2.0 e da Linux-syscall-note para os 1367 cabeçalhos do kernel no Zig;
+    - as licenças dos 556 cabeçalhos do macOS;
+    - a BSD do HIDAPI e a BSD-3 do yuv2rgb, que vão dentro do `libSDL3.a`;
+    - o crédito da FTL no LEIA-ME do jogo;
+    - o texto da LGPL-2.1 e subcomponentes do wasi-libc e do mingw-w64.
+  - Recomendação: podar o Zig para o alvo único, o que exige decisão sua e nova montagem e prova do pacote.
+  - Nada disso muda o pacote `l5zig6` da sessão, que não é publicado.
+
 ### N9-L L5: Builder e distribuição Linux (2026-11-03)
 
 Autorizada pelo mantenedor em 2026-11-03. Implementada e provada no WSL (Ubuntu 24.04, kernel 5.15.167.4-microsoft-standard-WSL2)
@@ -4551,6 +4611,16 @@ Contrato em `docs/N9-0-EDICOES.md`. O mesmo executável roda as duas edições, 
 - **Não feito nesta etapa:** tela de edição (N9.1), preset Remastered (N9.5–N9.8).
 
 ## Revisões independentes (Codex)
+
+### 2026-11-03: N9-L, preparação da sessão em Ubuntu nativo. Relatório `reviews/codex-20261103-210454.md` (5 achados)
+
+| Gravidade | Achado | Decisão |
+|---|---|---|
+| ALTA | O filtro de privacidade não cobria o hostname (`Host Name:`, `usuario@maquina`), os seriais nos nomes de `/dev/input/by-id` nem os GUIDs contínuos. A varredura final só avisava e o pacote saía mesmo assim. O `a2.txt` era gravado sem filtro | Aceito. O filtro passou a cobrir o hostname (quando não é o `ubuntu` padrão do Live), `usuario@maquina`, `Cookie` e 32 hex seguidos. Fica o GUID de modelo do SDL, que é igual em todo controle do mesmo modelo e serve ao A9. A listagem `by-id` saiu da coleta. A varredura agora recusa o pacote (`identificadores_restantes`), e o `a2.txt` passa pelo filtro. Prova: linhas no formato do `pactl`, do `wpctl` e do log filtradas; um caminho pessoal posto nas evidências bloqueia o pacote |
+| MÉDIA | O `preparar_pendrive.ps1` apagava uma `BS-TROCA` existente, incluindo `privado/` | Aceito. A pasta existente é recusada; com `-Substituir`, é renomeada para `BS-TROCA.anterior-<data>`, nunca apagada. Provado nos dois casos |
+| MÉDIA | O rótulo de `coletar.sh sistema` podia sair de `evidencias/` | Aceito. Valida como no `jogar.sh`, sem `..`. O rótulo `../fora` é recusado |
+| MÉDIA | `cmd /c` montado com o caminho do pacote | Aceito. `tar.exe` é chamado com os argumentos separados |
+| MÉDIA | O A2 escolhia o cache pelo nome, não o da execução, e não conferia os três filmes do arredondamento | Aceito. O cache vem da linha `cache de compilacao:` do `builder.log` da execução, e a asserção dos três (NEWGAME, E193, ENDING2) foi acrescentada como no B11. Prova: 7/7 ok, e o `.cpp` alterado continua acusado |
 
 ### 2026-11-03: N9-L L5. Relatórios `reviews/codex-20261103-105354.md` (5 achados) e `-143212.md` (3 achados, segunda passada)
 

@@ -196,6 +196,25 @@ Paralelismo do raster por pool de threads próprio (sem TBB) entra na L3, com pr
     nova decisão.
   - Projeto C++ editável (Developer) no Linux.
 
+### 6.3 Sessão em Ubuntu nativo de L3, L4 e L5: preparação (2026-11-03)
+
+Autorizada pelo mantenedor em 2026-11-03: preparar a validação conjunta, sem iniciar L6, L7 e L8 e sem publicar.
+
+- **Roteiro:** `docs/N9-L-ROTEIRO-UBUNTU.md`, numa sessão única com o Ubuntu 24.04 rodando do pendrive, sem instalação e sem
+  tocar nos discos internos. Os arquivos ficam num disco de troca USB, e o trabalho pesado num ext4 dentro de um arquivo, que
+  não é partição.
+- **Scripts em `tools/dist/linux/ubuntu/`:**
+  - `preparar_pendrive.ps1` (Windows): o disco de troca, com as ferramentas tiradas do commit e a parte privada separada;
+  - `preparar_sessao.sh`;
+  - `a1_a2.sh`: A1, A2, troca de edição e preservação dos arquivos do usuário;
+  - `jogar.sh`: log e bibliotecas carregadas, com aviso de `llvmpipe` e de recuo sem pedido;
+  - `filmes.sh`: os 16 SFD pelo decodificador nativo no lugar do NEWGAME, e os mods do A11;
+  - `anotar.sh`;
+  - `coletar.sh`: somente leitura, `sudo` só com autorização, filtro de privacidade e pacote de evidências.
+- **Licenças:** auditoria preliminar em `docs/N9-L-LICENCAS.md`. As pendências bloqueiam a publicação e não mudam o pacote da
+  sessão.
+- **Nada aprovado:** A1, A2 (no hardware), A5, A7, A8, A9 e A11 só passam a aprovados com as evidências da sessão.
+
 ## 7. Publicação da v0.8.0
 
 Autorizada antecipadamente, condicionada a todos os critérios acima:
