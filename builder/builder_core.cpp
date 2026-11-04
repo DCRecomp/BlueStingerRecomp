@@ -9,6 +9,7 @@
 #include "disc/cdi_image.h"
 #include "runtime_data.h"
 #include "toolchain.h"
+#include "util/hash.h"
 #include "video/movie_build.h"
 #include "platform/install_config.h"
 
@@ -219,6 +220,20 @@ void syncTree(const fs::path& from, const fs::path& to) {
 
 } // namespace
 
+// N9.1: as pastas de cache que ja existem para esta saida (a marca .bs-out diz de quem sao), sem criar nada
+std::vector<fs::path> cache_dirs(const fs::path& outDir) {
+    std::error_code ec;
+    const fs::path  out = fs::absolute(outDir, ec);
+    char            name[16];
+    std::snprintf(name, sizeof name, "%08x", plat::cache_key(out));
+    std::vector<fs::path> r;
+    for (const auto& root : plat::cache_roots(out / L".bs-build")) {
+        const fs::path c = root / L"build" / name;
+        if (readText(c / L".bs-out") == path_text(out)) r.push_back(c);
+    }
+    return r;
+}
+
 // arquivos obrigatorios e icones (Windows), SDL3 em fontes (Windows) ou pre-compilado (Linux): builder_platform_*.cpp
 std::string check_kit(const fs::path& kit, const fs::path& sdl3) {
     std::error_code ec;
@@ -319,6 +334,7 @@ native::install::InstallConfig install_config_for(const Request& req, const fs::
     if (req.edition) ic.edition = *req.edition;
     if (req.portableSaves)
         ic.saves = *req.portableSaves ? native::install::SavesLocation::Portable : native::install::SavesLocation::Documents;
+    if (req.subtitles) ic.subtitles = *req.subtitles;
     return ic;
 }
 
@@ -352,9 +368,24 @@ void install_swap(const fs::path& stage, const fs::path& dest, const std::functi
             // instalacao.toml fica fora da lista: e da instalacao (preservado numa troca sem escolha de modo)
             if (e.is_regular_file() && lower(path_wide_generic(fs::relative(e.path(), stage))) != lower(native::install::kConfigFile))
                 files.push_back(path_wide_generic(fs::relative(e.path(), stage)));
+        {  // N9.1: hashes para a verificacao do instalador (data\ fora: o jogo confere os dados com o manifesto proprio)
+            std::ofstream     h(stage / kPackageHashes, std::ios::binary | std::ios::trunc);
+            std::vector<char> buf(1 << 16);
+            for (const auto& f : files) {
+                if (lower(f).rfind(L"data/", 0) == 0) continue;
+                std::ifstream in(stage / plat::to_path(f), std::ios::binary);
+                util::Sha256  sha;
+                while (in) {
+                    in.read(buf.data(), std::streamsize(buf.size()));
+                    if (in.gcount() > 0) sha.update(buf.data(), size_t(in.gcount()));
+                }
+                h << sha.hexdigest() << "  " << narrow(f) << "\n";
+            }
+            if (!h) throw std::runtime_error("nao foi possivel gravar os hashes do pacote");
+        }
         std::ofstream m(stage / kPackageManifest, std::ios::binary | std::ios::trunc);
         for (const auto& f : files) m << narrow(f) << "\n";
-        m << narrow(kPackageManifest) << "\n" << narrow(kInstallMarker) << "\n";
+        m << narrow(kPackageManifest) << "\n" << narrow(kInstallMarker) << "\n" << narrow(kPackageHashes) << "\n";
         std::ofstream(stage / kInstallMarker, std::ios::binary | std::ios::trunc) << nowTicks() << "\n";
         if (!m) throw std::runtime_error("nao foi possivel gravar a lista do pacote");
     }
@@ -824,7 +855,14 @@ Result build(const Request& req, const Callbacks& cb) {
             if (fs::is_regular_file(from, ec)) fs::copy_file(from, stage / L"licencas" / name);
         // edicao e local dos saves escolhidos (sem escolha: o instalacao.toml anterior fica, como
         // arquivo do usuario). Nao faz parte da lista do pacote: nunca e apagado por uma troca.
-        if (req.portableSaves || req.edition) {
+        for (const auto& [from, name] : req.extraPackageFiles) {  // N9.1: o desinstalador do instalador
+            const fs::path to = stage / plat::to_path(name);
+            fs::create_directories(to.parent_path());
+            fs::copy_file(from, to, fs::copy_options::overwrite_existing);
+            plat::make_executable(to);
+            log("no pacote: " + path_text(to.filename()));
+        }
+        if (req.portableSaves || req.edition || req.subtitles) {
             std::string     iwarn;
             const native::install::InstallConfig ic = install_config_for(req, res.installDir, &iwarn);
             if (!iwarn.empty()) log(iwarn);

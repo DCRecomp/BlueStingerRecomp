@@ -22,6 +22,7 @@
 #include <stdexcept>
 #include <string>
 #include <system_error>
+#include <vector>
 
 namespace bs::builder {
 
@@ -61,6 +62,12 @@ struct Request {
     std::optional<bool>   portableSaves;
     // N9.0: a edicao gravada na instalacao. Vazio: a da instalacao anterior fica (uma instalacao nova: Original).
     std::optional<native::edition::Edition> edition;
+    // N9.1: o idioma inicial das legendas gravado na instalacao ("auto", uma etiqueta como "pt-BR", "" = desligadas).
+    // Vazio (nullopt): o da instalacao anterior fica.
+    std::optional<std::string> subtitles;
+    // N9.1: arquivos a mais no pacote (origem, nome relativo no pacote), como o BlueStinger-Desinstalar do instalador. Entram
+    // na lista e nos hashes do pacote; a falta de um deles e erro de instalacao.
+    std::vector<std::pair<std::filesystem::path, std::wstring>> extraPackageFiles;
 };
 
 struct Callbacks {
@@ -106,6 +113,9 @@ InstallInfo inspect_install(const std::filesystem::path& outDir, const std::wstr
 // usuario) e o instante da instalacao (identifica backups nossos e o mais recente).
 inline constexpr wchar_t kPackageManifest[] = L".bs-package";
 inline constexpr wchar_t kInstallMarker[]   = L".bs-install";
+// N9.1: SHA-256 dos arquivos do pacote fora de data\ (formato do sha256sum, caminhos com '/'), para a verificacao do
+// instalador (builder/instalador/instalacoes.h). Os dados tem a conferencia propria (BlueStinger --verify-data).
+inline constexpr wchar_t kPackageHashes[]   = L".bs-package.sha256";
 
 struct SwapCancelled : std::runtime_error {
     using std::runtime_error::runtime_error;
@@ -139,6 +149,9 @@ native::install::InstallConfig install_config_for(const Request& req, const std:
 void install_swap(const std::filesystem::path& stage, const std::filesystem::path& dest,
                   const std::function<bool(const std::filesystem::path& relative)>& isPackageFile,
                   const std::atomic<bool>* cancel = nullptr);
+
+// N9.1: pastas de cache de compilacao desta saida que existem (marcadas por ela), para a desinstalacao.
+std::vector<std::filesystem::path> cache_dirs(const std::filesystem::path& outDir);
 
 // Kit de fontes valido? Vazio = sim; senao, o que falta.
 std::string check_kit(const std::filesystem::path& kitDir, const std::filesystem::path& sdl3Dir);

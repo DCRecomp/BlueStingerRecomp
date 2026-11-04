@@ -159,6 +159,12 @@ target_link_libraries(bs_ui_tests PRIVATE bs_builder_core bs_builder_ui bs_nativ
 add_test(NAME ui COMMAND bs_ui_tests)
 endif()
 
+# N9.1: o nucleo do instalador (lista, verificacao, desinstalacao, fases, integracao desviada), nos dois sistemas
+add_executable(bs_instalador_tests unit/main.cpp unit/test_instalador.cpp)
+target_include_directories(bs_instalador_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/unit)
+target_link_libraries(bs_instalador_tests PRIVATE bs_instalador_core bs_builder_ui bs_disc_data tomlplusplus::tomlplusplus)
+add_test(NAME instalador COMMAND bs_instalador_tests)
+
 # Usa a imagem do usuario se BS_DISC_IMAGE estiver definido; senao, SKIP.
 add_executable(bs_real_disc_test data/test_real_disc.cpp)
 target_link_libraries(bs_real_disc_test PRIVATE bs_disc)
@@ -256,7 +262,7 @@ endif()
 
 # Sem janelas modais (assert do CRT de Debug, abort, falha de acesso): o teste falha no stderr em vez de
 # esperar um clique e prender o ctest/regressao (tests/sem_dialogos.cpp).
-set(_bs_dialogos bs_unit_tests bs_audio_tests bs_localization_tests bs_real_disc_test bs_runtime_data_test bs_analysis_real_test
+set(_bs_dialogos bs_unit_tests bs_instalador_tests bs_audio_tests bs_localization_tests bs_real_disc_test bs_runtime_data_test bs_analysis_real_test
           bs_fixture_gen bs_codegen_exec_0 bs_codegen_exec_1 bs_render_tests)
 if(WIN32)
   list(APPEND _bs_dialogos bs_video_tests bs_ui_tests)
