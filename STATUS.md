@@ -4325,6 +4325,35 @@ não por uma única bateria contínua** (decisão do mantenedor, 2026-11-02).
 - **Pendências:** H9; D-N8-4 no gate pós-N9; ressalva do 7.1 e D-K1(a); limite de 3 h de `n6_h` no executor, defeito a
   corrigir antes de uma futura integral, sem enfraquecer os testes. N9 e N10 não iniciados.
 
+### v0.8.0 Preview: preparação da publicação experimental (2026-11-04)
+
+Autorização do mantenedor: publicar a v0.8.0 Preview (Windows x64 e Linux x86-64 experimental) para baixar no Bazzite e
+testar em hardware real, depois dos gates de licenças, segurança e integridade. Uma eventual v0.8.1 só se houver mudança
+posterior. Sem N9.1, N9.2 e N10; a publicação não valida L3–L6 nem substitui as provas A1–A15.
+
+- **Licenças** (`docs/N9-L-LICENCAS.md`, seções 7 e 9): nenhum bloqueador.
+  - Textos acrescentados em `third_party/licencas/` (URL e SHA-256 em `compilador/PROCEDENCIA.txt`): kernel GPL-2.0 com a
+    Linux-syscall-note (v6.3), glibc LGPL-2.1 (`glibc-2.38`), APSL-2.0, jsoncpp, bzip2 e cppdap (CMake v3.30.5), OpenSSL
+    1.1.1v; HIDAPI (BSD), yuv2rgb; `SDL3-avisos-terceiros.txt` gerado por `tools/dist/sdl3_avisos.py`; `AVISOS.txt`
+    (créditos, LGPL seção 6, MSVC, codecs, marcas, procedência).
+  - O MSVC continua como ressalva documentada: não é distribuído; o usuário o instala nos termos da Microsoft.
+  - S1, S2 e S3 e a troca do CMake da S5 continuam propostas. A S4 foi feita (documentação).
+  - Nenhum código do Builder, do runtime ou do jogo mudou.
+- **Windows** (`gate_v080_win.ps1`, commit `71ad8f3606`, `known_versions.h` do HEAD durante os passos e o particular
+  restaurado com o hash `C4AD9E1A…` conferido):
+  - `make_builder.ps1 -Versao v0.8.0` ok;
+  - `test_builder` 24/0 (777 s); `test_edicao` 11/0;
+  - nenhuma versão particular nos exes; hashes do pacote testado em `n9-l9ad8f3606\hashes_pacote_testado.txt`.
+  - A primeira tentativa (`1bd6973`) foi recusada pela guarda nova do `-Versao`: `tools/extractor/build/`, pasta solta e não
+    ignorada, entraria no kit. Corrigido em `71ad8f3`: na release o kit leva só os arquivos rastreados.
+- **Linux** (`wsl_final.sh 1bd6973 v0.8.0`): suíte B1–B14 **interrompida** no B8 pelo Claude Code por falta de memória no
+  Windows, com 70 ok e 0 falhas até ali.
+  - A VM do WSL tinha 12 GB de cache (`vmmemWSL` 13,2 GB, 4 GB livres no Windows).
+  - A vigia de cache não estava rodando: lançada com `nohup` numa sessão `wsl.exe` que terminou, morreu junto. Cache esvaziado
+    depois (autorização de 2026-11-03).
+  - A repetição espera a autorização do mantenedor.
+- **Codex** `reviews/codex-20261104-103026.md`: 5 achados (tabela em "Revisões independentes").
+
 ### N9-L: Bazzite como ambiente prioritário e política de licenças (2026-11-03/04)
 
 Decisão do mantenedor: a validação nativa passa ao **Bazzite**; o roteiro do Ubuntu fica preservado. Regra permanente nova:
@@ -4396,6 +4425,19 @@ nada foi aprovado, sem commit.**
     (particular), `_bs-extract.exe` e `tools/extractor/build/`.
   - A pasta do repositório passou a pertencer a `BUILTIN\Administradores`: o git recusa sem `safe.directory`. Usado só por
     comando (`-c safe.directory`), sem configuração global; a troca do dono aguarda a confirmação do mantenedor.
+- **Depois dos commits (2026-11-04, sem commit):**
+  - Commits `802dead` (roteiro), `6d7ab81` (licenças), `e54aa13` (scripts), `76dfa43` (CLAUDE, STATUS, plano);
+    `varre_publicacao.py origin/master..master`: 21 commits, 0 achados.
+  - Pacote da sessão: nenhum disco USB conectado, então o `preparar_pendrive.ps1 -Teste` montou
+    `D:\BS-Sessao-Bazzite\BS-TROCA` (1 610 MB, 2 166 arquivos), com as ferramentas do commit `76dfa43` (bytes iguais aos do
+    `git show`, conferido arquivo a arquivo) e o pacote L5 `70a785ee`. `sha256sum -c` do `SHA256SUMS-TROCA.txt` ok.
+  - Posse da pasta (só leitura):
+    - a raiz e 16 dos 37 itens do topo (19 247 arquivos fora de `build`, `generated`, `analysis`, `game-data` e `.git`)
+      pertencem a `BUILTIN\Administradores`; `.git`, `C:\Source` e os outros 7 787, a `rodri`;
+    - a DACL é toda herdada do `C:\` (nenhuma ACE explícita);
+    - nenhum compartilhamento aponta para a pasta (só o `C$` administrativo);
+    - nenhum processo roda dela;
+    - o git exige `safe.directory` desde pelo menos 2026-10-23 (os scripts já o passam por variável de processo).
 
 ### N9-L: preparação da sessão em Ubuntu nativo de L3, L4 e L5 (2026-11-03)
 
@@ -4683,6 +4725,16 @@ Contrato em `docs/N9-0-EDICOES.md`. O mesmo executável roda as duas edições, 
 - **Não feito nesta etapa:** tela de edição (N9.1), preset Remastered (N9.5–N9.8).
 
 ## Revisões independentes (Codex)
+
+### 2026-11-04: v0.8.0, licenças nos pacotes. Relatório `reviews/codex-20261104-103026.md` (5 achados)
+
+| Achado | Decisão |
+|---|---|
+| ALTA: os avisos do SDL3 (HIDAPI, yuv2rgb, fdlibm) não chegam à pasta `licencas/` do jogo instalado | **aceito em parte**. O jogo é gerado na máquina do usuário e não é redistribuído pelo projeto; os textos vão nos dois pacotes do Builder, e os LEIA-ME do jogo (Windows e Linux) apontam onde estão. A cópia na instalação exige mudar o C++ do Builder e refazer as suítes: pendência registrada para a v0.8.1 ou a L8 (`N9-L-LICENCAS.md`, seção 7) |
+| MÉDIA: o extrator descartava arquivos com o cabeçalho do SDL e outro aviso (`SDL_qsort.c`, Gareth McCaughan; Wim Taymans; Collabora; NVIDIA) | **aceito**: todos os blocos com copyright; só o cabeçalho padrão do SDL (só Sam Lantinga como titular) sai. De 35 blocos e 122 arquivos para 49 e 140; conferido contra as fontes do Windows e as do pré-compilado do Linux (WSL) |
+| MÉDIA: o Linux não conferia se os avisos são da versão do SDL3 pré-compilado | **aceito**: a montagem compara a `PACKAGE_VERSION` do `SDL3ConfigVersion.cmake` com a versão do arquivo de avisos (agora lida do `SDL_version.h`) |
+| MÉDIA: o `-Versao` aceitava árvore suja | **aceito**: a árvore inteira tem de estar igual ao commit (fora o `known_versions.h`); e, antes de compilar, o `known_versions.h` tem de ser o do commit e o `-NoBuild` é recusado (senão o exe publicado levaria as versões particulares) |
+| BAIXA: seção 7 dizia "não" para textos já resolvidos | **aceito**: tabela atualizada, texto histórico datado |
 
 ### 2026-11-03: N9-L, Bazzite e licenças. Relatório `reviews/codex-20261103-234239.md` (5 achados)
 

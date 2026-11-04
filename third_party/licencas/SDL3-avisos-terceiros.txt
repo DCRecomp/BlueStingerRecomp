@@ -1,13 +1,202 @@
-Avisos de terceiros dentro do SDL3 desconhecida (alem do LICENSE.txt do SDL, zlib)
+Avisos de terceiros dentro do SDL3 3.2.30 (alem do LICENSE.txt do SDL, zlib)
 Gerado por tools/dist/sdl3_avisos.py a partir das fontes de src/ e include/ (sem os testes).
 Cada bloco e o aviso de copyright e licenca como aparece nas fontes; abaixo dele, os arquivos que o trazem.
 Textos completos referidos por estes avisos: HIDAPI-LICENSE*.txt e yuv2rgb-BSD-3.txt nesta pasta.
+
+==============================================================================
+Arquivos: include/SDL3/SDL_egl.h
+------------------------------------------------------------------------------
+* Copyright 2013-2020 The Khronos Group Inc.
+* SPDX-License-Identifier: Apache-2.0
+*
+* This header is generated from the Khronos EGL XML API Registry.
+* The current version of the Registry, generator scripts
+* used to make the header, and the header can be found at
+*   http://www.khronos.org/registry/egl
+*
+* Khronos $Git commit SHA1: 6fb1daea15 $ on $Git commit date: 2022-05-25 09:41:13 -0600 $
+
+==============================================================================
+Arquivos: include/SDL3/SDL_hidapi.h
+------------------------------------------------------------------------------
+# CategoryHIDAPI
+
+Header file for SDL HIDAPI functions.
+
+This is an adaptation of the original HIDAPI interface by Alan Ott, and
+includes source code licensed under the following license:
+
+```
+HIDAPI - Multi-Platform library for
+communication with HID devices.
+
+Copyright 2009, Alan Ott, Signal 11 Software.
+All Rights Reserved.
+
+This software may be used by anyone for any reason so
+long as the copyright notice in the source files
+remains intact.
+```
+
+(Note that this license is the same as item three of SDL's zlib license, so
+it adds no new requirements on the user.)
+
+If you would like a version of SDL without this code, you can build SDL
+with SDL_HIDAPI_DISABLED defined to 1. You might want to do this for
+example on iOS or tvOS to avoid a dependency on the CoreBluetooth
+framework.
+
+==============================================================================
+Arquivos: include/SDL3/SDL_init.h
+------------------------------------------------------------------------------
+Specify metadata about your app through a set of properties.
+
+You can optionally provide metadata about your app to SDL. This is not
+required, but strongly encouraged.
+
+There are several locations where SDL can make use of metadata (an "About"
+box in the macOS menu bar, the name of the app can be shown on some audio
+mixers, etc). Any piece of metadata can be left out, if a specific detail
+doesn't make sense for the app.
+
+This function should be called as early as possible, before SDL_Init.
+Multiple calls to this function are allowed, but various state might not
+change once it has been set up with a previous call to this function.
+
+Once set, this metadata can be read using SDL_GetAppMetadataProperty().
+
+These are the supported properties:
+
+- `SDL_PROP_APP_METADATA_NAME_STRING`: The human-readable name of the
+  application, like "My Game 2: Bad Guy's Revenge!". This will show up
+  anywhere the OS shows the name of the application separately from window
+  titles, such as volume control applets, etc. This defaults to "SDL
+  Application".
+- `SDL_PROP_APP_METADATA_VERSION_STRING`: The version of the app that is
+  running; there are no rules on format, so "1.0.3beta2" and "April 22nd,
+  2024" and a git hash are all valid options. This has no default.
+- `SDL_PROP_APP_METADATA_IDENTIFIER_STRING`: A unique string that
+  identifies this app. This must be in reverse-domain format, like
+  "com.example.mygame2". This string is used by desktop compositors to
+  identify and group windows together, as well as match applications with
+  associated desktop settings and icons. If you plan to package your
+  application in a container such as Flatpak, the app ID should match the
+  name of your Flatpak container as well. This has no default.
+- `SDL_PROP_APP_METADATA_CREATOR_STRING`: The human-readable name of the
+  creator/developer/maker of this app, like "MojoWorkshop, LLC"
+- `SDL_PROP_APP_METADATA_COPYRIGHT_STRING`: The human-readable copyright
+  notice, like "Copyright (c) 2024 MojoWorkshop, LLC" or whatnot. Keep this
+  to one line, don't paste a copy of a whole software license in here. This
+  has no default.
+- `SDL_PROP_APP_METADATA_URL_STRING`: A URL to the app on the web. Maybe a
+  product page, or a storefront, or even a GitHub repository, for user's
+  further information This has no default.
+- `SDL_PROP_APP_METADATA_TYPE_STRING`: The type of application this is.
+  Currently this string can be "game" for a video game, "mediaplayer" for a
+  media player, or generically "application" if nothing else applies.
+  Future versions of SDL might add new types. This defaults to
+  "application".
+
+\param name the name of the metadata property to set.
+\param value the value of the property, or NULL to remove that property.
+\returns true on success or false on failure; call SDL_GetError() for more
+         information.
+
+\threadsafety It is safe to call this function from any thread.
+
+\since This function is available since SDL 3.2.0.
+
+\sa SDL_GetAppMetadataProperty
+\sa SDL_SetAppMetadata
+
+==============================================================================
+Arquivos: include/SDL3/SDL_init.h
+------------------------------------------------------------------------------
+define SDL_PROP_APP_METADATA_NAME_STRING         "SDL.app.metadata.name"
+define SDL_PROP_APP_METADATA_VERSION_STRING      "SDL.app.metadata.version"
+define SDL_PROP_APP_METADATA_IDENTIFIER_STRING   "SDL.app.metadata.identifier"
+define SDL_PROP_APP_METADATA_CREATOR_STRING      "SDL.app.metadata.creator"
+define SDL_PROP_APP_METADATA_COPYRIGHT_STRING    "SDL.app.metadata.copyright"
+define SDL_PROP_APP_METADATA_URL_STRING          "SDL.app.metadata.url"
+define SDL_PROP_APP_METADATA_TYPE_STRING         "SDL.app.metadata.type"
+
+==============================================================================
+Arquivos: include/SDL3/SDL_opengl.h
+------------------------------------------------------------------------------
+Mesa 3-D graphics library
+
+Copyright (C) 1999-2006  Brian Paul   All Rights Reserved.
+Copyright (C) 2009  VMware, Inc.  All Rights Reserved.
+
+Permission is hereby granted, free of charge, to any person obtaining a
+copy of this software and associated documentation files (the "Software"),
+to deal in the Software without restriction, including without limitation
+the rights to use, copy, modify, merge, publish, distribute, sublicense,
+and/or sell copies of the Software, and to permit persons to whom the
+Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included
+in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
 
 ==============================================================================
 Arquivos: include/SDL3/SDL_vulkan.h
 ------------------------------------------------------------------------------
 Simple DirectMedia Layer
 Copyright (C) 2017, Mark Callow
+
+This software is provided 'as-is', without any express or implied
+warranty.  In no event will the authors be held liable for any damages
+arising from the use of this software.
+
+Permission is granted to anyone to use this software for any purpose,
+including commercial applications, and to alter it and redistribute it
+freely, subject to the following restrictions:
+
+1. The origin of this software must not be misrepresented; you must not
+claim that you wrote the original software. If you use this software
+in a product, an acknowledgment in the product documentation would be
+appreciated but is not required.
+2. Altered source versions must be plainly marked as such, and must not be
+misrepresented as being the original software.
+3. This notice may not be removed or altered from any source distribution.
+
+==============================================================================
+Arquivos: src/camera/pipewire/SDL_camera_pipewire.c
+------------------------------------------------------------------------------
+Simple DirectMedia Layer
+Copyright (C) 1997-2025 Sam Lantinga <slouken@libsdl.org>
+Copyright (C) 2024 Wim Taymans <wtaymans@redhat.com>
+
+This software is provided 'as-is', without any express or implied
+warranty.  In no event will the authors be held liable for any damages
+arising from the use of this software.
+
+Permission is granted to anyone to use this software for any purpose,
+including commercial applications, and to alter it and redistribute it
+freely, subject to the following restrictions:
+
+1. The origin of this software must not be misrepresented; you must not
+claim that you wrote the original software. If you use this software
+in a product, an acknowledgment in the product documentation would be
+appreciated but is not required.
+2. Altered source versions must be plainly marked as such, and must not be
+misrepresented as being the original software.
+3. This notice may not be removed or altered from any source distribution.
+
+==============================================================================
+Arquivos: src/core/linux/SDL_evdev_capabilities.c, src/core/linux/SDL_evdev_capabilities.h
+------------------------------------------------------------------------------
+Simple DirectMedia Layer
+Copyright (C) 1997-2025 Sam Lantinga <slouken@libsdl.org>
+Copyright (C) 2020 Collabora Ltd.
 
 This software is provided 'as-is', without any express or implied
 warranty.  In no event will the authors be held liable for any damages
@@ -51,6 +240,36 @@ THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
+
+==============================================================================
+Arquivos: src/filesystem/unix/SDL_sysfilesystem.c
+------------------------------------------------------------------------------
+The two functions below (prefixed with `xdg_`) have been copied from:
+https://gitlab.freedesktop.org/xdg/xdg-user-dirs/-/blob/master/xdg-user-dir-lookup.c
+and have been adapted to work with SDL. They are licensed under the following
+terms:
+
+Copyright (c) 2007 Red Hat, Inc.
+
+Permission is hereby granted, free of charge, to any person
+obtaining a copy of this software and associated documentation files
+(the "Software"), to deal in the Software without restriction,
+including without limitation the rights to use, copy, modify, merge,
+publish, distribute, sublicense, and/or sell copies of the Software,
+and to permit persons to whom the Software is furnished to do so,
+subject to the following conditions:
+
+The above copyright notice and this permission notice shall be
+included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
+BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 
 ==============================================================================
 Arquivos: src/hidapi/android/hid.cpp, src/hidapi/android/hid.h
@@ -151,6 +370,31 @@ communication with HID devices.
 libusb/hidapi Team
 
 Copyright 2021, All Rights Reserved.
+
+At the discretion of the user of this library,
+this software may be licensed under the terms of the
+GNU General Public License v3, a BSD-Style license, or the
+original HIDAPI license as outlined in the LICENSE.txt,
+LICENSE-gpl3.txt, LICENSE-bsd.txt, and LICENSE-orig.txt
+files located at the root of the source distribution.
+These files may also be found in the public source
+code repository located at:
+https://github.com/libusb/hidapi .
+
+==============================================================================
+Arquivos: src/hidapi/libusb/hidapi_thread_pthread.h
+------------------------------------------------------------------------------
+HIDAPI - Multi-Platform library for
+communication with HID devices.
+
+Alan Ott
+Signal 11 Software
+
+libusb/hidapi Team
+
+Sam Lantinga
+
+Copyright 2023, All Rights Reserved.
 
 At the discretion of the user of this library,
 this software may be licensed under the terms of the
@@ -309,10 +553,83 @@ distribution.
 Andreas Schiffler -- aschiffler at ferzkopp dot net
 
 ==============================================================================
+Arquivos: src/stdlib/SDL_qsort.c
+------------------------------------------------------------------------------
+Copyright (c) 1998-2021 Gareth McCaughan
+
+This software is provided 'as-is', without any express or implied
+warranty. In no event will the authors be held liable for any
+damages arising from the use of this software.
+
+Permission is granted to anyone to use this software for any purpose,
+including commercial applications, and to alter it and redistribute it
+freely, subject to the following restrictions:
+
+1. The origin of this software must not be misrepresented;
+   you must not claim that you wrote the original software.
+   If you use this software in a product, an acknowledgment
+   in the product documentation would be appreciated but
+   is not required.
+
+2. Altered source versions must be plainly marked as such,
+   and must not be misrepresented as being the original software.
+
+3. This notice may not be removed or altered from any source
+   distribution.
+
+==============================================================================
+Arquivos: src/stdlib/SDL_strtokr.c
+------------------------------------------------------------------------------
+Adapted from _PDCLIB_strtok() of PDClib library at
+https://github.com/DevSolar/pdclib.git
+
+The code was under CC0 license:
+https://creativecommons.org/publicdomain/zero/1.0/legalcode :
+
+                       No Copyright
+
+The person who associated a work with this deed has dedicated the
+work to the public domain by waiving all of his or her rights to
+the work worldwide under copyright law, including all related and
+neighboring rights, to the extent allowed by law.
+
+You can copy, modify, distribute and perform the work, even for
+commercial purposes, all without asking permission. See Other
+Information below.
+
+==============================================================================
+Arquivos: src/video/SDL_surface.c
+------------------------------------------------------------------------------
+This function Copyright 2023 Collabora Ltd., contributed to SDL under the ZLib license
+
+==============================================================================
 Arquivos: src/video/directx/d3d12.h, src/video/directx/d3d12sdklayers.h
 ------------------------------------------------------------------------------
 Copyright (c) Microsoft Corporation
 Licensed under the MIT license
+
+==============================================================================
+Arquivos: src/video/haiku/SDL_bmessagebox.h
+------------------------------------------------------------------------------
+Simple DirectMedia Layer
+Copyright (C) 1997-2025 Sam Lantinga <slouken@libsdl.org>
+Copyright (C) 2018-2019 EXL <exlmotodev@gmail.com>
+
+This software is provided 'as-is', without any express or implied
+warranty.  In no event will the authors be held liable for any damages
+arising from the use of this software.
+
+Permission is granted to anyone to use this software for any purpose,
+including commercial applications, and to alter it and redistribute it
+freely, subject to the following restrictions:
+
+1. The origin of this software must not be misrepresented; you must not
+claim that you wrote the original software. If you use this software
+in a product, an acknowledgment in the product documentation would be
+appreciated but is not required.
+2. Altered source versions must be plainly marked as such, and must not be
+misrepresented as being the original software.
+3. This notice may not be removed or altered from any source distribution.
 
 ==============================================================================
 Arquivos: src/video/khronos/EGL/egl.h, src/video/khronos/EGL/eglext.h
@@ -328,7 +645,7 @@ Arquivos: src/video/khronos/EGL/egl.h, src/video/khronos/EGL/eglext.h
 * Khronos $Git commit SHA1: f4cc936b88 $ on $Git commit date: 2023-12-16 01:21:49 -0500 $
 
 ==============================================================================
-Arquivos: src/video/khronos/EGL/eglplatform.h
+Arquivos: src/video/khronos/EGL/eglplatform.h, include/SDL3/SDL_egl.h
 ------------------------------------------------------------------------------
 * Copyright 2007-2020 The Khronos Group Inc.
 * SPDX-License-Identifier: Apache-2.0
@@ -351,7 +668,7 @@ Arquivos: src/video/khronos/GLES2/gl2platform.h, src/video/khronos/GLES3/gl3plat
 * SPDX-License-Identifier: Apache-2.0
 
 ==============================================================================
-Arquivos: src/video/khronos/KHR/khrplatform.h, include/SDL3/SDL_opengles2_khrplatform.h
+Arquivos: src/video/khronos/KHR/khrplatform.h, include/SDL3/SDL_egl.h, include/SDL3/SDL_opengl_glext.h, include/SDL3/SDL_opengles2_khrplatform.h
 ------------------------------------------------------------------------------
 * Copyright (c) 2008-2018 The Khronos Group Inc.
 *
@@ -512,6 +829,29 @@ FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
 AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
 ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+==============================================================================
+Arquivos: src/video/x11/SDL_x11opengl.c
+------------------------------------------------------------------------------
+Simple DirectMedia Layer
+Copyright (C) 1997-2025 Sam Lantinga <slouken@libsdl.org>
+Copyright (C) 2021 NVIDIA Corporation
+
+This software is provided 'as-is', without any express or implied
+warranty.  In no event will the authors be held liable for any damages
+arising from the use of this software.
+
+Permission is granted to anyone to use this software for any purpose,
+including commercial applications, and to alter it and redistribute it
+freely, subject to the following restrictions:
+
+1. The origin of this software must not be misrepresented; you must not
+claim that you wrote the original software. If you use this software
+in a product, an acknowledgment in the product documentation would be
+appreciated but is not required.
+2. Altered source versions must be plainly marked as such, and must not be
+misrepresented as being the original software.
+3. This notice may not be removed or altered from any source distribution.
 
 ==============================================================================
 Arquivos: src/video/x11/SDL_x11settings.c, src/video/x11/SDL_x11settings.h

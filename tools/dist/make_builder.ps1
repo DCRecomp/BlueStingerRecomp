@@ -42,6 +42,13 @@ foreach ($l in $envLines) { if ($l -match '^([^=]+)=(.*)$') { Set-Item -Path "en
 if (-not $env:VCToolsRedistDir) { Fail "VCToolsRedistDir nao definido pelo vcvars" }
 
 $build = Join-Path $repo "build\msvc-release"
+if ($Versao) {
+    # os executaveis sao compilados da arvore: numa release o known_versions.h tem de ser o do commit (o particular tem
+    # outras versoes), e o build tem de acontecer aqui (sem -NoBuild)
+    if ($NoBuild) { Fail "-Versao nao aceita -NoBuild" }
+    git -C $repo diff --quiet HEAD -- tools/extractor/known_versions.h
+    if ($LASTEXITCODE -ne 0) { Fail "-Versao: tools/extractor/known_versions.h difere do commit (o particular nao pode entrar na release)" }
+}
 if (-not $NoBuild) {
     Step "compilando o Builder (Release)"
     Push-Location $repo
@@ -118,8 +125,9 @@ if (-not $version) { $version = "desconhecida" }
 if ($Versao) {
     if ($Versao -notmatch '^v[0-9]+\.[0-9]+\.[0-9]+[A-Za-z0-9.+-]*$') { Fail "rotulo de versao invalido: $Versao" }
     if ($locais) { Fail "-Versao (release) nao aceita -LegendasLocais nem -IconeLocal" }
-    $sujos = @(git -C $repo status --porcelain -- @kitEntries "tools/dist/LEIA-ME-BUILDER.txt" "third_party/licencas" "third_party/pl_mpeg" |
-               Where-Object { $_ -notmatch 'tools/extractor/known_versions\.h$' -and $_ -notmatch '^\?\? ' })
+    # a arvore inteira igual ao commit (o proprio script, o sdl3_avisos.py, os textos e o kit), menos o known_versions.h
+    # particular, que o kit sempre le do commit; arquivos nao rastreados nao entram (o kit usa so os rastreados)
+    $sujos = @(git -C $repo status --porcelain --untracked-files=no | Where-Object { $_ -notmatch ' tools/extractor/known_versions\.h$' })
     if ($sujos) { Fail ("-Versao exige o kit igual ao commit; mudancas: " + ($sujos -join '; ')) }
     $version = "$Versao (" + (git -C $repo rev-parse --short=10 HEAD).Trim() + ")"
 }

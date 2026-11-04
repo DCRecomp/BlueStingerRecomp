@@ -1,5 +1,8 @@
 # Dependências e licenças: política e inventário (Windows e Linux)
 
+**Atualização (2026-11-04):** gate da v0.8.0 Preview na seção 9 (textos e avisos acrescentados aos pacotes; nenhum
+bloqueador; S1, S2, S3 e a troca do CMake da S5 continuam propostas).
+
 **Situação (2026-11-03):** inventário **preliminar**, feito pelas fontes do repositório, pelo pacote Linux `l5zig6` (SHA-256
 `70a785ee…eb4474`, árvore `72132c1a`) e pelo `make_builder.ps1` do Windows. **Não é parecer jurídico e não declara
 conformidade.** Nenhum pacote pode ser publicado antes de resolver as pendências da seção 7 e de o mantenedor as revisar. Pedidos
@@ -169,22 +172,26 @@ precaução (`zig ar`, `objcopy`).
 
 ## 7. Textos e avisos exigidos (lista para o pacote da L8)
 
-| Texto ou aviso | De onde vem | Para onde vai | No pacote hoje |
+| Texto ou aviso | De onde vem | Para onde vai | No pacote v0.8.0 |
 |---|---|---|---|
-| GPL-2.0 e Linux-syscall-note | `LICENSES/preferred/GPL-2.0` e `LICENSES/exceptions/Linux-syscall-note` da árvore do kernel de onde vêm os cabeçalhos do Zig 0.13 (versão a registrar) | `licencas/compilador/` | **não** |
-| LGPL-2.1 (glibc) | `COPYING.LIB` da versão da glibc que o Zig 0.13 traz | `licencas/compilador/` | **não** (só o `LICENSES`) |
-| HIDAPI (opção BSD) | SDL `src/hidapi/LICENSE-bsd.txt` e `LICENSE.txt` | `licencas/` e a pasta de licenças do jogo (Windows e Linux) | **não** |
-| yuv2rgb (BSD-3) | SDL `src/video/yuv2rgb/LICENSE` | idem | **não** |
-| fdlibm (Sun) | cabeçalho de `src/libm/*.c` do SDL | idem | **não** |
-| Demais avisos do SDL3 por alvo | levantamento (seção 3.1) | idem | **não** |
-| Crédito da FreeType | "Portions of this software are copyright © 2024 The FreeType Project (www.freetype.org). All rights reserved." | LEIA-ME do jogo e do Builder (Linux) | **não** |
-| jsoncpp, bzip2, cppdap, OpenSSL 1.1.1v (CMake) | `Utilities/` das fontes do CMake 3.30.5 e o `LICENSE` da OpenSSL 1.1.1v | `licencas/compilador/CMake-componentes/` | **não** |
-| cloudlibc, mingw-w64 por diretório, macOS | Zig `lib/libc/...` | `licencas/compilador/` | não; **somem com a poda** |
-| `NOTICE` do LLVM, se o binário o exigir | zig-bootstrap 18.1.6 | `licencas/compilador/` | a conferir |
-| Procedência | URL e SHA-256 de cada download; commit do SDL3 pré-compilado | `VERSAO.txt` | parcial (falta URL e commit) |
-| Windows: os mesmos do SDL3 (HIDAPI, yuv2rgb, libm) | SDL | `licencas/` do Builder Windows e do jogo | **não** |
+| GPL-2.0 e Linux-syscall-note | `LICENSES/` do kernel, tag v6.3 (cabeçalhos 6.3.8 no Zig 0.13) | `licencas/compilador/` (Linux) | **sim** |
+| LGPL-2.1 (glibc) | `COPYING.LIB` da tag `glibc-2.38` | `licencas/compilador/` (Linux) | **sim**, com o `LICENSES` |
+| HIDAPI (opção BSD) | SDL `src/hidapi/LICENSE-bsd.txt` e `LICENSE.txt` | `licencas/` dos dois Builders | **sim**; na pasta do jogo instalado, **não** (pendência, abaixo) |
+| yuv2rgb (BSD-3) | SDL `src/video/yuv2rgb/LICENSE` | idem | idem |
+| fdlibm (Sun) e demais avisos do SDL3 | `SDL3-avisos-terceiros.txt` (`tools/dist/sdl3_avisos.py`: 49 blocos, 140 arquivos, todos os alvos) | idem | idem |
+| Crédito da FreeType | FTL | LEIA-ME do Builder e do jogo (Linux), `AVISOS.txt` | **sim** |
+| jsoncpp, bzip2, cppdap, OpenSSL 1.1.1v (CMake) | `Utilities/` da tag v3.30.5 do CMake e `LICENSE` da `OpenSSL_1_1_1v` | `licencas/compilador/` (Linux) | **sim**, com os avisos de reconhecimento no `AVISOS.txt` |
+| APSL-2.0 (cabeçalhos do macOS); musl, mingw-w64, wasi-libc | `APPLE_LICENSE` do xnu; textos do Zig | `licencas/compilador/` (Linux) | **sim** (a poda da S2 fica para depois) |
+| `NOTICE` do LLVM | nenhum arquivo `NOTICE*` no Zig 0.13 (busca de 2026-11-04) | — | não se aplica |
+| Procedência | URL e SHA-256 de Zig, CMake, Ninja e dos textos; commit do SDL3 | `AVISOS.txt`, `compilador/PROCEDENCIA.txt`, `VERSAO.txt` | **sim** |
 
-Os textos não foram baixados nem copiados agora: entram com o pacote da L8, montado e provado de novo, depois da aprovação.
+Texto histórico (2026-11-03): os textos não tinham sido baixados; entraram em 2026-11-04 (seção 9).
+
+**Pendência para a v0.8.1 ou a L8:** o Builder copia para a pasta `licencas/` do jogo instalado só as licenças principais
+(`extra_licenses()` em `builder/builder_platform_*.cpp`). Os avisos do SDL3 (HIDAPI, yuv2rgb, fdlibm e outros) ficam no pacote do
+Builder. O jogo é gerado na máquina do usuário e não é redistribuído pelo projeto, então a obrigação de distribuição é atendida
+pelo pacote; o LEIA-ME do jogo aponta onde estão os avisos. A cópia na instalação exige mudar o Builder (C++) e refazer as suítes,
+e fica fora desta release (revisão Codex 20261104-103026, achado ALTA aceito em parte).
 
 ## 8. O que não basta
 
@@ -199,3 +206,30 @@ Os textos não foram baixados nem copiados agora: entram com o pacote da L8, mon
   distribui; a escolha de formatos para mods precisa disso documentado.
 
 O pacote que vai para as sessões de validação (o `l5zig6`) não é publicado e não muda; as correções entram no pacote da L8.
+
+## 9. Gate da v0.8.0 Preview (2026-11-04)
+
+O mantenedor autorizou a publicação experimental da v0.8.0 Preview (pacotes Windows e Linux para testes em hardware real),
+com a auditoria resolvida antes. Nenhum componente funcional foi trocado; só textos, avisos e documentação entraram.
+
+**Bloqueadores (pagamento, royalties, licença comercial obrigatória, proibição de redistribuir):** nenhum.
+
+| Item | Decisão para a v0.8.0 | Situação |
+|---|---|---|
+| MSVC e Windows SDK (S1) | Não são distribuídos. O usuário instala o Build Tools e aceita os termos da Microsoft. Para uso individual é gratuito (licença Community, ou os termos do Build Tools para código aberto de 2022). Organizações conferem os termos. Documentado no `LEIA-ME` e no `AVISOS.txt`. S1 (llvm-mingw) continua proposta. | **ressalva documentada**, não bloqueia |
+| Runtime do MSVC no Builder | "Distributable Code", redistribuído sem modificação, só com os programas do Builder. | compatível |
+| Cabeçalhos do kernel no Zig | `GPL-2.0.txt` e `Linux-syscall-note.txt` da tag v6.3 (cabeçalhos 6.3.8) em `licencas/compilador/`. | resolvido |
+| glibc no Zig | `glibc-COPYING.LIB.txt` (LGPL-2.1, tag `glibc-2.38`) e o `glibc-LICENSES.txt`. As partes estáticas no `bs-builder` (crt, `libc_nonshared`): pela seção 6 da LGPL-2.1, as fontes delas estão no pacote, e as do `bs-builder` na tag, com o script e o compilador para religar (`AVISOS.txt`). Isso vale também para as 13 fontes sem a exceção de ligação. | resolvido |
+| Cabeçalhos do macOS (405 com APSL) | `APSL-2.0.txt`. Não são usados; a poda (S2) fica para depois. | resolvido |
+| `lib/tsan` | 259 arquivos com SPDX Apache-2.0 com exceção LLVM, cobertos pelo texto do LLVM; nenhum com APSL. | compatível |
+| CMake: jsoncpp, bzip2, cppdap, OpenSSL 1.1.1v (S5) | Textos da tag v3.30.5 e da `OpenSSL_1_1_1v`, com os dois avisos de reconhecimento da OpenSSL no `AVISOS.txt`. O CMake não muda (a S5 com OpenSSL 3 fica para depois). | resolvido; OpenSSL 1.1.1 sem suporte (o Builder não usa a rede do CMake) |
+| SDL3: HIDAPI, yuv2rgb, fdlibm e outros | `SDL3-avisos-terceiros.txt` (49 blocos, 140 arquivos), gerado por `tools/dist/sdl3_avisos.py`, conferido contra as fontes do kit a cada montagem do Windows e contra as fontes do pré-compilado do Linux (a montagem do Linux confere a versão); `HIDAPI-LICENSE*.txt` (opção BSD) e `yuv2rgb-BSD-3.txt`. | resolvido |
+| FreeType | Crédito da FTL no `LEIA-ME` do Builder Linux, no do jogo e no `AVISOS.txt`. | resolvido |
+| Codecs de mods (S4) | Aviso em `docs/MODS-VIDEO.md` e no `AVISOS.txt`: HEVC pode exigir extensão paga no Windows; H.264 depende do `ffmpeg` em Fedora e Bazzite; MPEG-1, OGG, FLAC e WAV sem taxa. | resolvido (documentação) |
+| S3 (pl_mpeg no Windows) | Opcional; a política não o exige. | não iniciado |
+| Marcas | Uso nominativo e aviso de não afiliação no `AVISOS.txt`. | ressalva documentada |
+| Jogo gerado na máquina do usuário | Não é distribuído pelo projeto; recebe as licenças principais na pasta `licencas/`. Os textos completos ficam no pacote do Builder. | compatível |
+
+Procedência dos textos acrescentados: `third_party/licencas/compilador/PROCEDENCIA.txt` (URL e SHA-256). Este registro não é
+parecer jurídico: as obrigações conhecidas estão cumpridas e as ressalvas (MSVC, marcas, OpenSSL 1.1.1 sem suporte) estão
+documentadas.

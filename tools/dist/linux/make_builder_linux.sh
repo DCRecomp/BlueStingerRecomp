@@ -109,6 +109,10 @@ T=$work/src/third_party/licencas
 for f in AVISOS.txt SDL3-avisos-terceiros.txt HIDAPI-LICENSE.txt HIDAPI-LICENSE-bsd.txt yuv2rgb-BSD-3.txt; do
     [ -f "$T/$f" ] || falha "falta third_party/licencas/$f"; cp "$T/$f" "$L/$f"
 done
+# os avisos sao das fontes de uma versao do SDL3: o pre-compilado tem de ser dela (revisao Codex 20261104-103026)
+sdlv=$(sed -n 's/^set(PACKAGE_VERSION "\([0-9.]*\)").*/\1/p' "$sdl3/lib/cmake/SDL3/SDL3ConfigVersion.cmake" | head -1)
+avv=$(sed -n '1s/^Avisos de terceiros dentro do SDL3 \([0-9.]*\) .*/\1/p' "$T/SDL3-avisos-terceiros.txt")
+[ -n "$sdlv" ] && [ "$sdlv" = "$avv" ] || falha "SDL3 pre-compilado $sdlv, avisos de terceiros do SDL3 $avv"
 cp "$work/src/tools/dist/linux/LEIA-ME-BUILDER.txt" "$stage/LEIA-ME.txt"
 cp "$work/src/tools/dist/linux/instalar.sh" "$stage/instalar.sh"; chmod 755 "$stage/instalar.sh" "$stage/bs-builder"
 if [ -n "$toolchain" ]; then

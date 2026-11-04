@@ -112,3 +112,9 @@ Requisitos
 ----------
 Windows 10 ou 11, x64. O runtime do Visual C++ ja vem nesta pasta.
 A versao e a data da compilacao estao em VERSAO.txt.
+
+Licencas
+--------
+Textos em licencas\. Os avisos de terceiros do SDL3 (HIDAPI, yuv2rgb, fdlibm e outros), compilado
+neste jogo, e a procedencia dos componentes estao na pasta licencas\ do Blue Stinger Builder (comece
+por AVISOS.txt).
