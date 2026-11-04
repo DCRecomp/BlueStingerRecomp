@@ -76,7 +76,9 @@ $kit = Join-Path $stage "kit"
 $kitEntries = @("CMakeLists.txt", "LICENSE", "app", "runtime", "tools/extractor", "tools/dist/LEIA-ME.txt", "config",
                 "tools/dcmap", "native", "legacy", "transitional", "tools/build", "third_party/dr_libs", "third_party/xiph",
                 "third_party/vulkan", "mods-padrao")
-$kitList = @(git -C $repo -c core.quotepath=off ls-files --cached --others --exclude-standard -- @kitEntries)
+# release (-Versao): so os arquivos do commit (rastreados); um arquivo solto na arvore de trabalho nunca entra
+if ($Versao) { $kitList = @(git -C $repo -c core.quotepath=off ls-files --cached -- @kitEntries) }
+else { $kitList = @(git -C $repo -c core.quotepath=off ls-files --cached --others --exclude-standard -- @kitEntries) }
 if ($LASTEXITCODE -ne 0 -or $kitList.Count -lt 20) { Fail "git ls-files falhou ou listou poucos arquivos ($($kitList.Count))" }
 foreach ($rel in $kitList) {
     $src = Join-Path $repo $rel
@@ -117,7 +119,7 @@ if ($Versao) {
     if ($Versao -notmatch '^v[0-9]+\.[0-9]+\.[0-9]+[A-Za-z0-9.+-]*$') { Fail "rotulo de versao invalido: $Versao" }
     if ($locais) { Fail "-Versao (release) nao aceita -LegendasLocais nem -IconeLocal" }
     $sujos = @(git -C $repo status --porcelain -- @kitEntries "tools/dist/LEIA-ME-BUILDER.txt" "third_party/licencas" "third_party/pl_mpeg" |
-               Where-Object { $_ -notmatch 'tools/extractor/known_versions\.h$' })
+               Where-Object { $_ -notmatch 'tools/extractor/known_versions\.h$' -and $_ -notmatch '^\?\? ' })
     if ($sujos) { Fail ("-Versao exige o kit igual ao commit; mudancas: " + ($sujos -join '; ')) }
     $version = "$Versao (" + (git -C $repo rev-parse --short=10 HEAD).Trim() + ")"
 }
