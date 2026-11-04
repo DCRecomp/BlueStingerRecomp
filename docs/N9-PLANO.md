@@ -1,6 +1,6 @@
 # N9 — Blue Stinger Remastered: planejamento
 
-**Situação: N9 autorizado e iniciado em 2026-11-02. O mantenedor considerou o fechamento técnico do N8 suficiente para abrir o N9; as ressalvas do N8 e a campanha completa (seção 14) continuam abertas. N9.0 com fechamento técnico confirmado pelo mantenedor (`docs/N9-0-EDICOES.md`). **Próximo: N9-L, suporte nativo a Linux (`docs/N9-L-PLANO.md`), marco intermediário provisório, antes do N9.1 e do N9.2, que ficam bloqueados até a validação da portabilidade.** Planejamento aprovado em
+**Situação: N9 autorizado e iniciado em 2026-11-02. O mantenedor considerou o fechamento técnico do N8 suficiente para abrir o N9; as ressalvas do N8 e a campanha completa (seção 14) continuam abertas. N9.0 com fechamento técnico confirmado pelo mantenedor (`docs/N9-0-EDICOES.md`). N9-L (`docs/N9-L-PLANO.md`) L0–L5 e a v0.8.0 Preview publicados, com a validação no Bazzite pelo mantenedor, que não bloqueia a remasterização (2026-11-04). **N9.1 (instalador, `docs/N9-1-INSTALADOR.md`) autorizado, implementado e testado em 2026-11-04, à espera do fechamento pelo mantenedor; o N9.2 só começa depois dele.** Planejamento aprovado em
 2026-10-23 e atualizado com as lições do N8 em 2026-10-28 (seção 13). Este documento registra o escopo, a arquitetura e os critérios. A ordem N0–N10 não muda (`docs/PLANO-PORT-NATIVO.md`, seções 4 e 4.2).
 
 Fontes: o pedido do mantenedor de 2026-10-23 ("Planejamento oficial do N9: Remasterização"), a definição do N9 de
@@ -197,6 +197,8 @@ recomendada, **O** = opcional) com complexidade (**P**, **M**, **G**, **GG**).
   dos saves e das preferências antes e depois); cancelamento em cada fase deixa a instalação anterior utilizável;
   progresso monotônico com as fases reais; 100 %/125 %/150 %/200 % de escala sem cortes; navegação completa só pelo
   teclado; textos em pt-BR e en-US sem chave faltando (o teste de catálogo que o Recompiler já tem).
+- **Situação (2026-11-04):** implementado; provas em `STATUS.md` (N9.1). Faltam a conferência visual da janela real do
+  Windows e o Linux no Bazzite, os dois pelo mantenedor.
 
 ### N9.2 — Interface moderna do jogo (E, G)
 

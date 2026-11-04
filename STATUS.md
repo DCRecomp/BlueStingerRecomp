@@ -3541,7 +3541,7 @@ Plano: `docs/PLANO-PORT-NATIVO.md`, seções 4 e 4.2.
 | N6 Áudio | **concluída** (2026-10-23): H9 aprovado 3/3 com o Vulkan padrão (0 faltas); legado fora do produto no N8.6. H9 reaberto no N8.8: intermitente, não corrigido, não aprovado | 100 |
 | N7 Vulkan | **funcional, em fechamento técnico**: Vulkan padrão da janela com recuo seguro para o software; N7a, N7b e N7c validadas. Os dois bloqueios ganharam evidência no N8.7 (2026-10-28). **AMD:** a causa do `Invalid Read` foi demonstrada e corrigida (descritor não reescrito no realloc de `tris_`; 0/90 depois). **Fog e volumes:** implementados no software e no Vulkan, iguais em 32 bits, com a sombra conferida com o Flycast; falta um quadro de fog pareado. O N7 fica em 95% até o mantenedor encerrar formalmente esses bloqueios. SSAO, 16:9 real e MSAA permanecem no N9 (`docs/N7-PLANO.md` seção 25) | 95 |
 | N8 Sem legado | **iniciada** em 2026-10-24 (D-N8-1 a D-N8-4). N8.0 **concluído** em 2026-10-25 (regressão nível 3, correções, 16 referências validadas e reproduzidas, fixação do áudio nas suítes históricas); N8.1 **concluído** em 2026-10-26 (cadência B, TMU, CCN, cabo e ponte de interrupções no tempo lógico); N8.2 **concluído** em 2026-10-26 (produto × validação: papéis, `BS_VALIDACAO`, catraca do mapa); N8.3 **concluído** em 2026-10-26 (serviço nativo das syscalls; BIOS, drive e flash simulados fora do produto); N8.4 **concluído** em 2026-10-27 (barramento sem dispositivos; Maple, `--controles/--saves legado` fora do produto); N8.5 **concluído** em 2026-10-27 (filme legado e conversor YUV fora do produto); N8.6 **concluído** em 2026-10-27 (área de som nativa; AICA, áudio legado e DMA do G2 fora do produto); N8.7 **concluído** em 2026-10-30: AMD corrigida, fog e volumes nos dois renderizadores, o caminho gráfico do legado (TA, PVR, VRAM, vídeo, interrupções, DMAC, system block, rasterizador de referência) fora do produto e em sombra na validação; a fronteira guest fica no contrato do jogo (D-K1 a); N8.8 com **fechamento técnico em 2026-11-02, com ressalvas**: regressão nível 3 por composição, H9 e campanha completa abertos (`docs/N8-8-FECHAMENTO.md`) | 95 |
-| N9 Remasterização | **não iniciada**; planejamento oficial aprovado em 2026-10-23 (`docs/N9-PLANO.md`): duas edições, Original e Remastered, do mesmo núcleo; começa depois do N8 | 0 |
+| N9 Remasterização | **iniciada** em 2026-11-02 (`docs/N9-PLANO.md`): duas edições, Original e Remastered, do mesmo núcleo. N9.0 fechado (2026-11-02). N9-L L0–L5 e a v0.8.0 Preview publicados, com a validação no Bazzite pelo mantenedor. **N9.1 (instalador) implementado e testado em 2026-11-04, à espera do fechamento pelo mantenedor** (conferência visual da janela real e Linux no Bazzite). N9.2 não iniciado | 8 |
 | N10 Mods e elevação | não iniciada (extensões preparadas: mídia do N5/N6, texturas HD por conteúdo e shaders validados do N7) | 0 |
 
 Progresso geral: ~81 % (onze etapas de peso igual; N8 em 95 % é estimativa, com campanha e H9 abertos).
@@ -4325,6 +4325,95 @@ não por uma única bateria contínua** (decisão do mantenedor, 2026-11-02).
 - **Pendências:** H9; D-N8-4 no gate pós-N9; ressalva do 7.1 e D-K1(a); limite de 3 h de `n6_h` no executor, defeito a
   corrigir antes de uma futura integral, sem enfraquecer os testes. N9 e N10 não iniciados.
 
+### N9.1: instalador moderno e identidade visual (2026-11-04)
+
+Autorizado pelo mantenedor em 2026-11-04. Desenho em `docs/N9-1-INSTALADOR.md` e arte em `docs/N9-1-ARTE.md`. Decisões
+seguidas:
+- 12.2: Win32 + Direct2D no Windows;
+- 12.3: a identidade é compartilhada, o motor não;
+- 12.9: arte própria, em geometria, sob MIT;
+- mantenedor, 2026-11-04: SDL3 + FreeType no Linux e integração por usuário.
+
+Evidências em `%LOCALAPPDATA%\BlueStingerRecomp\n9-1\evidencias`.
+
+**O que foi feito**
+- **Arquitetura:** o `bs_builder_core` continua sendo o mecanismo. O instalador é uma camada de cima:
+  - `builder/instalador/`: núcleo portátil (lista das instalações, verificação SHA-256, desinstalação, fases, integração);
+  - `builder/instalador/gui/`: telas e arte portáteis;
+  - dois hospedeiros: `janela_win.cpp` (Direct2D) e `janela_sdl.cpp` (pintor em software com o `native/text`).
+- **Contrato de antes preservado:** `BlueStinger-Recompiler --disc --out --kit --sdl3 --portatil --edicao --idioma --auto
+  --sem-filmes`, códigos 0/1/2/3.
+  - Novas opções: `--integrar`, `--captura`, `--teclas`.
+  - O pacote ganha o `BlueStinger-Desinstalar` e o `.bs-package.sha256`, com o SHA-256 de tudo o que está fora de `data/`.
+    Os dados continuam conferidos pelo manifesto do jogo.
+- **Remastered:** numa instalação nova, as legendas começam em pt-BR. A Original não muda.
+- **Desinstalação:**
+  - remove só a lista do pacote, o `instalacao.toml` e o `bluestinger.log` (o log do jogo ao lado do executável);
+  - saves, preferências, mods e arquivos do jogador ficam;
+  - o próprio desinstalador e o runtime saem depois do processo;
+  - com o jogo aberto, nada muda.
+- **Correções durante as provas:**
+  - o hospedeiro sem janela não gerava o ícone do `.desktop`; a geração agora é comum (`icone_atalho_png`);
+  - o log do jogo ficava na pasta depois da desinstalação;
+  - a janela do Windows tinha a área útil de 944×581; agora é de 960×620 DIP, como no desenho;
+  - o script do WSL não recompilava os fontes mudados, porque o relógio do WSL adianta minutos sobre o do Windows; agora
+    usa `rsync -c` e a cópia do horário atual.
+
+**Testes (nível 1, dirigidos)**
+- **Unitários `bs_instalador_tests`:** 12/0 no Windows e 11/0 no Linux (WSL). O caso "jogo aberto" só existe no Windows.
+  - Cobrem: fases monotônicas (o ruído de arredondamento não conta como recuo); lista; verificação; atualização que preserva
+    os dados pessoais; desinstalação só do pacote e limpa; jogo aberto; integração desviada; espaço; e os três casos da
+    revisão Codex.
+- **`bs_ui_tests`:** 25/0, com o catálogo pt-BR/en-US completo.
+- **`ctest --preset msvc-debug`:** 29 testes, 100 % nas duas rodadas.
+  - Sem o disco, 5 ignorados.
+  - Com o disco, 2 ignorados (`boot_trace` e `movie_manifest`).
+- **Capturas (`--captura`):** 120 imagens em cada sistema, com as 15 telas e estados, os dois idiomas e 100/125/150/200 %,
+  conferidas em 960×620 e em 880×580.
+  - Windows: 0 cortes.
+  - Linux (WSL): 0 cortes, depois de corrigir a altura do rodapé lateral.
+- **Teclado:** o roteiro de navegação passou (todas as telas, ida e volta, sem mouse).
+- **`tools/dist/test_instalador.ps1`, ponta a ponta com o CDI real: 28/0.**
+  - I1: instalação Remastered só pelo teclado, em 81 s.
+  - I2: os dados pessoais de referência.
+  - I3: cancelamento na extração, na preparação e na instalação. Em todas, a anterior fica intacta e o jogo responde.
+  - I4: atualização para a Original com os dados pessoais idênticos.
+  - I5: verificação que acusa um arquivo adulterado.
+  - I6: desinstalação que deixa só os arquivos do jogador.
+  - I7: instalação limpa da Original e desinstalação numa pasta com `& % ^ ( )` e Unicode no nome.
+- **`test_builder.ps1`: 24/0.** Rodou na distribuição de teste `n9-1\builder-dist`, sem tocar em `dist\`.
+  - O Recompiler novo, em janela `--auto`, conclui e preserva o `ini`, o modo portátil, a edição, as legendas e o save.
+  - O cancelamento pela janela do Developer dá código 3.
+- **Linux (WSL), ponta a ponta com o CDI real e o kit e o compilador da v0.8.0 (`wsl_n91_e2e.sh`): E1–E10.**
+  - Instalação e desinstalação pelo teclado, `.desktop`, ícone, o jogo responde e só os arquivos do jogador ficam.
+  - **Isto não aprova o Linux.** Os critérios do Linux esperam os testes do mantenedor no Bazzite.
+- **Janela real do Windows (fumaça com `PostMessage` só para a janela do instalador):**
+  - ela abre, recebe teclas, desenha sem erro (todos os `EndDraw` S_OK) e fecha com código 0;
+  - o conteúdo não aparece pela `PrintWindow`, nem com `PW_RENDERFULLCONTENT`, nem pelo GDI: o Direct2D apresenta pelo DXGI;
+  - **a conferência visual da janela fica com o mantenedor.** O desenho é o mesmo das capturas, só muda o alvo do pintor.
+- **Binários finais:** `BlueStinger-Recompiler.exe` `1eafd87b…`, `BlueStinger-Desinstalar.exe` `d09ba725…`, Linux
+  `00381d4c…` e `d076d36a…`.
+  - A suíte do Windows, o `test_builder` e o `ctest` rodaram na versão de antes do ajuste da área útil da janela, uma linha
+    de `CreateWindowExW`.
+  - Depois do ajuste, os unitários foram repetidos (12/0) e a fumaça da janela também.
+
+**Original × Remastered no N9.1**
+- O instalador escolhe a edição e grava `[edicao] perfil` no `instalacao.toml`.
+- A Remastered começa com as legendas em pt-BR numa instalação nova.
+- Nenhum arquivo do jogo, do runtime ou do código gerado mudou: o `BlueStinger.exe` é o mesmo programa nas duas edições.
+
+**Análise de impacto: sem C8 e sem regressão longa**
+- O C8 reproduz a campanha no programa do jogo, e o N9.1 não toca em `runtime/`, `app/`, `native/`, `config/`, no gerador nem
+  no código gerado (diff só em `builder/`, `tests/`, `tools/dist/` e `docs/`).
+- O resultado aprovado do programa atual continua valendo pela chave. Monitor de Campanha intacto.
+- Os testes do mecanismo mudado (o pacote e o `--auto`) foram o `test_builder` e o `test_instalador`.
+
+**Pendências**
+- Conferência visual da janela real (Windows) pelo mantenedor.
+- Linux no Bazzite pelo mantenedor.
+- O `tools/extractor/known_versions.h` particular está sem o `};` que fecha a lista. O kit sempre leva o do HEAD, então os
+  pacotes não são afetados. O arquivo não foi alterado.
+
 ### v0.8.0 Preview: preparação da publicação experimental (2026-11-04)
 
 Autorização do mantenedor: publicar a v0.8.0 Preview (Windows x64 e Linux x86-64 experimental) para baixar no Bazzite e
@@ -4766,6 +4855,16 @@ Contrato em `docs/N9-0-EDICOES.md`. O mesmo executável roda as duas edições, 
 - **Não feito nesta etapa:** tela de edição (N9.1), preset Remastered (N9.5–N9.8).
 
 ## Revisões independentes (Codex)
+
+### 2026-11-04: N9.1, instalador. Relatório `reviews/codex-20261104-195545.md` (5 achados)
+
+| Achado | Decisão |
+|---|---|
+| ALTA: um link ou junction num componente intermediário da lista do pacote levava a exclusão para fora da pasta | **aceito**: todos os componentes e a própria pasta do jogo (e a da versão anterior) têm de ser pastas de verdade (`symlink_status`; a junction do MSVC é `file_type::junction`); as iterações não entram em links. Teste `instalador_desinstala_nao_segue_elos`, que falha com a guarda desligada. Resta a corrida com o próprio usuário trocando a pasta durante a desinstalação |
+| ALTA: um nome de pasta com `&`, a barra vertical, `^` ou `%` virava comando no `cmd` adiado que apaga o desinstalador | **aceito**: cada caminho vai numa variável de ambiente, e a linha só tem `"%BS_DES_n%"` (com `/v:off`). Na prova isolada, a versão anterior deixou o `.exe` e as DLLs e a corrigida removeu a pasta. Também está no I7 da suíte |
+| ALTA: os "atalhos" da lista das instalações eram apagados sem conferência | **aceito**: só sai um atalho nosso (`.lnk` "Blue Stinger*" ou `bluestinger-*.desktop`, arquivo comum) direto no Menu Iniciar, na Área de Trabalho ou no menu de aplicativos. Teste `instalador_atalhos_so_os_nossos` |
+| MÉDIA: o nome alternativo do atalho podia sobrescrever o de outra instalação | **aceito**: procura um nome livre com número e nunca grava sobre um arquivo alheio (mesmo teste) |
+| MÉDIA: duas instalações ao mesmo tempo podiam perder uma alteração da lista | **aceito**: trava por usuário (`instalacoes.toml.lock`) na leitura, na alteração e na troca, com espera de até 10 s. Teste `instalador_lista_concorrente` (2 × 15 registros) |
 
 ### 2026-11-04: v0.8.0, correções posteriores. Relatório `reviews/codex-20261104-115430.md` (4 achados)
 

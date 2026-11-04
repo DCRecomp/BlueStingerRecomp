@@ -85,7 +85,7 @@ execução) · **P** = processo externo · **F** = ferramenta de build · **T** 
 | MSVC (Visual Studio Build Tools) e Windows SDK | instalado pelo usuário | compila o Builder e, na máquina do usuário, o jogo | proprietária (termos da Microsoft); gratuita para uso individual e, desde 2022, para compilar projetos open source; **não redistribuível** | Microsoft | F | não | aceitar os termos da Microsoft | — | **análise**: é a dependência de compilação mais próxima de violar a política (licença proprietária com condições de uso, download obrigatório da Microsoft). Os termos exatos e o caso de organizações precisam de leitura | **llvm-mingw** (Clang, LLD, mingw-w64, libc++; Apache-2.0 com exceção LLVM, ZPL, domínio público): opção B de `docs/DISTRIBUICAO-COMPILADOR.md` |
 | Runtime do MSVC (`vcruntime140*.dll`, `msvcp140*.dll`…) | do VS do mantenedor | runtime do Builder | "Distributable Code" da Microsoft | `VCToolsRedist` | D | **sim** (cópia no Builder) | só com o programa, sem modificar; condições da licença do VS de quem monta | — | **análise** | some com llvm-mingw e libc++ estática |
 | Media Foundation (H.264 e AAC) | do Windows | Builder: SFD → MP4; jogo: filmes e mods | parte do Windows | sistema | D | não | — | H.264 e AAC têm pools de patentes; o licenciamento é da Microsoft para o codec do sistema; o projeto não distribui codificador nem os MP4 gerados. Edições N precisam do Media Feature Pack (gratuito) | compatível; **análise** de baixa prioridade | proposta S3 (seção 5) |
-| XAudio2 2.9, DirectWrite/Direct2D/WIC, XInput, fibras | do Windows 10+ | áudio, legendas, controles | parte do Windows | sistema | D | não | — | — | compatível | — |
+| XAudio2 2.9, DirectWrite/Direct2D/WIC, XInput, fibras; DWM, Shell (IShellLinkW, SHGetKnownFolderPath), registro HKCU | do Windows 10+ | áudio, legendas, controles; o instalador do N9.1 (desenho, texto, capturas PNG, barra de título escura, atalhos, "Aplicativos instalados") | parte do Windows | sistema | D | não | — | — | compatível | — |
 | Segoe UI | do Windows | fonte das legendas no Windows | Microsoft, fonte do sistema | sistema | D (pelo DirectWrite) | não | não copiar a fonte | — | compatível | — |
 | Carregador Vulkan (`vulkan-1.dll`) e driver | do driver | Vulkan | do fabricante | sistema | D | não | — | — | compatível | — |
 
@@ -96,6 +96,7 @@ execução) · **P** = processo externo · **F** = ferramenta de build · **T** 
 | glibc (`libc.so.6`, `libm`, `libdl`, `libpthread`) | LGPL-2.1+ | D | compatível |
 | `libvulkan.so.1`, Mesa (RADV, NVK, llvmpipe), driver NVIDIA | Apache-2.0; MIT; proprietária (NVIDIA, do sistema do usuário) | D | compatível (o driver da NVIDIA é do sistema do usuário, opcional: o RADV e o NVK são livres) |
 | libwayland, libdecor, libX11/xcb, PipeWire, libpulse, ALSA, libudev, D-Bus, libusb (pelo SDL) | MIT; LGPL-2.1; AFL/GPL (D-Bus) | D | compatível |
+| Portal de arquivos do desktop (xdg-desktop-portal) ou zenity, pelos diálogos do SDL3 no instalador do N9.1 | LGPL-2.1+; LGPL-2.1+ | D (processo externo, só em execução) | compatível |
 
 ### 3.5 Ferramentas externas opcionais e mods
 
@@ -233,3 +234,10 @@ com a auditoria resolvida antes. Nenhum componente funcional foi trocado; só te
 Procedência dos textos acrescentados: `third_party/licencas/compilador/PROCEDENCIA.txt` (URL e SHA-256). Este registro não é
 parecer jurídico: as obrigações conhecidas estão cumpridas e as ressalvas (MSVC, marcas, OpenSSL 1.1.1 sem suporte) estão
 documentadas.
+
+## 10. N9.1: instalador (2026-11-04)
+
+O instalador e o desinstalador do N9.1 não trazem nenhum componente de terceiros novo. No Windows eles usam só
+componentes do sistema (seção 3.3). No Linux usam o SDL3, o FreeType e a Noto Sans que já estavam no pacote (seção 3.1),
+além dos diálogos do desktop em execução (seção 3.4). A arte é do projeto, em geometria, sob MIT: `docs/N9-1-ARTE.md`.
+O pacote do Builder ganha só executáveis do projeto (`BlueStinger-Desinstalar`).

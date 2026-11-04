@@ -19,7 +19,7 @@ V1.000) para C++ nativo em Windows x64. Arquitetura e decisões em
   tem análise de impacto, testes dirigidos, revisão Codex e prova de equivalência. Inventário: `docs/N9-L-LICENCAS.md`.
 - `STATUS.md` registra cada verificação com data e método.
 - Commits só quando o mantenedor pedir.
-- **N9 (Remasterização)** foi autorizado em 2026-11-02 (`docs/N9-PLANO.md`). N9.0 fechado (`docs/N9-0-EDICOES.md`). Próximo: **N9-L, Linux nativo** (`docs/N9-L-PLANO.md`), só depois da aprovação do plano; N9.1, N9.2 e N10 bloqueados até lá. Validação nativa prioritária no **Bazzite** (`docs/N9-L-ROTEIRO-BAZZITE.md`; o roteiro Ubuntu fica como alternativa). Cada subetapa
+- **N9 (Remasterização)** foi autorizado em 2026-11-02 (`docs/N9-PLANO.md`). N9.0 fechado (`docs/N9-0-EDICOES.md`). N9-L (`docs/N9-L-PLANO.md`) L0–L5 e a v0.8.0 publicados; a validação no Bazzite é do mantenedor e não bloqueia. **N9.1 (instalador, `docs/N9-1-INSTALADOR.md`) implementado em 2026-11-04, à espera do fechamento**; N9.2 só depois dele; N10 não iniciado. Validação nativa prioritária no **Bazzite** (`docs/N9-L-ROTEIRO-BAZZITE.md`; o roteiro Ubuntu fica como alternativa). Cada subetapa
   passa pelo C8 (`tools/dev/test_campanha.py --casos C8`, seção 14.2) e o N9.5–N9.8 não começa com o N7 aberto. Regras permanentes: um projeto e um núcleo C++ com **duas
   edições** (Original e Remastered), escolhidas pelo Recompiler por um perfil de edição separado das preferências; a
   **edição Original** continua fiel ao Dreamcast e validada contra as referências; na **Remastered a câmera Livre é
@@ -67,8 +67,10 @@ Ferramentas:
 - `tools/dev/compare_capstone.py`: decodificador vs. Capstone (venv opcional).
 - `bs-builder --disc <img.cdi> --out <pasta> --kit . --sdl3 build/msvc-release/_deps/sdl3-src`:
   fluxo completo do Builder (CDI → BlueStinger.exe) a partir do repositório. Janelas sobre o mesmo núcleo:
-  `BlueStinger-Recompiler.exe` (simples: idioma pt-BR/en-US, Modo portátil = `instalacao.toml`; `--auto
-  --portatil --idioma <cod> --sem-filmes` para testes) e `BlueStinger-Developer.exe` (três áreas: exportar o projeto C++20 sem compilar, `--somente-exportar` no CLI; compilar projeto Release/Debug sem o CDI pela pasta dos recursos; inspecionar instalação ou projeto sem o CDI).
+  `BlueStinger-Recompiler.exe` (o instalador do N9.1: Win32 + Direct2D, no Linux SDL3 + FreeType; telas em
+  `builder/instalador/gui`; `--auto --portatil --edicao --idioma <cod> --sem-filmes [--integrar]` para testes; `--captura <pasta>` e
+  `--teclas <roteiro>` sem janela; desinstalador `BlueStinger-Desinstalar` no pacote; unitários `bs_instalador_tests`, ctest
+  `instalador`; suíte `tools/dist/test_instalador.ps1 -Disc <cdi>`, com a integração desviada por `BS_INSTALADOR_TESTE_RAIZ`) e `BlueStinger-Developer.exe` (três áreas: exportar o projeto C++20 sem compilar, `--somente-exportar` no CLI; compilar projeto Release/Debug sem o CDI pela pasta dos recursos; inspecionar instalação ou projeto sem o CDI).
   Textos por chave em `builder/ui`; unitários `bs_ui_tests` (ctest `ui`).
 - Edições (N9.0): `[edicao] perfil` no `instalacao.toml`, escrito só pelo instalador (`--edicao original|remastered` no
   `bs-builder` e no `BlueStinger-Recompiler`). O jogo não tem essa opção. Suíte `tools/dist/test_edicao.ps1`.

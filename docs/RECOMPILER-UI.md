@@ -77,18 +77,28 @@ compilador) em `docs/DISTRIBUICAO-COMPILADOR.md`.
 O Recompiler não mudou de comportamento: só passou a usar o header comum `builder/ui/win_shared.h` (chave
 da etapa e idiomas do Windows), sem mudança de casos.
 
-## Futuro (N9, planejado em 2026-10-23; não iniciado)
+## N9.1: o instalador gráfico (2026-11-04)
 
-`docs/N9-PLANO.md`, N9.0 e N9.1. O Recompiler vira um **instalador gráfico** com identidade visual própria, mantendo o
-`bs_builder_core` como mecanismo (o contrato da linha de comando e do Developer não muda):
-- escolha da **edição** (Blue Stinger Original ou Remastered), gravada em `instalacao.toml` (`[edicao]`) como perfil
-  de edição, separado das preferências do jogador;
-- telas: boas-vindas, edição, CDI, componentes e idiomas, pasta, progresso real, conclusão ("Jogar agora");
-- detecção e atualização de instalações sem perder saves e preferências, verificação, desinstalador, cancelamento
-  seguro, log técnico opcional;
-- arte com origem e direitos documentados; arte do jogo só a partir dos arquivos do próprio usuário, só local (como o
-  ícone da capa em `icone-local/`, 2026-10-23).
-Nada disso começa antes do N8.
+Desde o N9.1 (`docs/N9-1-INSTALADOR.md`), o `BlueStinger-Recompiler` é o **instalador gráfico**. Ele usa Win32 + Direct2D
+no Windows e SDL3 + FreeType no Linux, sobre as mesmas telas portáteis (`builder/instalador/gui`). O mecanismo continua
+o `bs_builder_core`, e a linha de comando de antes não mudou (`--disc --out --kit --sdl3 --portatil --edicao --idioma
+--auto --sem-filmes`, códigos 0/1/2/3). O Developer também não mudou. Novidades:
+- **Telas:**
+  - boas-vindas, com as instalações encontradas e as opções Atualizar, Verificar e Desinstalar;
+  - edição, CDI, componentes e idiomas, pasta;
+  - progresso em três fases;
+  - conclusão, com "Jogar agora" e atalhos.
+- **Desinstalador:** cada jogo instalado leva o `BlueStinger-Desinstalar` no pacote, e ele remove só os arquivos do
+  pacote. O Windows o chama por "Aplicativos instalados"; o instalador também o oferece.
+- **Integração por usuário, sem administrador:** atalhos, a chave `Uninstall` em HKCU e o `.desktop` no Linux. No
+  `--auto`, a integração só acontece com `--integrar`.
+- **Modo sem janela, para testes:**
+  - `--captura <pasta>`: todas as telas, com o relatório de texto cortado;
+  - `--teclas <roteiro>`: a interface conduzida pelo teclado, com os roteiros de `tools/dist/roteiros-instalador`;
+  - a suíte é `tools/dist/test_instalador.ps1`.
+- **Arte própria, em geometria:** origem e direitos em `docs/N9-1-ARTE.md`.
+
+A primeira parte deste documento descreve a janela simples de antes, até a v0.8.0.
 
 ## BlueStinger-Developer (2026-10-20, worktree `../recomp-BStinger-dev`)
 
