@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# N9-L: coleta de evidencias da sessao em Ubuntu nativo. Somente leitura: nao instala, nao muda configuracao, nao encerra
+# N9-L: coleta de evidencias da sessao em Linux nativo (Ubuntu ou Bazzite). Somente leitura: nao instala, nao muda configuracao, nao encerra
 # processos. Comandos com sudo so com --privilegiado, e cada um e mostrado e perguntado antes.
 #
 #   coletar.sh inicio            sistema antes de qualquer pacote (A1: o que o Ubuntu ja traz)
@@ -44,7 +44,22 @@ sistema() {  # sistema <pasta>
     cmd "$f" sh -c "dpkg-query -W -f='\${Package} \${Version} \${Status}\n' libvulkan1 mesa-vulkan-drivers vulkan-tools ffmpeg binutils \
         build-essential gcc g++ clang cmake ninja-build wine wine64 'nvidia-driver-*' 'libnvidia-gl-*' pipewire pipewire-pulse \
         wireplumber pulseaudio libsdl3-0 libsdl2-2.0-0 2>&1 | grep -v 'no packages found'"
-    cmd "$f" sh -c 'command -v wine wine64 proton steam 2>&1 || echo "(nenhum)"'
+    # Fedora, Bazzite (Fedora Atomic): os mesmos pacotes pelo rpm, a imagem em uso, o SELinux e o Game Mode
+    if command -v rpm >/dev/null 2>&1; then
+        cmd "$f" sh -c "rpm -q --qf '%{NAME} %{VERSION}-%{RELEASE}\n' vulkan-loader mesa-vulkan-drivers mesa-dri-drivers vulkan-tools \
+            ffmpeg ffmpeg-free ffmpeg-libs libavcodec-freeworld libavcodec-free openh264 noopenh264 gamemode gamescope binutils gcc \
+            gcc-c++ clang cmake ninja-build wine pipewire pipewire-pulseaudio wireplumber pulseaudio SDL3 SDL2 sdl2-compat \
+            nvidia-driver nvidia-driver-libs kmod-nvidia akmod-nvidia 2>&1 | grep -v 'is not installed'"
+        # a imagem em uso e o que foi acrescentado a ela (LayeredPackages, overrides): prova de que o sistema esta como veio
+        cmd "$f" sh -c 'command -v rpm-ostree >/dev/null && rpm-ostree status --booted 2>&1 | head -30 || echo "(nao e Fedora Atomic)"'
+    fi
+    cmd "$f" sh -c 'command -v getenforce >/dev/null && getenforce || echo "(sem SELinux)"'
+    cmd "$f" sh -c 'command -v wine wine64 proton steam gamemoderun gamescope 2>&1 || echo "(nenhum)"'
+    cmd "$f" sh -c 'command -v gamemoded >/dev/null && gamemoded -v 2>&1 | head -2 || echo "(gamemoded ausente)"'
+    # decodificadores do ffmpeg do sistema que importam para os mods de filme (H.264 e AAC dependem da distribuicao)
+    cmd "$f" sh -c 'command -v ffmpeg >/dev/null && { ffmpeg -hide_banner -version | head -1; ffmpeg -hide_banner -decoders 2>/dev/null \
+        | grep -E " (h264|libopenh264|hevc|vp9|libvpx-vp9|av1|libdav1d|mpeg1video|aac|libfdk_aac|opus|libopus|vorbis|flac|adpcm_adx) "; } \
+        || echo "(ffmpeg ausente)"'
 
     f="$d/gpu.txt"; : > "$f"
     cmd "$f" lspci -nnk -d ::0300
@@ -72,7 +87,9 @@ sistema() {  # sistema <pasta>
     cmd "$f" sh -c 'grep -E "^(N: Name|H: Handlers|U: Uniq)" /proc/bus/input/devices'
     # sem /dev/input/by-id: os nomes de la trazem o numero de serie do aparelho
     cmd "$f" sh -c 'ls -l /dev/hidraw* /dev/uinput 2>&1 | sed -E "s/^([^ ]+) .* (\/dev\/[^ ]+)$/\1 \2/"'
-    cmd "$f" sh -c 'lsmod | grep -E "^(xpad|hid_microsoft|hid_xpadneo|hid_sony|hid_playstation|hid_nintendo|btusb|uhid) " || echo "(nenhum)"'
+    cmd "$f" sh -c 'lsmod | grep -E "^(xpad|xone_[a-z_]+|hid_microsoft|hid_xpadneo|hid_sony|hid_playstation|hid_nintendo|hid_steam|btusb|uhid) " || echo "(nenhum)"'
+    # o Steam aberto pode tomar o controle (Steam Input) e criar controles virtuais: registra se esta rodando
+    cmd "$f" sh -c 'pgrep -x steam >/dev/null && echo "Steam: aberto" || echo "Steam: fechado"'
     cmd "$f" bluetoothctl devices Connected
 
     if [ $priv -eq 1 ]; then

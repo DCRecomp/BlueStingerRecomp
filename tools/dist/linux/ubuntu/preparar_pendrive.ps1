@@ -86,7 +86,7 @@ $tarArgs = @("-xzOf", $Pacote, "$base/VERSAO.txt")   # argumentos separados: nad
 $versao = (& tar.exe @tarArgs) -join "`n"
 if ($LASTEXITCODE -ne 0 -or -not $versao) { Pare "nao consegui ler o VERSAO.txt do pacote" }
 $ident = @"
-Sessao de validacao N9-L (L3, L4 e L5) em Ubuntu nativo
+Sessao de validacao N9-L (L3, L4 e L5) em Linux nativo (Ubuntu ou Bazzite)
 Preparada em: $(Get-Date -Format "yyyy-MM-dd HH:mm")
 Commit das ferramentas: $commit
 Arvore do commit: $arvore
@@ -140,3 +140,4 @@ Get-ChildItem -LiteralPath "$pub\ferramentas" -Recurse -File -Include *.sh, *.py
 $tam = (Get-ChildItem -LiteralPath $raiz -Recurse -File | Measure-Object Length -Sum).Sum / 1MB
 Write-Host ("Pronto: {0} ({1:N0} MB, {2} arquivos conferidos)" -f $raiz, $tam, $linhas.Count)
 Write-Host "No Ubuntu: bash /media/`$USER/<rotulo do disco>/BS-TROCA/publico/ferramentas/ubuntu/preparar_sessao.sh"
+Write-Host "No Bazzite: bash /run/media/`$USER/<rotulo do disco>/BS-TROCA/publico/ferramentas/ubuntu/preparar_sessao.sh"

@@ -5,6 +5,7 @@
 #   jogar.sh a7-radv BS_VULKAN_GPU=AMD
 #   jogar.sh a7-software -- --render software
 #   jogar.sh a8-pipewire SDL_AUDIO_DRIVER=pipewire
+#   BS_PREFIXO=gamemoderun jogar.sh a5-gamemode BS_VULKAN_GPU=AMD     (Game Mode; o lancador faz exec do jogo)
 # Grava evidencias/sessoes/<rotulo>.txt (saida do jogo), <rotulo>.libs.txt (bibliotecas do processo: driver Vulkan,
 # PipeWire/PulseAudio, Wayland/X11) e <rotulo>.resumo.txt. Feche o jogo normalmente (menu ou janela) para terminar.
 # So acompanha o processo que ele mesmo abriu; nunca encerra outros.
@@ -19,13 +20,21 @@ while [ $# -gt 0 ]; do
     vars+=("$1"); shift
 done
 [ -x "$BS_EXE" ] || falha "sem o jogo em $BS_EXE (rode a1_a2.sh)"
+# BS_PREFIXO=<programa>: um lancador que termina com exec do jogo no mesmo processo (ex.: gamemoderun, do Game Mode);
+# so o nome de um programa do PATH, sem argumentos
+prefixo=()
+if [ -n "${BS_PREFIXO:-}" ]; then
+    [[ "$BS_PREFIXO" =~ ^[A-Za-z0-9._-]+$ ]] || falha "BS_PREFIXO: so o nome de um programa (ex.: gamemoderun)"
+    p=$(command -v -- "$BS_PREFIXO") || falha "BS_PREFIXO: $BS_PREFIXO nao esta no PATH"
+    prefixo=("$p")
+fi
 d="$BS_EVID/sessoes"; mkdir -p "$d"
 out="$d/$rotulo.txt"; libs="$d/$rotulo.libs.txt"; res="$d/$rotulo.resumo.txt"
 [ -e "$out" ] && falha "$out ja existe: use outro rotulo"
-{ echo "inicio: $(agora)"; echo "ambiente: ${vars[*]:-}"; echo "argumentos: ${args[*]:-}"; } | privacidade > "$res"
+{ echo "inicio: $(agora)"; echo "ambiente: ${vars[*]:-}"; echo "prefixo: ${prefixo[*]:-nenhum}"; echo "argumentos: ${args[*]:-}"; } | privacidade > "$res"
 
 ini=$(date +%s)
-( cd "$BS_JOGO" && exec env "${vars[@]}" "$STDBUF" -oL ./BlueStinger "${args[@]}" ) > >(tee >(privacidade > "$out")) 2>&1 &
+( cd "$BS_JOGO" && exec env "${vars[@]}" "${prefixo[@]}" "$STDBUF" -oL ./BlueStinger "${args[@]}" ) > >(tee >(privacidade > "$out")) 2>&1 &
 pid=$!
 # bibliotecas carregadas: uma amostra aos 15 s e outras a cada 60 s (os drivers de audio e controle carregam sob demanda)
 (
@@ -50,7 +59,7 @@ seg=$(( $(date +%s) - ini ))
     grep -E '^\[(render|apresentacao|audio|controles|input|video|edicao|camera|saves|menu|legenda|legendas|texto)\]' "$out" | sort | uniq -c | sort -rn | head -60
     echo "-- bibliotecas carregadas (o carregador do Vulkan abre TODOS os drivers instalados, entao libvulkan_* aqui nao diz"
     echo "   qual foi usado; servem para o audio e o video do SDL: pipewire/pulse, wayland/X11):"
-    grep -E 'vulkan|nvidia|pipewire|pulse|asound|wayland|libX11|xcb|decor|udev|ffmpeg|avcodec' "$libs"
+    grep -E 'vulkan|nvidia|pipewire|pulse|asound|wayland|libX11|xcb|decor|udev|ffmpeg|avcodec|gamemode' "$libs"
 } >> "$res"
 cat "$res"
 if grep -qE 'Vulkan direta: llvmpipe|\[render\] Vulkan: llvmpipe' "$out"; then

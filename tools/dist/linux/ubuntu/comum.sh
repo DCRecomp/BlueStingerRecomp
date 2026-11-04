@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# N9-L: funcoes comuns da sessao de validacao em Ubuntu nativo (docs/N9-L-ROTEIRO-UBUNTU.md). Carregado pelos outros
-# scripts desta pasta com "source"; nao executa nada sozinho.
+# N9-L: funcoes comuns da sessao de validacao em Linux nativo: Ubuntu (docs/N9-L-ROTEIRO-UBUNTU.md) e Bazzite
+# (docs/N9-L-ROTEIRO-BAZZITE.md); a pasta se chama "ubuntu" por historico. Carregado pelos outros scripts desta pasta com
+# "source"; nao executa nada sozinho.
 #
 # Layout (tudo no disco de troca, montado pelo Ubuntu em /media/<usuario>/BS-TROCA):
 #   publico/      pacote do Builder e estas ferramentas (podem ser publicados)
@@ -17,7 +18,9 @@ BS_EVID="$BS_TROCA/evidencias"
 BS_IMG="$BS_TROCA/trabalho.img"
 # onde o ext4 de trabalho esta montado (pelo rotulo); BS_TRAB=<pasta> usa outra pasta (ex.: sem disco, na RAM do Live)
 BS_TRAB=${BS_TRAB:-$(findmnt -n -o TARGET -S LABEL=BS-TRABALHO 2>/dev/null | head -1)}
-BS_TRAB=${BS_TRAB:-/media/$USER/BS-TRABALHO}
+if [ -z "$BS_TRAB" ]; then   # o Fedora e o Bazzite montam em /run/media/<usuario>; o Ubuntu em /media/<usuario>
+    if [ -d "/run/media/$USER" ]; then BS_TRAB=/run/media/$USER/BS-TRABALHO; else BS_TRAB=/media/$USER/BS-TRABALHO; fi
+fi
 BS_JOGO_DIR=${BS_JOGO_DIR:-$BS_TRAB/Jogos/Blue Stinger}     # --out do Builder (com espaco de proposito)
 BS_JOGO="$BS_JOGO_DIR/BlueStinger"                           # pasta do jogo gerado
 BS_EXE="$BS_JOGO/BlueStinger"
@@ -35,12 +38,19 @@ falha() { printf '\nERRO: %s\n' "$*" >&2; exit 1; }
 #   O nome da maquina so e trocado quando nao e o padrao do Live ("ubuntu"), que nao identifica ninguem. O GUID que o SDL da
 #   ao controle ("GUID <32 hex>" no log do jogo) fica: e o do modelo (barramento, fabricante, produto, versao, driver), igual
 #   para todo controle do mesmo modelo, e o A9 precisa dele. Os outros 32 hex seguidos (machine-id, cookies) saem.
+#   O mesmo vale para os nomes padrao do Fedora e do Bazzite: "bazzite" tambem e o ID do sistema no os-release, e trocar
+#   esse nome estragaria o retrato do sistema (e a varredura final recusaria o pacote).
 BS_MAQUINA=$(hostname 2>/dev/null || cat /etc/hostname 2>/dev/null || echo "")
+BS_MAQ_GENERICAS=" ubuntu bazzite fedora localhost localhost-live localhost.localdomain "
+maquina_identifica() {  # 0 se o nome da maquina identifica alguem (e precisa sair do texto)
+    [ -n "$1" ] && [ ${#1} -ge 3 ] && [[ "$BS_MAQ_GENERICAS" != *" $1 "* ]]
+}
 privacidade() {
     local h=${HOME%/} u=${USER:-x} m=$BS_MAQUINA
     local maq=()
-    [ -n "$m" ] && [ "$m" != ubuntu ] && [ ${#m} -ge 3 ] && maq=(-e "s/\b${m//./\\.}\b/<maquina>/g")
-    sed -u -E -e "s#${h//#/\\#}#~#g" \
+    maquina_identifica "$m" && maq=(-e "s/\b${m//./\\.}\b/<maquina>/g")
+    # /var/home/<usuario> (Fedora Atomic) antes da HOME: com HOME=/home/<usuario> sobraria "/var~"
+    sed -u -E -e "s#/var/home/${u}(/|\b)#~\1#g" -e "s#${h//#/\\#}#~#g" \
            -e "s#/home/${u}(/|\b)#/home/<usuario>\1#g" -e "s#/media/${u}/#/media/<usuario>/#g" \
            -e "s#/run/user/[0-9]+#/run/user/<uid>#g" \
            -e "s/\b${u}@[A-Za-z0-9._-]+/<usuario>@<maquina>/g" \
@@ -57,7 +67,7 @@ privacidade() {
 identificadores_restantes() {  # identificadores_restantes <pasta>
     local u=${USER:-x} m=$BS_MAQUINA
     local pad="/home/${u}/|/media/${u}/|\b${u}@|([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}"
-    [ -n "$m" ] && [ "$m" != ubuntu ] && [ ${#m} -ge 3 ] && pad="$pad|\b${m//./\\.}\b"
+    maquina_identifica "$m" && pad="$pad|\b${m//./\\.}\b"
     grep -rIlE "$pad" "$1" --exclude='*.tar.gz' 2>/dev/null
 }
 

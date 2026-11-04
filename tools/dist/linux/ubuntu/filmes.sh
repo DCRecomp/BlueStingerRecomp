@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# N9-L A8/A11 na sessao em Ubuntu nativo: os filmes no jogo de verdade (janela, GPU, saida de audio reais).
+# N9-L A8/A11 na sessao em Linux nativo (Ubuntu ou Bazzite): os filmes no jogo de verdade (janela, GPU, saida de audio reais).
 #
 #   filmes.sh todos [--perguntar]   os 16 SFD do disco, um por vez, pelo decodificador nativo e o audio do sistema.
 #                                    O roteiro passo_newgame_area1 escolhe NEW GAME sozinho; cada filme toca no lugar do
@@ -123,7 +123,19 @@ mods)
         && grep -q 'sem decodificador neste sistema' "$ultimo_log" \
         && anotar "A11.mod-sem-decodificador" ok "toca o NEWGAME original e avisa ($(basename "$ultimo_log"))" \
         || anotar "A11.mod-sem-decodificador" falha "ver filmes/$(basename "$ultimo_log")"
-    if command -v ffmpeg >/dev/null && command -v ffprobe >/dev/null; then
+    if command -v ffmpeg >/dev/null && command -v ffprobe >/dev/null \
+       && ! ffmpeg -hide_banner -decoders 2>/dev/null | grep -qE '^ V[A-Z.]{5} (h264|libopenh264) '; then
+        # Fedora e derivados (Bazzite, conforme a imagem) podem trazer um ffmpeg sem H.264 (codec com patentes): o mod de
+        # teste (H.264 + AAC) nao toca; o certo e o jogo tocar o original e avisar, sem travar
+        aviso "o ffmpeg deste sistema nao decodifica H.264: o mod de teste deve ser recusado com aviso (o original toca)"
+        cp -f "$e017" "$modv/NEWGAME.MP4"
+        caso "mod-ffmpeg-sem-h264" NEWGAME.SFD nao 1100 \
+            && grep -q 'sem decodificador neste sistema' "$ultimo_log" \
+            && anotar "A11.mod-ffmpeg-sem-codec" ok "ffmpeg sem H.264: toca o NEWGAME original e avisa ($(basename "$ultimo_log"))" \
+            || anotar "A11.mod-ffmpeg-sem-codec" falha "ver filmes/$(basename "$ultimo_log")"
+        rm -f "$modv/NEWGAME.MP4"
+        anotar "A11.mod-mp4-ffmpeg" nao-feito "o ffmpeg do sistema nao tem decodificador H.264"
+    elif command -v ffmpeg >/dev/null && command -v ffprobe >/dev/null; then
         tol=500
         caso "mod-ffmpeg" E017.SFD sim 400 && anotar "A11.mod-mp4-ffmpeg" ok "E017.mp4 tocado pelo ffmpeg do sistema no lugar do NEWGAME" \
             || anotar "A11.mod-mp4-ffmpeg" falha "ver filmes/$(basename "$ultimo_log")"
@@ -132,7 +144,7 @@ mods)
             || anotar "A11.mod-nome-minusculas" falha "ver filmes/$(basename "$ultimo_log")"
         rm -f "$modv/newgame.mp4"; tol=100
     else
-        aviso "ffmpeg ausente: instale (sudo apt install ffmpeg) e rode 'filmes.sh mods' de novo para os casos com ffmpeg"
+        aviso "ffmpeg ausente: veja no roteiro como obte-lo (Ubuntu: sudo apt install ffmpeg; Bazzite: secao 9 do roteiro) e rode 'filmes.sh mods' de novo"
         anotar "A11.mod-mp4-ffmpeg" nao-feito "ffmpeg ausente"
     fi
     : > "$modv/NEWGAME.MP4"
