@@ -91,19 +91,25 @@ Remove-Item -LiteralPath $ctl -Force
 # E8: o menu real, pelo controle virtual (botoes como em tools/dev/n7_menu_pausa.py). Pagina Controles > Camera, Direita na
 # primeira linha e sair. Na Remastered essa linha e a sensibilidade: ela muda no arquivo e modo e movimento nao. Na Original
 # a mesma sequencia acerta o Modo, e o arquivo muda: e a prova de que o caso enxerga uma troca de modo
+# N9.2: na Remastered as configuracoes abrem pelo menu inicial nativo (que aparece no "PRESS START", ~25 s): Configuracoes
+# (Continuar e Carregar desativados sem perfil), a mesma pagina Controles > Camera, Direita, e volta ao menu inicial
 function Menu($dir, $nome) {
     $ctl = Join-Path $dir "controles.toml"
     [IO.File]::WriteAllText($ctl, "[camera]`nmodo = `"original`"`nmovimento = `"original`"`nsensibilidade_x = 100`n")
-    $linhas = @("0 conectar"); $t = 6000
-    foreach ($b in "back", "dpdown", "dpdown", "dpdown", "a", "a", "dpright", "b", "b", "b") { $linhas += "$t $b 1", ("{0} {1} 0" -f ($t + 100), $b); $t += 500 }
+    $linhas = @("0 conectar")
+    if ($nome -eq "remastered") { $t = 32000; $seq = @("dpdown", "a", "dpdown", "dpdown", "dpdown", "a", "a", "dpright", "b", "b", "b") }
+    else { $t = 6000; $seq = @("back", "dpdown", "dpdown", "dpdown", "a", "a", "dpright", "b", "b", "b") }
+    foreach ($b in $seq) { $linhas += "$t $b 1", ("{0} {1} 0" -f ($t + 100), $b); $t += 500 }
     $linhas += "$($t + 1500) sair"
     $pad = Join-Path $Saida "pad-$nome.txt"; [IO.File]::WriteAllLines($pad, $linhas)
     $o = Join-Path $Saida "menu-$nome.txt"
     $env:BS_CONTROLE_VIRTUAL = $pad; $env:BS_RELOGIO_FIXO = "1700000000"
-    $p = Start-Process -FilePath (Join-Path $dir "BlueStinger.exe") -WorkingDirectory $dir -PassThru -RedirectStandardError $o -RedirectStandardOutput "$o.out"
+    # N9.2: um cartao vazio do teste (sem perfil, o menu inicial da Remastered comeca em Novo jogo; os saves do jogador nao entram)
+    $cartao = Join-Path $Saida "saves-$nome"
+    $p = Start-Process -FilePath (Join-Path $dir "BlueStinger.exe") -WorkingDirectory $dir -PassThru -RedirectStandardError $o -RedirectStandardOutput "$o.out" -ArgumentList "--saves-pasta `"$cartao`""
     Remove-Item Env:BS_CONTROLE_VIRTUAL, Env:BS_RELOGIO_FIXO
     $null = $p.Handle
-    $fim = $p.WaitForExit(60000)
+    $fim = $p.WaitForExit(90000)
     if (-not $fim) { Stop-Process -Id $p.Id -Force }
     $r = [pscustomobject]@{ Fim = $fim; Rc = $p.ExitCode; Log = [string](Get-Content -LiteralPath $o -Raw -ErrorAction SilentlyContinue); Toml = [string](Get-Content -LiteralPath $ctl -Raw) }
     Remove-Item -LiteralPath $ctl -Force
