@@ -1,7 +1,10 @@
 # Nucleo do executavel (sem janela): execucao do jogo numa thread, ritmo e quadros.
 add_library(bs_app_core STATIC game_host.cpp assist.cpp
             subtitle_overlay.cpp   # N7c: legendas das falas por cima do gameplay
-            settings_menu.cpp)     # N7c: modelo do menu interno de configuracoes
+            settings_menu.cpp      # N7c: modelo do menu interno de configuracoes
+            remaster/entrada_titulo.cpp   # N9.2: pontos de entrada nativos do titulo (so na Remastered)
+            remaster/interface.cpp        # N9.2: modelo da interface nativa da Remastered
+            remaster/desenho.cpp)         # N9.2: desenho dela (native/text, identidade do projeto)
 # N7c: desenho do menu (Direct2D/DirectWrite no Windows)
 if(WIN32)
   target_sources(bs_app_core PRIVATE menu_overlay.cpp)
@@ -10,7 +13,7 @@ else()
 endif()
 target_include_directories(bs_app_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(bs_app_core PUBLIC bs_runtime bs_transitional bs_video_adapter bs_sound_adapter bs_native_localization
-                      bs_native_video PRIVATE $<$<PLATFORM_ID:Windows>:d2d1;dwrite;windowscodecs;ole32>)
+                      bs_native_video bs_native_text PRIVATE $<$<PLATFORM_ID:Windows>:d2d1;dwrite;windowscodecs;ole32>)
 # N8.3: o modelo HLE do sistema (BIOS, GD-ROM e flash) so no build de validacao; o produto usa o servico nativo
 if(BS_VALIDACAO)
   target_link_libraries(bs_app_core PUBLIC bs_runtime_hle)

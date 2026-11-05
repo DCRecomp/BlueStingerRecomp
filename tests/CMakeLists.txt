@@ -165,6 +165,12 @@ target_include_directories(bs_instalador_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DI
 target_link_libraries(bs_instalador_tests PRIVATE bs_instalador_core bs_builder_ui bs_disc_data tomlplusplus::tomlplusplus)
 add_test(NAME instalador COMMAND bs_instalador_tests)
 
+# N9.2: a interface nativa da Remastered (modelo e desenho), sem janela nem jogo
+add_executable(bs_remaster_tests unit/main.cpp unit/test_remaster.cpp)
+target_include_directories(bs_remaster_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/unit)
+target_link_libraries(bs_remaster_tests PRIVATE bs_app_core)
+add_test(NAME remaster COMMAND bs_remaster_tests)
+
 # Usa a imagem do usuario se BS_DISC_IMAGE estiver definido; senao, SKIP.
 add_executable(bs_real_disc_test data/test_real_disc.cpp)
 target_link_libraries(bs_real_disc_test PRIVATE bs_disc)

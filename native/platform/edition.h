@@ -19,6 +19,7 @@ bool        parse_edition(const std::string& v, Edition* out);  // falso: valor 
 struct EditionProfile {
     Edition edition              = Edition::Original;
     bool    free_camera_required = false;  // camera Livre e movimento relativo a ela, sem opcao de desligar
+    bool    native_menus         = false;  // N9.2: menu inicial, pausa e configuracoes nativos (o titulo original fica escondido)
     bool    operator==(const EditionProfile&) const = default;
 };
 

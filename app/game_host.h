@@ -135,6 +135,9 @@ struct GameOptions {
     std::function<void()> registerFunctions;
     // Prepara RAM e registradores. Padrao: boot nativo a partir de `data`. Testes trocam.
     std::function<void(Sh4Context&)> prepare;
+    // N9.2: chamado na thread do jogo no inicio de cada sessao, depois dos mods (que sao zerados a cada sessao): a Remastered
+    // instala aqui os pontos de entrada nativos do titulo (app/remaster/entrada_titulo.h). Vazio = nada (a Original).
+    std::function<void()> onSessionStart;
     bool     realtime    = true;  // segura o jogo em 59,94 VBlanks por segundo
     uint64_t vblankLimit = 0;     // > 0: para sozinho depois desses VBlanks (headless)
     // Desenvolvimento (gameplay assistido, app/assist.h): chamado na thread do jogo a cada VBlank,
@@ -163,6 +166,10 @@ public:
     void start(GameOptions opt);
     void requestStop();  // o jogo para no proximo VBlank
     void join();         // espera a thread (que libera fibras e recursos dela)
+    // N9.2 (docs/N9-2-PONTOS-DE-ENTRADA.md): "Menu principal" da Remastered. O jogo original nao volta ao titulo sozinho (a
+    // cena do titulo so e chamada pelo main); o reinicio para a sessao e comeca outra com as mesmas opcoes, como um boot
+    // novo. Chamado da thread da janela; a pausa e soltada. Os quadros continuam numerados (latestFrame segue valendo).
+    void restart();
 
     bool        running() const { return running_.load(); }
     uint64_t    vblanks() const { return vblanks_.load(); }

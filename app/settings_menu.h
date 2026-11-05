@@ -85,6 +85,9 @@ public:
     void set_shaders(std::vector<ShaderChoice> s) { shaders_ = std::move(s); }
     // algum pacote de legendas instalado diz quem fala (campo "personagem"): a opcao de identificacao fica disponivel
     void set_speakers_available(bool on) { speakers_ = on; }
+    // N9.2: o rotulo do ultimo item da pagina principal ("Voltar ao jogo" por padrao; a Remastered usa "Voltar" quando o
+    // menu foi aberto do menu inicial, sem partida). Vazio = o padrao.
+    void set_return_label(std::string pt, std::string en) { returnPt_ = std::move(pt), returnEn_ = std::move(en); }
     void mark_shader_invalid(const std::string& name, const std::string& why);
     const std::vector<ShaderChoice>& shaders() const { return shaders_; }
 
@@ -108,6 +111,7 @@ private:
     native::edition::EditionProfile  profile_;
     std::vector<std::string>         languages_;
     bool                             speakers_ = false;
+    std::string                      returnPt_, returnEn_;
     bool                             open_ = false, dirty_ = false;
     std::vector<MenuItem>            controlsInfo_;
     std::vector<ShaderChoice>        shaders_;

@@ -80,7 +80,8 @@ std::vector<SettingsMenu::Entry> SettingsMenu::entries() const {
         e.push_back({L("Restaurar padrões", "Restore defaults"), "", true, nullptr, [](SettingsMenu& m) {
                          m.pending_ = Pending::Restore;
                      }});
-        e.push_back({L("Voltar ao jogo", "Return to game"), "", true, nullptr, [](SettingsMenu& m) { m.close(); }});
+        e.push_back({returnPt_.empty() ? L("Voltar ao jogo", "Return to game") : L(returnPt_.c_str(), returnEn_.c_str()), "", true,
+                     nullptr, [](SettingsMenu& m) { m.close(); }});
         break;
     case Page::Graphics: {
         const auto& g   = prefs_.graphics;

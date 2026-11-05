@@ -326,6 +326,19 @@ void GameHost::join() {
     if (thread_.joinable()) thread_.join();
 }
 
+void GameHost::restart() {
+    requestStop();
+    join();
+    paused_.store(false);
+    vblanks_.store(0);
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        error_.clear();
+    }
+    GameOptions again = opt_;
+    start(std::move(again));
+}
+
 std::string GameHost::error() const {
     std::lock_guard<std::mutex> lock(mutex_);
     return error_;
@@ -624,6 +637,20 @@ void GameHost::threadMain() {
         if (opt_.registerFunctions) opt_.registerFunctions();
         bs::mods::reset();     // sessao nova: nada herdado de uma anterior
         bs::mods::init_all();  // mods compilados no executavel (projeto editavel; BS_MOD)
+        if (opt_.onSessionStart) opt_.onSessionStart();  // N9.2: pontos de entrada da Remastered
+#if BS_VALIDACAO
+        // N9.2, so investigacao: BS_DESLIGAR_FUNCOES=<end>[,<end>] troca rotinas chamadas por ponteiro por uma que nao faz
+        // nada (r0 = 0). Serve para achar quem desenha o que na tela (o menu do titulo), comparando quadros.
+        if (const char* v = std::getenv("BS_DESLIGAR_FUNCOES"); v && *v) {
+            std::stringstream ss(v);
+            for (std::string t; std::getline(ss, t, ',');)
+                if (!t.empty()) {
+                    const uint32_t a = uint32_t(std::stoul(t, nullptr, 16));
+                    const bool     ok = bs::mods::replace(a, [](Sh4Context* cc) { cc->r[0] = 0; });
+                    std::fprintf(stderr, "[desligar] %08X %s\n", a, ok ? "desligada" : "NAO ENCONTRADA");
+                }
+        }
+#endif
         bs::call_trace_install();  // diagnostico BS_CALL_TRACE (desligado por padrao)
         bs::cri_diag_install();    // diagnostico BS_CRI_DIAG (N2b-0; desligado por padrao)
         transitional::pad::probe_install();  // teste de contrato BS_PAD_CONTRATO (N3-0; desligado por padrao)

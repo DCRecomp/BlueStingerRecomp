@@ -18,6 +18,9 @@
 #include "disc/disc_image.h"
 #include "funcs.h"
 #include "game_host.h"
+#include "remaster/desenho.h"
+#include "remaster/entrada_titulo.h"
+#include "remaster/interface.h"
 #include "subtitle_overlay.h"
 #include "menu_overlay.h"
 #include "window_present.h"
@@ -569,6 +572,28 @@ struct PresenterRef {
     std::unique_ptr<bs::WindowPresenter> p;
 };
 
+// N9.2: os saves de PC como perfis da Remastered (BLUESTIN.000 a .005 do cartao nativo, sem VMU, soquete nem bloco). Valido =
+// envelope e imagem VMS conferidos; a data e a do envelope.
+std::vector<bs::remaster::Perfil> listarPerfis(const fs::path& root) {
+    namespace ns = bs::native::saves;
+    std::vector<bs::remaster::Perfil> r;
+    if (root.empty()) return r;
+    auto                       store = ns::make_file_store(root);
+    std::vector<ns::SaveEntry> es;
+    if (store->list(0, es) != ns::SaveError::None) return r;
+    for (const auto& e : es) {
+        if (e.name.size() != 12 || e.name.rfind("BLUESTIN.00", 0) != 0 || e.name[11] < '0' || e.name[11] > '5') continue;
+        bs::remaster::Perfil p;
+        p.arquivo = e.name[11] - '0';
+        p.gravado = e.modified_unix;
+        std::vector<std::byte> img;
+        p.valido = store->load(0, e.name, img) == ns::SaveError::None && ns::vms_check(img);
+        r.push_back(p);
+    }
+    std::sort(r.begin(), r.end(), [](const auto& a, const auto& b) { return a.arquivo < b.arquivo; });
+    return r;
+}
+
 // N7c: o menu interno na janela (docs/N7-PLANO.md secao 19). O estado e a navegacao sao de app/settings_menu, o desenho
 // de app/menu_overlay; aqui so a ligacao com o SDL e com o jogo:
 //   - abre com ESC ou com o botao View/Back do controle (o jogo nao os usa no mapa padrao); fecha com eles ou com
@@ -603,12 +628,22 @@ public:
         menu_.set_controls_info(std::move(info));
     }
 
-    bool open() const { return menu_.is_open(); }
+    bool open() const { return menu_.is_open() || (remaster_ && ui_.aberta()); }
     const bs::Preferences& prefs() const { return applied_; }
+
+    // N9.2: a interface nativa da Remastered (menu inicial, pausa e configuracoes no estilo do projeto). `saves` = a pasta dos
+    // saves nativos (os perfis). A Original nunca chama isto: o menu interno do N7c segue como sempre.
+    void set_remaster(fs::path saves, std::string versao) {
+        remaster_ = true, savesRoot_ = std::move(saves);
+        ui_.set_versao(std::move(versao));
+        ui_.set_ingles(menu_.english());
+        menu_.set_return_label("Voltar", "Back");
+    }
 
     // true = o evento foi do menu (nao vai ao jogo)
     bool event(const SDL_Event& e) {
         if (!enabled_) return false;
+        if (remaster_) return remasterEvent(e);
         const double now = SDL_GetTicks() / 1000.0;
         const bool   down = e.type == SDL_EVENT_KEY_DOWN || e.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN;
         // abrir/fechar
@@ -687,6 +722,7 @@ public:
     // A cada volta do laco da janela: repeticao do controle, reversao da confirmacao, aplicacao e gravacao.
     void update() {
         const double now = SDL_GetTicks() / 1000.0;
+        if (remaster_ && enabled_) remasterUpdate(now);
         if (menu_.is_open()) {
             menu_.tick(now);
             if (held_ >= 0 && now >= nextRepeat_) act(bs::MenuAction(held_), now), nextRepeat_ = now + 0.12;
@@ -711,7 +747,31 @@ public:
         if (styleDirty_) subs.set_style(style_), styleDirty_ = false;
         if (const auto* l = subs.layer(subtitle, uint32_t(w), uint32_t(h), area.x, area.y, area.w, area.h))
             out[0] = {l, uint32_t(w), uint32_t(h), subs.version()};
-        if (menu_.is_open()) {
+        // N9.2: a camada inteira da saida, com fade na entrada e na saida (nada de corte seco)
+        const double agora = SDL_GetTicks() / 1000.0;
+        if (remaster_) {
+            if (ui_.aberta()) {
+                if (!eraAberta_) abertoEm_ = agora, eraAberta_ = true;
+                ultimaVista_ = ui_.vista();
+            } else if (eraAberta_) {
+                eraAberta_ = false, fechouEm_ = agora;
+            }
+        }
+        const float alfa = !remaster_ ? 0.f
+                         : ui_.aberta() ? float(std::min(1.0, (agora - abertoEm_) / kFade))
+                                        : float(std::max(0.0, 1.0 - (agora - fechouEm_) / kFade));
+        const bs::remaster::Area jogo{area.x, area.y, area.w, area.h};
+        if (remaster_ && alfa > 0.f) {
+            const auto& l = ui_.aberta() && menu_.is_open()
+                                ? desenho_.camada_config(menu_.view(), uint32_t(w), uint32_t(h), !ui_.na_pausa(), jogo, alfa)
+                                : desenho_.camada(ultimaVista_, uint32_t(w), uint32_t(h), jogo, alfa);
+            out[1] = {&l, uint32_t(w), uint32_t(h), desenho_.versao()};
+            static const char* capDir = std::getenv("BS_MENU_CAPTURA");
+            const auto         v      = ui_.vista();
+            const std::string  k      = (menu_.is_open() ? menu_.view().title + std::to_string(menu_.view().selected)
+                                                         : v.titulo + std::to_string(int(v.tela)) + "|" + std::to_string(v.selecionado));
+            if (capDir && *capDir && alfa >= 1.f && k != lastCapture_) lastCapture_ = k, capture = true;
+        } else if (menu_.is_open()) {
             const bs::MenuView v = menu_.view();
             const auto&        l = overlay_.layer(v, uint32_t(w), uint32_t(h), area.x, area.y, area.w, area.h);
             out[1] = {&l, uint32_t(w), uint32_t(h), overlay_.version()};
@@ -881,6 +941,238 @@ private:
 
 public:
     void disable() { enabled_ = false; }  // modo espectador: o roteiro controla, sem menu
+
+private:
+    // ---- N9.2: Remastered (docs/N9-2-INTERFACE.md) ----
+    enum class Fase : uint8_t { Nada, Agindo, Saindo, Reiniciando };
+    bool                              remaster_ = false;
+    fs::path                          savesRoot_;
+    bs::remaster::Interface           ui_;
+    bs::remaster::Desenho             desenho_;
+    Fase                              fase_ = Fase::Nada;
+    double                            desde_ = 0, ultimoQuadroTitulo_ = -10;
+    uint64_t                          quadrosVistos_ = 0;
+    bool                              tituloAtivo_ = false, remPausado_ = false;
+    int                               carregarDepois_ = -1;  // Carregar pela pausa: o arquivo, depois do reinicio
+    bool                              pediuMenu_ = false;     // o "PRESS START" ja foi pedido (5 -> 6)
+    // fade (segundos): entrada e saida da interface
+    static constexpr double           kFade = 0.25;
+    bool                              eraAberta_ = false;
+    double                            abertoEm_ = 0, fechouEm_ = -10;
+    bs::remaster::Vista               ultimaVista_;
+
+    const char* T(const char* pt, const char* en) const { return menu_.english() ? en : pt; }
+    std::vector<bs::remaster::Perfil> perfis() const { return listarPerfis(savesRoot_); }
+    void pausar(bool on) {
+        if (on) input_.release_keyboard();  // o que estava apertado solta (o jogo fica parado)
+        host_.setPaused(on), remPausado_ = on;
+    }
+    // O titulo original continua animado por baixo (o logotipo e a personagem): o jogo NAO pausa. No estado 6 (menu do
+    // titulo aberto) ele nao cai na demonstracao (medido: 3200 passos parado no 6); as opcoes originais ficam sob a faixa.
+    void abrirInicial() {
+        input_.release_keyboard();
+        ui_.abrir_inicial(perfis());
+        std::fprintf(stderr, "[remaster] menu inicial (titulo no estado 6)\n");
+    }
+    void abrirPausa() {
+        ui_.abrir_pausa(perfis());
+        pausar(true);
+        std::fprintf(stderr, "[remaster] pausa no VBlank %llu\n", static_cast<unsigned long long>(host_.vblanks()));
+    }
+    // A navegacao vai para as configuracoes (se abertas) ou para as telas da Remastered
+    void navegar(bs::MenuAction a, double now) {
+        if (menu_.is_open()) act(a, now);
+        else ui_.input(a);
+    }
+
+    bool remasterEvent(const SDL_Event& e) {
+        const double now = SDL_GetTicks() / 1000.0;
+        const bool   down = e.type == SDL_EVENT_KEY_DOWN || e.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN;
+        if (!ui_.aberta()) {
+            // pausa: Esc ou View/Back durante o jogo (no titulo, o menu inicial abre sozinho no "PRESS START")
+            const bool pede = (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_ESCAPE && !e.key.repeat) ||
+                              (e.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN && e.gbutton.button == SDL_GAMEPAD_BUTTON_BACK);
+            if (pede && !tituloAtivo_ && fase_ == Fase::Nada) {
+                input_.release_keyboard();
+                abrirPausa();
+                return true;
+            }
+            return false;
+        }
+        // com o controle virtual (testes), o mouse fisico nao mexe na selecao: o teste nao depende de onde o ponteiro esta
+        static const bool semMouse = std::getenv("BS_CONTROLE_VIRTUAL") != nullptr;
+        if (semMouse && (e.type == SDL_EVENT_MOUSE_MOTION || e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_WHEEL))
+            return true;
+        // e so o controle virtual: um controle de verdade ligado no computador nao mexe no teste
+        if (semMouse && (e.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN || e.type == SDL_EVENT_GAMEPAD_BUTTON_UP ||
+                         e.type == SDL_EVENT_GAMEPAD_AXIS_MOTION)) {
+            const char* nome = SDL_GetGamepadNameForID(e.type == SDL_EVENT_GAMEPAD_AXIS_MOTION ? e.gaxis.which : e.gbutton.which);
+            if (!nome || std::strcmp(nome, "Controle virtual") != 0) return true;
+        }
+        switch (e.type) {
+        case SDL_EVENT_KEY_DOWN:
+            switch (e.key.key) {
+            case SDLK_UP: navegar(bs::MenuAction::Up, now); break;
+            case SDLK_DOWN: navegar(bs::MenuAction::Down, now); break;
+            case SDLK_LEFT: navegar(bs::MenuAction::Left, now); break;
+            case SDLK_RIGHT: navegar(bs::MenuAction::Right, now); break;
+            case SDLK_RETURN:
+            case SDLK_KP_ENTER:
+            case SDLK_SPACE: navegar(bs::MenuAction::Confirm, now); break;
+            case SDLK_ESCAPE:
+            case SDLK_BACKSPACE: navegar(bs::MenuAction::Back, now); break;
+            default: break;
+            }
+            return true;
+        case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
+            switch (e.gbutton.button) {
+            case SDL_GAMEPAD_BUTTON_DPAD_UP: navegar(bs::MenuAction::Up, now), hold(bs::MenuAction::Up, now); break;
+            case SDL_GAMEPAD_BUTTON_DPAD_DOWN: navegar(bs::MenuAction::Down, now), hold(bs::MenuAction::Down, now); break;
+            case SDL_GAMEPAD_BUTTON_DPAD_LEFT:
+            case SDL_GAMEPAD_BUTTON_LEFT_SHOULDER: navegar(bs::MenuAction::Left, now), hold(bs::MenuAction::Left, now); break;
+            case SDL_GAMEPAD_BUTTON_DPAD_RIGHT:
+            case SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER: navegar(bs::MenuAction::Right, now), hold(bs::MenuAction::Right, now); break;
+            case SDL_GAMEPAD_BUTTON_SOUTH:
+            case SDL_GAMEPAD_BUTTON_START: navegar(bs::MenuAction::Confirm, now); break;
+            case SDL_GAMEPAD_BUTTON_EAST:
+            case SDL_GAMEPAD_BUTTON_BACK: navegar(bs::MenuAction::Back, now); break;
+            default: break;
+            }
+            return true;
+        case SDL_EVENT_GAMEPAD_BUTTON_UP: held_ = -1; return false;  // soltar chega ao jogo (nada preso ao voltar)
+        case SDL_EVENT_KEY_UP: return false;
+        case SDL_EVENT_GAMEPAD_AXIS_MOTION:
+            if (e.gaxis.axis == SDL_GAMEPAD_AXIS_LEFTX || e.gaxis.axis == SDL_GAMEPAD_AXIS_LEFTY) {
+                const float v = float(e.gaxis.value) / 32767.0f;
+                const bool  y = e.gaxis.axis == SDL_GAMEPAD_AXIS_LEFTY;
+                stick_[y ? 1 : 0] = v;
+                const int            dir = std::fabs(v) > 0.6f ? (v > 0 ? 1 : -1) : 0;
+                const bs::MenuAction a   = y ? (dir > 0 ? bs::MenuAction::Down : bs::MenuAction::Up)
+                                             : (dir > 0 ? bs::MenuAction::Right : bs::MenuAction::Left);
+                if (dir && held_ != int(a)) navegar(a, now), hold(a, now);
+                if (!dir && std::fabs(stick_[0]) < 0.6f && std::fabs(stick_[1]) < 0.6f) held_ = -1;
+            }
+            // o eixo e estado: chega ao jogo sempre (revisao Codex 20261104-222855), senao o valor de antes da pausa ficaria
+            // preso ao voltar. Na pausa o jogo esta parado; no titulo ele so mexe o cursor original, que nao e desenhado e
+            // que a acao nativa grava
+            return false;
+        case SDL_EVENT_MOUSE_MOTION:
+            if (menu_.is_open()) {
+                if (const auto h = desenho_.config_em(px(e.motion.x), py(e.motion.y))) menu_.select(h->item);
+            } else if (const auto i = desenho_.item_em(px(e.motion.x), py(e.motion.y))) ui_.selecionar(*i);
+            return true;
+        case SDL_EVENT_MOUSE_BUTTON_DOWN:
+            if (e.button.button == SDL_BUTTON_RIGHT) navegar(bs::MenuAction::Back, now);
+            else if (e.button.button == SDL_BUTTON_LEFT) {
+                if (menu_.is_open()) {
+                    if (!menu_.view().prompt.empty()) act(bs::MenuAction::Confirm, now);
+                    else if (const auto h = desenho_.config_em(px(e.button.x), py(e.button.y))) {
+                        if (h->part == bs::MenuHit::Part::Decrease) menu_.adjust(h->item, -1, now);
+                        else if (h->part == bs::MenuHit::Part::Increase) menu_.adjust(h->item, +1, now);
+                        else menu_.select(h->item), act(bs::MenuAction::Confirm, now);
+                    }
+                } else if (const auto i = desenho_.item_em(px(e.button.x), py(e.button.y))) {
+                    ui_.selecionar(*i), ui_.input(bs::MenuAction::Confirm);
+                }
+            }
+            return true;
+        case SDL_EVENT_MOUSE_WHEEL: navegar(e.wheel.y > 0 ? bs::MenuAction::Up : bs::MenuAction::Down, now); return true;
+        default: return down;
+        }
+    }
+
+    void remasterUpdate(double now) {
+        namespace rm = bs::remaster;
+        const rm::EstadoTitulo st = rm::EntradaTitulo::get().estado();
+        if (st.quadros != quadrosVistos_) quadrosVistos_ = st.quadros, ultimoQuadroTitulo_ = now;
+        // o titulo esta rodando: quadros dele recentes (com o jogo parado, vale o que era antes de parar)
+        if (!host_.paused()) tituloAtivo_ = st.noTitulo && now - ultimoQuadroTitulo_ < 0.5;
+        ui_.set_ingles(menu_.english());
+        if (held_ >= 0 && now >= nextRepeat_ && ui_.aberta() && !menu_.is_open()) ui_.input(bs::MenuAction(held_)), nextRepeat_ = now + 0.12;
+        switch (fase_) {
+        case Fase::Nada:
+            if (!ui_.aberta() && tituloAtivo_ && !st.ocupado) {
+                // no "PRESS START" o ponto de entrada abre o menu do titulo (como o START); com ele aberto, o menu nativo
+                if (st.estado == 5 && !pediuMenu_) rm::EntradaTitulo::get().pedir(rm::Acao::AbrirMenu), pediuMenu_ = true;
+                else if (st.estado == 6) abrirInicial(), pediuMenu_ = false;
+            }
+            if (!tituloAtivo_) pediuMenu_ = false;
+            break;
+        case Fase::Agindo:  // o pedido foi feito: espera o ponto de entrada terminar
+            if (st.resultado < 0 || now - desde_ > 40) {
+                if (!ui_.aberta()) ui_.abrir_inicial(perfis());
+                ui_.erro(T("N\xC3\xA3o foi poss\xC3\xADvel carregar este perfil. O arquivo pode estar danificado ou n\xC3\xA3o ser deste jogo.",
+                           "This profile could not be loaded. The file may be damaged or not belong to this game."));
+                fase_ = Fase::Nada;
+            } else if (st.resultado > 0 && !st.ocupado) {
+                if (ui_.aberta()) fase_ = Fase::Saindo, desde_ = now;  // a tela de espera do load fecha quando o titulo para
+                else fase_ = Fase::Nada;                                 // novo jogo: o fade original ja esta a vista
+            }
+            break;
+        case Fase::Saindo:  // a acao valeu: o titulo termina por baixo da tela de espera; ela fecha quando ele para
+            if (now - ultimoQuadroTitulo_ > 0.35 || now - desde_ > 20) ui_.fechar(), fase_ = Fase::Nada;
+            break;
+        case Fase::Reiniciando:  // depois do reinicio, com o titulo no "PRESS START": o load pedido ou o menu inicial
+            if (tituloAtivo_ && st.estado == 5) {
+                if (carregarDepois_ >= 0) {
+                    rm::EntradaTitulo::get().pedir(rm::Acao::Carregar, carregarDepois_);
+                    carregarDepois_ = -1, fase_ = Fase::Agindo, desde_ = now;
+                } else {
+                    fase_ = Fase::Nada;  // o menu inicial abre na proxima volta
+                }
+            }
+            break;
+        }
+        if (const auto s = ui_.tomar()) executar(*s, now);
+    }
+
+    void executar(const bs::remaster::Saida& s, double now) {
+        namespace rm = bs::remaster;
+        switch (s.pedido) {
+        case rm::Pedido::NovoJogo:
+            ui_.fechar();  // a interface sai em fade e o fade original do titulo aparece (o NEW GAME do jogo)
+            rm::EntradaTitulo::get().pedir(rm::Acao::NovoJogo);
+            fase_ = Fase::Agindo, desde_ = now;
+            break;
+        case rm::Pedido::Carregar: {
+            const std::string txt = std::string(T("Carregando o perfil ", "Loading profile ")) + std::to_string(s.arquivo + 1) + "...";
+            if (ui_.na_pausa()) {  // a partida acaba: o jogo reinicia e carrega no titulo, coberto pela tela de espera
+                ui_.abrir_inicial(perfis());
+                ui_.aguardar(txt);
+                carregarDepois_ = s.arquivo;
+                remPausado_     = false;
+                host_.restart();
+                fase_ = Fase::Reiniciando, desde_ = now;
+            } else {
+                ui_.aguardar(txt);
+                rm::EntradaTitulo::get().pedir(rm::Acao::Carregar, s.arquivo);
+                fase_ = Fase::Agindo, desde_ = now;
+            }
+            break;
+        }
+        case rm::Pedido::Retomar:
+            ui_.fechar();
+            pausar(false);
+            break;
+        case rm::Pedido::Configuracoes: menu_.open(); break;
+        case rm::Pedido::MenuPrincipal:
+            ui_.fechar();
+            carregarDepois_ = -1, remPausado_ = false;
+            host_.restart();  // a abertura do jogo aparece de novo; o menu inicial volta no "PRESS START"
+            fase_ = Fase::Reiniciando, desde_ = now;
+            std::fprintf(stderr, "[remaster] menu principal: o jogo reiniciou\n");
+            break;
+        case rm::Pedido::Sair: {
+            SDL_Event q{};
+            q.type = SDL_EVENT_QUIT;
+            SDL_PushEvent(&q);
+            break;
+        }
+        default: break;
+        }
+    }
+
+public:
 
 private:
     int                               outW_ = 0, outH_ = 0;
@@ -1339,6 +1631,59 @@ fs::path savesRoot(const Args& a) {
     return root;
 }
 
+// N9.2: os pontos de entrada nativos do titulo, na Remastered, a cada sessao (app/remaster/entrada_titulo.h). Reproducao e
+// testes, sem janela: BS_REMASTER_ACOES=<arquivo> com linhas "passo acao [arquivo]" (os eventos de uma gravacao) e
+// BS_REMASTER_PEDIR=<acao>[:<arquivo>] (o pedido que o menu nativo faria, aplicado no primeiro quadro em que o titulo aceita).
+// Com BS_GRAVAR, cada acao aplicada vai para <gravacao>.acoes (o mesmo formato).
+void remasterSession() {
+    namespace rm = bs::remaster;
+    std::vector<rm::Evento> eventos;
+    if (const char* f = std::getenv("BS_REMASTER_ACOES"); f && *f) {
+        std::ifstream in(f);
+        if (!in) throw std::runtime_error(std::string("BS_REMASTER_ACOES: nao abre ") + f);
+        for (std::string l; std::getline(in, l);) {
+            l = l.substr(0, l.find('#'));
+            std::istringstream ls(l);
+            rm::Evento         e;
+            std::string        nome;
+            if (!(ls >> e.passo >> nome)) continue;
+            if (!rm::acao_de_nome(nome, e.acao)) throw std::runtime_error("BS_REMASTER_ACOES: acao desconhecida: " + nome);
+            ls >> e.arquivo;
+            if (e.arquivo < 0 || e.arquivo > 5) throw std::runtime_error("BS_REMASTER_ACOES: arquivo fora de 0..5");
+            eventos.push_back(e);
+        }
+    }
+    std::function<void(const rm::Evento&)> aplicado;
+    if (const char* g = std::getenv("BS_GRAVAR"); g && *g) {
+        const std::string path = std::string(g) + ".acoes";
+        // uma gravacao nova comeca o arquivo vazio; os reinicios da mesma execucao ("Menu principal") acrescentam
+        // (revisao Codex 20261104-222855)
+        static bool zerado = false;
+        if (!zerado) {
+            if (FILE* f = std::fopen(path.c_str(), "w")) std::fclose(f);
+            zerado = true;
+        }
+        aplicado = [path](const rm::Evento& e) {
+            if (FILE* f = std::fopen(path.c_str(), "a")) {
+                std::fprintf(f, "%llu %s %d\n", static_cast<unsigned long long>(e.passo), rm::acao_nome(e.acao), e.arquivo);
+                std::fclose(f);
+            }
+        };
+    }
+    // o menu original so deixa de ser desenhado quando o menu nativo conduz o titulo (a janela com a interface ou a reproducao
+    // de eventos dela); um roteiro ou uma gravacao-base conduzem o menu original, inteiro (revisao Codex 20261104-222855)
+    const bool roteiroOriginal = (std::getenv("BS_INPUT_SCRIPT") || std::getenv("BS_GRAVAR_BASE")) && eventos.empty() &&
+                                 !std::getenv("BS_REMASTER_PEDIR");
+    rm::EntradaTitulo::get().instalar(std::move(eventos), std::move(aplicado), !roteiroOriginal);
+    if (const char* p = std::getenv("BS_REMASTER_PEDIR"); p && *p) {
+        std::string s = p, nome = s.substr(0, s.find(':'));
+        rm::Acao    a;
+        if (!rm::acao_de_nome(nome, a)) throw std::runtime_error("BS_REMASTER_PEDIR: acao desconhecida: " + nome);
+        const int arquivo = s.find(':') == std::string::npos ? 0 : std::atoi(s.c_str() + s.find(':') + 1);
+        rm::EntradaTitulo::get().pedir(a, arquivo);
+    }
+}
+
 bs::GameOptions gameOptions(const Args& a) {
     bs::GameOptions opt;
     opt.data              = a.gameData;
@@ -1364,6 +1709,7 @@ bs::GameOptions gameOptions(const Args& a) {
     opt.camera            = bs::native::edition::clamp_to(opt.camera, editionProfile());
     opt.realtime          = a.headless == 0;
     opt.vblankLimit       = a.headless;
+    if (editionProfile().native_menus) opt.onSessionStart = remasterSession;  // N9.2
     return opt;
 }
 
@@ -1436,6 +1782,16 @@ int mainHeadless(Args& a) {
     if (a.dumpEvery && !a.capture.empty()) opt.captureEvery = a.dumpEvery, opt.capture = headlessCapture(a);
     host.start(std::move(opt));
     if (a.internalHeight) host.setRenderScale(float(a.internalHeight) / 480.f);
+#if BS_VALIDACAO
+    // N9.2: prova do reinicio (GameHost::restart, "Menu principal" da Remastered): BS_REINICIO_TESTE=<vblanks> reinicia a
+    // sessao uma vez depois desses VBlanks; a sessao nova tem de dar o mesmo estado por passo de um processo novo
+    if (const char* r = std::getenv("BS_REINICIO_TESTE"); r && *r) {
+        const uint64_t at = std::strtoull(r, nullptr, 10);
+        while (host.running() && host.vblanks() < at) std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        std::fprintf(stderr, "[reinicio] no VBlank %llu\n", static_cast<unsigned long long>(host.vblanks()));
+        host.restart();
+    }
+#endif
     const int rc = runHeadless(host, a);
     host.requestStop();
     host.join();
@@ -1702,6 +2058,8 @@ int mainWindow(Args& a) {
         InGameMenu menu(host, *input, window, pres, prefsDir, prefs, persisted, renderOverride, subtitleOverride, cameraOverride, caps,
                         languages);
         if (g_spectator.on) menu.disable();
+        // N9.2: a interface da Remastered, menos quando um roteiro ou uma gravacao conduz o titulo original
+        if (editionProfile().native_menus && !g_spectator.on && !std::getenv("BS_GRAVAR_BASE")) menu.set_remaster(savesRoot(a), BS_VERSION);
         menu.set_shaders(std::move(postShaders));
         menu.set_speakers_available(speakers);
         menu.apply(prefs, true);
