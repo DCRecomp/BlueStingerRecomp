@@ -4326,6 +4326,33 @@ não por uma única bateria contínua** (decisão do mantenedor, 2026-11-02).
 - **Pendências:** H9; D-N8-4 no gate pós-N9; ressalva do 7.1 e D-K1(a); limite de 3 h de `n6_h` no executor, defeito a
   corrigir antes de uma futura integral, sem enfraquecer os testes. N9 e N10 não iniciados.
 
+### N9.5: auditoria gráfica e plano (2026-11-05)
+
+O mantenedor autorizou só a auditoria e o planejamento. O código funcional não mudou. Documento:
+`docs/N9-5-AUDITORIA.md`, com os fatos provados, as hipóteses e o que ainda não é observável separados.
+
+- **[P] O 16:9 verdadeiro exige o jogo projetar mais largo.** A projeção é do jogo: o TA recebe coordenadas de tela, e a IR
+  as guarda assim. Esticar ou recortar no renderizador não é widescreen verdadeiro. Hoje o 16:9 é 4:3 com faixas.
+- **[P] A estrutura de tela do Ninja** (`NJS_SCREEN`) fica em `0x8C24CCB4`: distância 500, 640×480, centro (320, 240), o que
+  dá cerca de 65,2° na horizontal e 51,3° na vertical. Ela é referenciada por 9 rotinas, entre elas o laço de gameplay
+  `8C052240`.
+- **[P] Experimento `BS_TELA_TESTE=854,427`** (só no build de validação): a largura e o cx foram reescritos a cada VBlank, no
+  LOAD do slot 1 e na caminhada no corredor (save sintético de teste, passos 1855 e 2300).
+  - A área de estado do jogo ficou **idêntica**, 0 bytes, fora a câmera e a tela. O quadro também ficou **idêntico**.
+  - O desenho usa constantes calculadas antes (a matriz do `njSetScreen`, hipótese forte), e a lógica não dependeu desses
+    campos nesse trecho.
+  - Evidências em `%LOCALAPPDATA%\BlueStingerRecomp\n9-5\tela`.
+- **Bloqueadores** (`docs/N9-5-AUDITORIA.md`, seção 4):
+  - B1, onde está a projeção do desenho;
+  - B2, o recorte nas laterais;
+  - B3, a marca cena/HUD por desenho na IR (já pedida no N7);
+  - B4, o quadro lógico de 640;
+  - B5, o software sem 16:9 (fica 4:3 como recuo);
+  - B6, a fidelidade dos estados com o hor+ de verdade.
+- **Plano:** seis fases (0 a 5), cada uma provada antes da próxima. Critérios de aceitação verificáveis, matriz de impacto,
+  memória **calculada** (o alvo 16:9 em 2160 linhas ≈ 66,4 MB, +33 % sobre o 4:3) e os riscos.
+- **Pendentes:** nenhuma medição de desempenho foi feita nesta fase.
+
 ### Replanejamento do N9: N9.3 cancelado (2026-11-05)
 
 Decisão do mantenedor (2026-11-05):

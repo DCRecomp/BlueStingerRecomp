@@ -261,6 +261,8 @@ só como histórico:
 - Pré-requisitos do N7 (seção 25.2): marca cena/HUD por desenho na IR.
 - **Aceitação:** rotas de gameplay e cenas sem buracos visíveis nas bordas (capturas comparadas por área nova), HUD na
   posição certa em 16:9 e 21:9, filmes na proporção original.
+- **Situação (2026-11-05):** auditoria e plano em `docs/N9-5-AUDITORIA.md`: a estrutura de tela do Ninja em `0x8C24CCB4`,
+  os bloqueadores B1–B6, as fases 0–5 e os critérios. A implementação espera a aprovação do mantenedor.
 
 ### N9.6 — Iluminação, sombras e materiais (R, GG)
 
