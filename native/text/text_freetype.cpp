@@ -1,6 +1,8 @@
-// N9-L (L4): o motor de texto do Linux (text_engine.h): FreeType sobre a Noto Sans embutida (fonts_embed.S.in). Sem hinting,
+// N9-L (L4): o motor de texto do Linux (text_engine.h), nos dois sistemas desde o N9.2: FreeType sobre a Noto Sans embutida
+// (fonts_embed.h). Sem hinting,
 // com posicao de glifo em quartos de pixel e cobertura em tons de cinza, como o texto do Direct2D em modo software.
 #include "text/text_engine.h"
+#include "text/fonts_embed.h"
 
 #include <ft2build.h>
 #include FT_FREETYPE_H
@@ -14,10 +16,6 @@
 #include <tuple>
 #include <vector>
 
-extern "C" {
-extern const unsigned char bs_font_noto_regular[], bs_font_noto_regular_end[];
-extern const unsigned char bs_font_noto_semibold[], bs_font_noto_semibold_end[];
-}
 
 namespace bs::native::text {
 
@@ -172,8 +170,10 @@ public:
             lib_ = nullptr;
             return;
         }
-        load(0, bs_font_noto_regular, bs_font_noto_regular_end);
-        load(1, bs_font_noto_semibold, bs_font_noto_semibold_end);
+        for (int i = 0; i < 2; ++i) {
+            const FontBlob f = embedded_font(i);
+            if (f.data) load(i, f.data, f.data + f.size);
+        }
     }
     ~FreeTypeEngine() override {
         for (FT_Face& f : faces_)

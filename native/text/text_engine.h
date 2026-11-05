@@ -1,7 +1,8 @@
 #pragma once
 // N9-L (L4): texto sem DirectWrite, para o Linux (docs/N9-L-PLANO.md, secao 3: o menu e as legendas usam a mesma interface).
 // FreeType sobre a Noto Sans (third_party/fonts/noto-sans, OFL 1.1), embutida no executavel. O Windows continua no DirectWrite
-// (subtitles_dwrite.cpp, menu_overlay.cpp): este modulo so entra no build do Linux.
+// (subtitles_dwrite.cpp, menu_overlay.cpp); desde o N9.2 este modulo tambem entra no build do Windows, so para a interface
+// da Remastered (decisao do mantenedor de 2026-11-04: FreeType + Noto Sans nos dois sistemas).
 //
 // O layout segue as regras que o desenho do Windows usa do DirectWrite: tamanho em pixels de em (DIP a 96 dpi), altura de linha
 // pelas metricas da fonte (ascendente + descendente + espaco entre linhas), quebra nas palavras e, se uma palavra nao cabe

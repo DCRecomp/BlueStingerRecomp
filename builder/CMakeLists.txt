@@ -53,7 +53,7 @@ endif()
 add_library(bs_instalador_gui STATIC instalador/gui/ui.cpp instalador/gui/arte.cpp instalador/gui/telas.cpp
             instalador/gui/hospedeiro.cpp)
 target_include_directories(bs_instalador_gui PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(bs_instalador_gui PUBLIC bs_instalador_core bs_builder_ui bs_builder_core PRIVATE tomlplusplus::tomlplusplus)
+target_link_libraries(bs_instalador_gui PUBLIC bs_instalador_core bs_builder_ui bs_builder_core bs_native_api PRIVATE tomlplusplus::tomlplusplus)
 
 if(NOT WIN32)
   # N9.1, Linux (decisao do mantenedor, 2026-11-04): o instalador numa janela SDL3, com o pintor em software e o texto pelo
@@ -81,10 +81,10 @@ if(WIN32)
 # icone: gerado do emblema vetorial (arte.cpp) por uma ferramenta compilada aqui mesmo (nada de imagem no repositorio)
 add_executable(bs-instalador-icone instalador/gui/icone_win.cpp instalador/gui/arte.cpp instalador/gui/pintor_d2d.cpp)
 target_include_directories(bs-instalador-icone PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(bs-instalador-icone PRIVATE d2d1 dwrite windowscodecs ole32)
+target_link_libraries(bs-instalador-icone PRIVATE bs_native_api d2d1 dwrite windowscodecs ole32)
 set(BS_INSTALADOR_ICO ${CMAKE_CURRENT_BINARY_DIR}/instalador.ico)
 add_custom_command(OUTPUT ${BS_INSTALADOR_ICO} COMMAND bs-instalador-icone ${BS_INSTALADOR_ICO}
-                   DEPENDS bs-instalador-icone instalador/gui/arte.cpp COMMENT "icone do instalador (emblema vetorial)")
+                   DEPENDS bs-instalador-icone instalador/gui/arte.cpp ${PROJECT_SOURCE_DIR}/native/ui/identidade.h COMMENT "icone do instalador (emblema vetorial)")
 configure_file(instalador/gui/instalador.rc.in ${CMAKE_CURRENT_BINARY_DIR}/instalador.rc @ONLY)
 set_source_files_properties(${CMAKE_CURRENT_BINARY_DIR}/instalador.rc PROPERTIES OBJECT_DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/instalador.ico)
 foreach(_bs_inst BlueStinger-Recompiler BlueStinger-Desinstalar)

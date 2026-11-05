@@ -46,25 +46,17 @@ Ret quadro(Pintor& p, const Ret& r, float a, float b) {
 } // namespace
 
 void emblema(Pintor& p, float x, float y, float s, bool comFundo) {
+    namespace id = native::ui::identidade;  // N9.2: a geometria e a mesma da interface do jogo
     if (comFundo) {
-        p.arredondado({x, y, s, s}, s * 0.22f, tema::kFundoAlto);
-        p.contorno({x, y, s, s}, s * 0.22f, std::max(1.f, s * 0.02f), tema::kBorda);
+        p.arredondado({x, y, s, s}, s * id::kEmblemaRaio, tema::kFundoAlto);
+        p.contorno({x, y, s, s}, s * id::kEmblemaRaio, std::max(1.f, s * id::kEmblemaContorno), tema::kBorda);
     }
     auto X = [&](float u) { return x + u * s; };
     auto Y = [&](float v) { return y + v * s; };
-    const Cor asa = tema::kAgua.com_alfa(0.9f), asa2 = tema::kAgua.com_alfa(0.55f);
-    // asas: duas de cada lado, em leque
-    p.triangulo(X(0.47f), Y(0.36f), X(0.12f), Y(0.22f), X(0.20f), Y(0.46f), asa);
-    p.triangulo(X(0.53f), Y(0.36f), X(0.88f), Y(0.22f), X(0.80f), Y(0.46f), asa);
-    p.triangulo(X(0.47f), Y(0.44f), X(0.16f), Y(0.52f), X(0.30f), Y(0.64f), asa2);
-    p.triangulo(X(0.53f), Y(0.44f), X(0.84f), Y(0.52f), X(0.70f), Y(0.64f), asa2);
-    // cabeca e corpo (o ferrao para baixo)
-    p.triangulo(X(0.41f), Y(0.12f), X(0.59f), Y(0.12f), X(0.50f), Y(0.24f), tema::kAmbar);
-    p.triangulo(X(0.37f), Y(0.27f), X(0.63f), Y(0.27f), X(0.50f), Y(0.90f), tema::kAmbar);
+    for (const auto& t : id::kEmblema) p.triangulo(X(t.x0), Y(t.y0), X(t.x1), Y(t.y1), X(t.x2), Y(t.y2), rgb(t.cor).com_alfa(t.alfa));
     // faixas do corpo: a largura acompanha as bordas do triangulo
-    auto meia = [](float v) { return 0.13f * (0.90f - v) / (0.90f - 0.27f); };
-    for (float v : {0.42f, 0.57f}) {
-        const float e = 0.045f, a = meia(v), b = meia(v + e);
+    for (float v : id::kFaixas) {
+        const float e = id::kFaixaEspessura, a = id::faixa_meia(v), b = id::faixa_meia(v + e);
         quad(p, X(0.5f - a), Y(v), X(0.5f + a), Y(v), X(0.5f + b), Y(v + e), X(0.5f - b), Y(v + e), tema::kAmbarEscuro);
     }
 }
