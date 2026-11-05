@@ -2,6 +2,9 @@
 
 #include "debug/file_log.h"
 #include "input/input.h"
+#if BS_VALIDACAO
+#include "render_capture.h"
+#endif
 
 #include <algorithm>
 #include <array>
@@ -256,6 +259,18 @@ struct Assist::Impl {
             reply("ok dump " + p.string());
             return false;
         }
+#if BS_VALIDACAO
+        if (cmd == "ir") {  // N9.5 fase 0 (so validacao): a IR do ultimo render, no formato do BS_RENDER_IR_GUARDAR
+            std::string name;
+            ls >> name;
+            if (!plainName(name)) throw std::runtime_error("nome invalido: " + name);
+            const fs::path p = dir / (name + ".ir");
+            if (!transitional::render_capture::save_frame_dump(p.string(), transitional::render_capture::last_frame()))
+                throw std::runtime_error("nao gravou " + p.string());
+            reply("ok ir " + p.string());
+            return false;
+        }
+#endif
         if (cmd == "marca") {
             std::string text;
             std::getline(ls >> std::ws, text);

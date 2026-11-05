@@ -212,6 +212,31 @@ void stepLogWrite(uint64_t step, void*) {
 // Periodo de um campo NTSC: 1001 / 60000 s (59,94 Hz).
 constexpr auto kField = std::chrono::nanoseconds(16683333);
 
+#if BS_VALIDACAO
+// N9.5 fase 0 (so investigacao, BS_TELA_LOGICA43): roda a rotina do jogo com a projecao do 4:3 (o cx da copia do desenho
+// 8C2D9C7C e a largura e o cx da estrutura 8C24CCB4 voltam a 320/640/320 so durante a chamada)
+uint8_t* g_ramTela = nullptr;
+void     tela43(uint32_t addr, Sh4Context* cc) {
+    // os tres campos voltam ao valor de antes mesmo se a rotina sair por excecao (revisao Codex 2026-11-05)
+    struct Restaura {
+        uint8_t salvo[12];
+        Restaura() {
+            std::memcpy(salvo, g_ramTela + 0x2D9C7C, 4), std::memcpy(salvo + 4, g_ramTela + 0x24CCB8, 4);
+            std::memcpy(salvo + 8, g_ramTela + 0x24CCC0, 4);
+        }
+        ~Restaura() {
+            std::memcpy(g_ramTela + 0x2D9C7C, salvo, 4), std::memcpy(g_ramTela + 0x24CCB8, salvo + 4, 4);
+            std::memcpy(g_ramTela + 0x24CCC0, salvo + 8, 4);
+        }
+    } restaura;
+    const float w = 640.f, cx = 320.f;
+    std::memcpy(g_ramTela + 0x2D9C7C, &cx, 4), std::memcpy(g_ramTela + 0x24CCB8, &w, 4);
+    std::memcpy(g_ramTela + 0x24CCC0, &cx, 4);
+    bs::mods::call_original(addr, cc);
+}
+template <uint32_t A> void tela43(Sh4Context* cc) { tela43(A, cc); }
+#endif
+
 } // namespace
 
 // N6 fase E: as falas nativas avisam inicio, fim, interrupcao e pausa (native/audio/voice_player.h); a ponte as
@@ -462,16 +487,27 @@ void GameHost::vblank() {
     applyRequests();  // N7c: pedidos do menu (volumes, idioma das legendas, renderizador)
     transitional::free_camera::vblank(n);  // N7c: um passo da camera livre (nada no modo Original)
 #if BS_VALIDACAO
-    // N9.5, so investigacao (docs/N9-5-AUDITORIA.md): BS_TELA_TESTE=<largura>,<cx> reescreve a largura e o centro da
-    // estrutura de tela do Ninja (8C24CCB8 e 8C24CCC0) a cada VBlank, para medir se a logica do jogo depende deles.
-    static const std::pair<float, float> kTela = [] {
-        std::pair<float, float> t{0.f, 0.f};
-        if (const char* v = std::getenv("BS_TELA_TESTE")) std::sscanf(v, "%f,%f", &t.first, &t.second);
+    // N9.5, so investigacao (docs/N9-5-AUDITORIA.md): BS_TELA_TESTE=<largura>,<cx>[,estrutura] reescreve a cada VBlank
+    // a largura e o centro da estrutura de tela do Ninja (8C24CCB8 e 8C24CCC0) e o centro da copia que o desenho usa
+    // (8C2D9C7C: o njSetScreen 8C1741D4 copia distancia, cx e cy para 8C2D9C70, e cada modelo le dali). Com
+    // ",estrutura", so a estrutura (o experimento da auditoria: o quadro nao muda, porque a copia e rara). Com um terceiro
+    // numero (<largura>,<cx>,<cx_copia>), a copia recebe esse valor: separa o efeito da estrutura do efeito do desenho.
+    struct Tela {
+        float largura = 0, cx = 0, cxCopia = 0;
+        bool  copia = true;
+    };
+    static const Tela kTela = [] {
+        Tela t;
+        if (const char* v = std::getenv("BS_TELA_TESTE")) {
+            if (std::sscanf(v, "%f,%f,%f", &t.largura, &t.cx, &t.cxCopia) < 3) t.cxCopia = t.cx;
+            t.copia = std::strstr(v, ",estrutura") == nullptr;
+        }
         return t;
     }();
-    if (kTela.first > 0 && ram_) {
-        std::memcpy(ram_ + 0x24CCB8, &kTela.first, 4);
-        std::memcpy(ram_ + 0x24CCC0, &kTela.second, 4);
+    if (kTela.largura > 0 && ram_) {
+        std::memcpy(ram_ + 0x24CCB8, &kTela.largura, 4);
+        std::memcpy(ram_ + 0x24CCC0, &kTela.cx, 4);
+        if (kTela.copia) std::memcpy(ram_ + 0x2D9C7C, &kTela.cxCopia, 4);
     }
 #endif
     transitional::sound::vblank(n);  // N6: tempo logico do mixer nativo (nada se os provedores sao o legado)
@@ -662,6 +698,39 @@ void GameHost::threadMain() {
                     const bool     ok = bs::mods::replace(a, [](Sh4Context* cc) { cc->r[0] = 0; });
                     std::fprintf(stderr, "[desligar] %08X %s\n", a, ok ? "desligada" : "NAO ENCONTRADA");
                 }
+        }
+        // N9.5 fase 0, so investigacao: BS_TELA_LOGICA43=1 (com BS_TELA_TESTE) roda o teste "na tela" (8C05D1C0: projeta
+        // e compara com 640x480 fixos) e o pan do som (8C064560: projeta, limita a [0, largura] e subtrai o cx) com a
+        // projecao do 4:3 (o cx da copia 8C2D9C7C e a largura e o cx da estrutura 8C24CCB4 voltam a 320/640/320 so durante
+        // a chamada). Com ele, os efeitos sonoros da rota de combate ficaram iguais aos do 4:3 (sem ele, o pan muda); as
+        // particulas nao (docs/N9-5-AUDITORIA.md, secao 11). Precisa das chamadas diretas por slot (build com mods:
+        // msvc-release-mods).
+        // BS_TELA_LOGICA43=<end>[,<end>] escolhe outras rotinas (so as da tabela abaixo: os chamadores do njProjectScreen
+        // 8C170A54 e ele mesmo), para achar por bissecao quem mais depende da projecao.
+        if (const char* v = std::getenv("BS_TELA_LOGICA43"); v && *v) {
+            g_ramTela = c.ram;
+            static const std::pair<uint32_t, Sh4Func> kTabela[] = {
+                {0x8C05D1C0, &tela43<0x8C05D1C0>}, {0x8C064560, &tela43<0x8C064560>},
+                {0x8C170A54, &tela43<0x8C170A54>}, {0x8C031B80, &tela43<0x8C031B80>},
+                {0x8C032708, &tela43<0x8C032708>}, {0x8C034FC0, &tela43<0x8C034FC0>},
+                {0x8C03BF78, &tela43<0x8C03BF78>}, {0x8C03D548, &tela43<0x8C03D548>},
+                {0x8C0584CC, &tela43<0x8C0584CC>},
+                // as rotinas do jogo com as constantes 640,0 ou 320,0 no literal pool
+                {0x8C032838, &tela43<0x8C032838>}, {0x8C0151DC, &tela43<0x8C0151DC>},
+                {0x8C063F4C, &tela43<0x8C063F4C>}, {0x8C09BA04, &tela43<0x8C09BA04>},
+                {0x8C063CE0, &tela43<0x8C063CE0>}, {0x8C0351E0, &tela43<0x8C0351E0>},
+                {0x8C01F500, &tela43<0x8C01F500>}, {0x8C0221A0, &tela43<0x8C0221A0>}};
+            const std::string lista = std::strcmp(v, "1") == 0 ? std::string("8C05D1C0,8C064560") : std::string(v);
+            std::stringstream ss(lista);
+            for (std::string t; std::getline(ss, t, ',');) {
+                const uint32_t a  = uint32_t(std::stoul(t, nullptr, 16));
+                Sh4Func        fn = nullptr;
+                for (const auto& [ea, ef] : kTabela)
+                    if (ea == a) fn = ef;
+                if (!fn || !bs::mods::has_slot(a) || !bs::mods::replace(a, fn))
+                    throw std::runtime_error("BS_TELA_LOGICA43: " + t + " fora da tabela ou sem slot (precisa do build com mods)");
+                std::fprintf(stderr, "[tela] %08X na projecao do 4:3\n", a);
+            }
         }
 #endif
         bs::call_trace_install();  // diagnostico BS_CALL_TRACE (desligado por padrao)

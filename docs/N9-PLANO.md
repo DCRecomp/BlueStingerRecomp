@@ -263,6 +263,9 @@ só como histórico:
   posição certa em 16:9 e 21:9, filmes na proporção original.
 - **Situação (2026-11-05):** auditoria e plano em `docs/N9-5-AUDITORIA.md`: a estrutura de tela do Ninja em `0x8C24CCB4`,
   os bloqueadores B1–B6, as fases 0–5 e os critérios. A implementação espera a aprovação do mantenedor.
+- **Fase 0 (2026-11-05, autorizada só ela):** a projeção hor+ foi provada no build de validação (seção 11 da auditoria). O
+  `njSetScreen` `8C1741D4` usa a cópia `8C2D9C70`; o estado ficou igual nas duas rotas; o pan do som foi corrigido pela
+  projeção 4:3; as faíscas do cais seguem em investigação. A fase 1 espera aprovação.
 
 ### N9.6 — Iluminação, sombras e materiais (R, GG)
 

@@ -4326,6 +4326,62 @@ não por uma única bateria contínua** (decisão do mantenedor, 2026-11-02).
 - **Pendências:** H9; D-N8-4 no gate pós-N9; ressalva do 7.1 e D-K1(a); limite de 3 h de `n6_h` no executor, defeito a
   corrigir antes de uma futura integral, sem enfraquecer os testes. N9 e N10 não iniciados.
 
+### N9.5 fase 0: a projeção hor+ (2026-11-05)
+
+O mantenedor autorizou **só a fase 0**: investigação e prova, no build de validação, sem mudar o executável de distribuição.
+O relatório completo está em `docs/N9-5-AUDITORIA.md`, seção 11. Evidências em
+`%LOCALAPPDATA%\BlueStingerRecomp\n9-5\fase0`, `fase0c` e `fase0m`.
+
+- **[P] A projeção:**
+  - `njSetScreen` = `8C1741D4` copia distância, cx e cy da estrutura `0x8C24CCB4` para `0x8C2D9C70`, e o desenho dos
+    modelos lê dessa cópia (bloco por desenho em `0x8C2D9654`, percurso `8C15F078`);
+  - `njProjectScreen` (`8C170A54`) faz sx = cx + dist·ax·x/z;
+  - a hipótese "matriz de projeção" da auditoria foi descartada.
+- **Ferramentas (só validação):**
+  - `BS_TELA_TESTE` agora também escreve a cópia do desenho (`,<cx_copia>` e `,estrutura` separam os dois);
+  - `BS_TELA_LOGICA43` roda rotinas na projeção do 4:3 (precisa do `msvc-release-mods`);
+  - o comando `ir` do gameplay assistido;
+  - `bs-ir-tela` (`tools/ir_tela`: desenhar uma IR numa largura, medir, comparar e classificar os desenhos).
+- **Experimento 4:3 × 16:9 (854, cx 427):** cartão de teste sintético com `passo_load_slot1` (passos 1855 e 2300) e
+  `passo_combate` desde o NEW GAME (passos 2000, 6000, 10000 e 11660), sessões assistidas sem janela. Controle 4:3 × 4:3:
+  IR e quadro iguais.
+  - **[P] Hor+:** todo vértice 3D andou exatamente +107 em x e 0 em y, uma translação pura (sem esticar, mesmo campo
+    vertical). Centenas de desenhos que saíam do 4:3 aparecem nas faixas, e as imagens em 854×480 desenhadas pela IR mostram
+    as laterais preenchidas.
+  - **[P] Estado:** vida, posição, passo e VBlank iguais em todos os 2241 e 11661 passos. Região de estado idêntica fora da
+    estrutura de tela.
+  - **[P] O HUD e as mensagens são 2D na grade do 4:3** e ficam deslocados no 16:9 (B3).
+- **Divergências:**
+  - **pan do som** `8C064560` (fontes além do 4:3, ±32 → ±42; 7686 amostras em 0,18 s), **corrigido** rodando a rotina na
+    projeção do 4:3: efeitos iguais amostra a amostra;
+  - **teste "na tela"** `8C05D1C0` (640×480 fixos) vai para a projeção do 4:3 na fase 1;
+  - **10 faíscas** de um efeito no cais deixam de ser enviadas. A causa está no cx da cópia; o `njProjectScreen`, os
+    chamadores dele, o teste na tela, o pan e as 8 rotinas com 640/320 foram refutados. Fica **em investigação**: é
+    cosmético, sem efeito no estado nem no som.
+- **[P] Original intacta:** `app/game_host.cpp` e `app/assist.cpp` pré-processados com o comando do `msvc-release` saem iguais
+  ao HEAD. O controle com `BS_VALIDACAO` dá diferente.
+- **Bloqueadores:**
+  - B1 resolvido com prova;
+  - B2, B5 e B6 parcialmente;
+  - B3 em investigação;
+  - B4 bloqueado até a fase 1.
+
+  O widescreen não exige antecipar o N9.6–N9.8.
+- **Revisão Codex** (`reviews/codex-20261105-120810.md`, local). O Codex conferiu sem problema `njSetScreen`,
+  `njProjectScreen`, `8C05D1C0`, `8C0634C0`, o pan e o isolamento por `BS_VALIDACAO`, e reproduziu todas as contagens. Os
+  três achados foram **aceitos**:
+  - **média:** `8C05D1C0` tem três chamadores (`8C069880`, `8C06D610`, `8C06F7E0`), não um. Conferido no disassembly (`jsr`
+    em `8C06D704` e `8C06F940`); o relatório foi corrigido com uma errata.
+  - **média:** o `bs-ir-tela comparar` gravava o TSV antes do repareamento pela geometria e pareava só pela posição. Agora
+    pareia tudo antes de gravar, exige o mesmo estado de desenho e todos os atributos dos vértices, e marca os pares
+    ambíguos. As contagens refeitas são as mesmas: nenhum ambíguo e as 10 faíscas continuam faltando.
+  - **baixa:** a RAM do envoltório 4:3 não voltava se a rotina saísse por exceção. Agora um guarda RAII a restaura.
+    Conferido com um teste rápido (3000 VBlanks, rc 0), e o produto continua igual ao HEAD no pré-processado.
+  - **Não refeito pelo Codex:** as comparações completas de RAM, o áudio e o `cl /EP`. Ficam como provas deste relatório.
+- **Testes:** ctest 30/30 (`msvc-debug`, sem disco).
+- **Próximo (com aprovação):** a fase 1. Ponto de entrada da projeção na Remastered, o pan e o teste "na tela" no 4:3, a
+  rotina das faíscas, o quadro lógico largo no Vulkan e mais rotas.
+
 ### N9.5: auditoria gráfica e plano (2026-11-05)
 
 O mantenedor autorizou só a auditoria e o planejamento. O código funcional não mudou. Documento:

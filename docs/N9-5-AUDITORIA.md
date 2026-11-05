@@ -47,8 +47,9 @@ Legenda: **[P]** provado (com o método), **[H]** hipótese, **[N]** ainda não 
   - Foi achada na RAM de gameplay (LOAD do slot 1, corredor RCG02). Fica logo depois do objeto câmera do SDK (`0x8C24CC38`,
     0x78 B, o que a câmera Livre do N7c já usa).
   - Campo de visão: 2·atan(320/500) ≈ 65,2° na horizontal e 2·atan(240/500) ≈ 51,3° na vertical.
-  - Há outras cópias com a distância 500 e alturas de 480 e 450 em `0x8C2D96xx` e `0x8C2D9C7x`. São telas de outros
-    contextos [H].
+  - Há outras cópias com a distância 500 e alturas de 480 e 450 em `0x8C2D96xx` e `0x8C2D9C7x`. Na auditoria a hipótese era
+    "telas de outros contextos"; a fase 0 mostrou que **não**: `0x8C2D9C70` é a cópia que o desenho usa, e `0x8C2D96xx` são
+    os blocos de parâmetros montados por desenho a partir dela (seção 11).
 - **[P] Quem referencia `0x8C24CCB4`:** 9 rotinas, entre elas o laço de gameplay `8C052240`, `8C0584CC`, `8C062E88`,
   `8C063530`, `8C064560`, o título (`8C078AC0`, `8C07AD80`) e `8C08A1CC`. O campo seguinte (`0x8C24CCC8`, um ponteiro) tem 72
   referências. `8C064560` e `8C08A1CC` projetam pontos isolados (distância × coordenada ÷ profundidade): é o uso de
@@ -59,10 +60,11 @@ Legenda: **[P]** provado (com o método), **[H]** hipótese, **[N]** ainda não 
   - **a área de estado do jogo é idêntica** (0 bytes, fora a câmera e a tela);
   - **o quadro também é idêntico**.
 
-  Conclusão: o desenho dos modelos **não lê** a largura nem o cx a cada quadro. Ele usa constantes calculadas antes, na
-  matriz de projeção que o `njSetScreen` monta [H forte]. Nesse trecho, a lógica não dependeu desses campos.
-- **[N] Onde ficam as constantes de projeção do desenho:** precisa rastrear quem escreve a estrutura e a matriz (o
-  `njSetScreen` e a carga do XMTRX/FTRV). É o **bloqueador B1**.
+  Conclusão da auditoria: o desenho dos modelos **não lê** a largura nem o cx a cada quadro. A fase 0 achou o motivo (abaixo):
+  a hipótese "matriz do `njSetScreen`" estava **errada na forma** (não há matriz; há uma cópia de três números) e certa no
+  efeito (constantes copiadas antes). Fica registrada como hipótese descartada.
+- **[P, fase 0] A projeção do desenho** (seção 11): o `njSetScreen` é `8C1741D4` e copia distância, cx e cy para
+  `0x8C2D9C70`; cada desenho de modelo lê dali. Isso resolve o B1.
 
 ## 3. Elementos 2D e 3D (mapa)
 
@@ -81,6 +83,8 @@ Legenda: **[P]** provado (com o método), **[H]** hipótese, **[N]** ainda não 
 
 ## 4. Bloqueadores
 
+A situação de cada um depois da fase 0 está na seção 11.7.
+
 | | Bloqueador | Por que bloqueia | Como resolver (proposta) |
 |---|---|---|---|
 | B1 | Onde está a projeção do desenho | sem isso não há hor+ | rastrear `njSetScreen` e a matriz de projeção. Ponto de entrada nativo **só na Remastered** que chama o `njSetScreen` do próprio jogo com a largura 16:9 e o mesmo campo vertical (dist e cy mantidos), como os pontos do N9.2 |
@@ -98,6 +102,8 @@ Legenda: **[P]** provado (com o método), **[H]** hipótese, **[N]** ainda não 
    - capturas sem janela da área nova;
    - estado por passo comparado nas rotas do `test_remaster`, do `newgame_area1` e do combate.
    - **Saída:** projeção hor+ provada e a lista das salas com buracos.
+   - **Feita em 2026-11-05** (seção 11): a projeção hor+ foi provada em seis cenas, com o estado igual. Ficam em aberto as
+     faíscas do cais e a cobertura de mais salas.
 2. **Fase 1, quadro largo (B4 e B5):**
    - o Vulkan e a apresentação aceitam a largura lógica 854 (×e);
    - o software e os filmes ficam em 4:3;
@@ -174,3 +180,202 @@ As baterias longas só rodam quando a mudança as toca (impacto antes de regress
   - os manifestos, o cache e os pacotes são do N9.8.
 
   Nada disso entra no N9.5.
+
+## 11. Fase 0: a projeção hor+ (resultados, 2026-11-05)
+
+Autorizada pelo mantenedor em 2026-11-05: **só a fase 0**, investigação e prova da projeção, no build de validação. O
+executável de distribuição não mudou (prova em 11.4). Evidências em `%LOCALAPPDATA%\BlueStingerRecomp\n9-5\fase0`, `fase0c`
+e `fase0m`.
+
+### 11.1 A rotina que projeta (B1)
+
+- **[P] `njSetScreen` = `8C1741D4`.** Copia três campos da estrutura de tela (`0x8C24CCB4`): distância (+0), cx (+12) e cy
+  (+16), para a **cópia do desenho** em `0x8C2D9C70` (+0, +12, +16). A largura e a altura (+4, +8) **não** são copiadas.
+  Chamadores:
+  - o título (`8C078AC0`, `8C07AD80`): grava dist, w, h e cx = w/2, cy = h/2 e chama;
+  - o laço de gameplay (`8C052240`): só quando o bit 2 de uma flag está ligado, aproxima a distância de um alvo em
+    `8C2501F0` a 1/16 por quadro (o zoom);
+  - `8C062E88`;
+  - `8C063400`/`8C0634C0`: desenha numa textura 256×256 com o centro em 128,128 e depois **recalcula cx = w/2 e cy = h/2
+    pela largura da estrutura** e chama de novo.
+- **[P] Por que reescrever a estrutura não mudava o quadro** (o experimento da seção 2): o desenho lê a cópia, e a cópia só
+  muda quando o jogo chama o `njSetScreen`, o que é raro. A hipótese "matriz de projeção" foi **descartada**: não há matriz
+  de tela, há a cópia de três números.
+- **[P] O desenho por modelo:** as rotinas de desenho do Ninja (`8C15F856`, `8C15F8B8` e as irmãs) montam a cada chamada um
+  bloco de parâmetros em `0x8C2D9654`:
+  - +16 = dist·`[8C2D9CA4]` e +20 = dist·`[8C2D9CA8]` (`9CA4`/`9CA8` são as escalas de aspecto, 1,0);
+  - +24 = cx e +28 = cy.
+
+  Depois chamam o percurso do modelo `8C15F078`, que passa esse bloco à transformação por vértice. Há quatro blocos assim
+  (`8C2D966C`, `96C0`, `9744`, `9770`), e todos passaram de 320 para 427 no experimento.
+- **[P] A fórmula.** O `njProjectScreen` (`8C170A54`) faz a mesma conta para um ponto:
+  - `FTRV` pela matriz corrente;
+  - `sx = cx + dist·ax·x/z` e `sy = cy + dist·ay·y/z`, com dist e cx da cópia `8C2D9C70` e ax, ay de `9CA4`/`9CA8`.
+
+  A prova dinâmica abaixo (todo vértice 3D anda exatamente Δcx) confirma que a transformação por vértice segue a mesma
+  forma.
+- **[P] `njClipZ` = `8C174098`**: perto e longe, limitados a −1 e −65535, gravados negados em `8C2D9C9C`/`9CA0`. O recorte é
+  em profundidade, não pelas laterais da tela.
+- **O caminho até a imagem:**
+  1. rotina do jogo → `njSetScreen` (a cópia);
+  2. desenho do Ninja (bloco por desenho, vértices em coordenadas de tela);
+  3. listas do TA → `transitional/render_capture` (a IR de `render.h`: x e y em pixels de tela, 1/w);
+  4. software ou Vulkan. O renderizador não projeta nada.
+
+**Hor+ verdadeiro:**
+- dist e cy mantidos (o campo vertical não muda);
+- largura lógica 854 a 480 linhas;
+- **cx = 427** na cópia do desenho e na estrutura (largura 854, por causa do recálculo de `8C0634C0`).
+
+O campo horizontal fica 2·atan(427/500) ≈ 81,0°.
+
+### 11.2 Ferramentas (só validação)
+
+| Ferramenta | O que faz |
+|---|---|
+| `BS_TELA_TESTE=<largura>,<cx>[,<cx_copia>][,estrutura]` | a cada VBlank, a largura e o cx da estrutura e o cx da cópia do desenho; `,estrutura` reproduz o experimento da seção 2 (só a estrutura) |
+| `BS_TELA_LOGICA43=1` ou `=<end>[,<end>]` | roda rotinas do jogo com a projeção do 4:3 (a cópia e a estrutura voltam a 320/640/320 só durante a chamada). `1` = o teste "na tela" `8C05D1C0` e o pan do som `8C064560`. Precisa das chamadas diretas por slot (`msvc-release-mods`) |
+| comando `ir <nome>` do gameplay assistido | grava a IR do último render no passo pausado (formato do `BS_RENDER_IR_GUARDAR`) |
+| `bs-ir-tela` (`tools/ir_tela`) | `quadro` desenha a IR em software numa largura escolhida (BMP); `medir` dá os limites dos vértices; `comparar` alinha os desenhos de duas IRs e classifica cada um (lista abaixo) |
+
+Como o `bs-ir-tela comparar` trabalha:
+- **Pareamento:**
+  - primeiro pela ordem de envio (LCS sobre lista, número de vértices e textura);
+  - o que não fecha é pareado de novo pela geometria, exigindo o mesmo estado de desenho. Numa sequência com a mesma
+    assinatura, um desenho a menos desalinha os seguintes.
+  - Cada par no TSV diz por onde foi pareado e se havia candidato ambíguo.
+- **Classes:**
+  - **cena:** o mesmo desenho, com todo vértice andando dx em x (no arredondamento do float) e igual em y, 1/w, u, v e cores;
+  - **tela:** o mesmo desenho sem mudar nada (2D em coordenadas de tela);
+  - **só no 4:3 / só no largo:** enviado por um dos dois.
+
+### 11.3 Experimento controlado
+
+- **Mesma entrada, mesmos passos, só dados sintéticos.** Duas rotas:
+  - o cartão de teste `n9-2/saves1` (importado do save `g1`, gerado pela sessão roteirizada do N6, o mesmo da suíte C8) com
+    o `passo_load_slot1`: LOAD e corredor RCG02, passos 1855 e 2300;
+  - o `passo_combate` desde o NEW GAME, só com entrada roteirizada: cais com cena em tempo real, porta, menu, exterior e
+    combate, passos 2000, 6000, 10000 e 11660.
+- **Como:** sessões assistidas sem janela, 4:3 × 16:9 (`BS_TELA_TESTE=854,427`). Em cada uma:
+  - o estado por passo (`BS_STATE_PASSO_CADA=1`);
+  - a RAM e a IR nos passos marcados;
+  - na rota de combate, os efeitos sonoros (`BS_EFEITOS_WAV`).
+- **Controle:** duas sessões 4:3 iguais até o passo 2000 dão a mesma IR (1796 = 1796 desenhos, todos pareados pela ordem e
+  idênticos) e o mesmo quadro. O método separa o que muda do que é ruído.
+
+| Cena (passo) | Desenhos 4:3 / 16:9 | Cena (andou +107, y igual) | Tela (não andou) | Enviados só num | Cena além do 4:3 | Inteiros fora do 4:3, visíveis no 16:9 |
+|---|---|---|---|---|---|---|
+| corredor RCG02, perto (1855) | 511 / 511 | 487 | 24 | 0 | 280 | 90 de 181 |
+| corredor RCG02 (2300) | 1153 / 1153 | 1129 | 24 | 0 | 684 | 6 de 666 |
+| cais, cena em tempo real (2000) | 1796 / 1786 | 1766 (71 pareados pela geometria, nenhum ambíguo) | 20 | **10 só no 4:3** | 689 | 198 de 602 |
+| porta trancada, mensagem (10000) | 1290 / 1290 | 1247 | 43 | 0 | 665 | 44 de 606 |
+| telas 2D (6000 e 11660) | 818 / 818 e 134 / 134 | 0 | todos | 0 | — | — |
+
+### 11.4 Os critérios
+
+1. **[P] Geometria extra nas laterais, sem esticar.** Em todas as cenas 3D, centenas de desenhos que no 4:3 saíam da tela
+   aparecem nas faixas novas. As imagens do próprio jogo, desenhadas pela IR em 854×480 (`bs-ir-tela quadro --largura
+   854`), mostram parede, piso, terminal e mar continuando nas laterais (`lado*.png` nas pastas de evidência).
+2. **[P] Proporções.** Todo vértice 3D andou **exatamente** Δcx = 107 em x e 0 em y, dentro do arredondamento do float (perto
+   do plano da câmera, x chega a 4·10⁷). É uma translação pura: a escala não muda, e as proporções dos personagens e
+   objetos também não.
+3. **[P] Campo vertical constante.** Dist e cy não mudam, e o y é idêntico em todos os vértices.
+4. **[P] Estado do jogo.**
+   - A região 0x8C240000–0x8C260000 é idêntica, fora a própria estrutura de tela, nos passos 1855, 2300, 2000, 6000, 10000
+     e 11660.
+   - A vida, a posição, o passo e o VBlank são iguais em **todos os passos**: 2241 da rota de LOAD e 11661 da rota de
+     combate, nas três variantes da seção 11.5.
+   - O resto da RAM que muda é do desenho: as cópias do cx, os rascunhos de vértices projetados (+107 exato), os ponteiros
+     das listas e áreas referenciadas só pela biblioteca do SDK (código a partir de `0x8C1580D4`).
+5. **[P] Original intacta.**
+   - O código novo só existe com `BS_VALIDACAO` e só age com as variáveis acima.
+   - `app/game_host.cpp` e `app/assist.cpp` foram pré-processados (`cl /EP`) com o comando exato do `msvc-release`, na
+     versão do HEAD e na da árvore, e saíram **iguais**. O controle negativo (`-DBS_VALIDACAO=1`) dá diferente.
+   - O `bs-ir-tela` só existe com `BS_VALIDACAO`.
+6. **[P] Reprodutível:** seis cenas em duas rotas, com o controle 4:3 × 4:3.
+
+### 11.5 Divergências achadas e a causa
+
+- **[P] Pan do som (`8C064560`).** A rotina projeta a fonte com o cx da cópia, limita x a [0, largura da estrutura] e
+  calcula pan = (x − cx da estrutura)·0,1. No 4:3 o pan fica em ±32; no 16:9, as fontes além das bordas do 4:3 vão até ±42.
+  - **Medido:** na rota de combate, os efeitos diferem em 7686 amostras, todas em 0,18 s perto de 843,5 s (um efeito).
+  - **Correção provada:** com `BS_TELA_LOGICA43=1` (a rotina roda com a projeção do 4:3), os efeitos ficam **iguais amostra
+    a amostra** aos do 4:3 (0 diferença em 37,8 milhões de amostras), e o estado continua igual.
+  - Na fase 1, o pan fica na projeção do 4:3.
+- **[P] Teste "na tela" (`8C05D1C0`).** A rotina confere o ângulo com a câmera (±90°), projeta com o cx da cópia e devolve 1
+  se 0 ≤ sx ≤ **640,0** e 0 ≤ sy ≤ **480,0** (constantes fixas). Com o cx 427, a janela do teste anda 107 px.
+  - Chamadores conhecidos (por ponteiro): `8C069880`, `8C06D610` (`jsr` em `8C06D704`) e `8C06F7E0` (`jsr` em
+    `8C06F940`). Os três testam o retorno logo depois.
+    - Errata da revisão Codex: a primeira versão deste relatório dizia "único chamador real" e tomava os outros dois por
+      coincidência de bytes. Era um erro de leitura: o disassembly tinha começado dentro do literal pool.
+    - O envoltório da própria `8C05D1C0` cobre os três. A lista não foi provada exaustiva.
+  - Nas rotas medidas, não mudou o estado. Na fase 1, roda na projeção do 4:3, como o pan, para a lógica de visibilidade
+    continuar a do Original.
+  - **[H]** A finalidade dos três chamadores não foi identificada.
+- **[Em investigação] Faíscas da cena do cais (passo 2000).**
+  - **10 quads translúcidos** (lista 2, 4 vértices, textura) que o 4:3 desenha no meio da tela (x 293–467) **não são
+    enviados** no 16:9. Os outros 71 que pareciam "mexidos" eram pareamentos errados (mesma assinatura) e acham o par exato
+    pela geometria.
+  - **[P] Causa no caminho do cx da cópia:** só a estrutura (`854,427,estrutura`) não muda nada; só a cópia (`640,320,427`)
+    reproduz os 10.
+  - **Refutado.** Rodaram na projeção do 4:3, e as 10 continuaram faltando:
+    - o `njProjectScreen` (`8C170A54`) e os chamadores dele no jogo (`8C031B80`, `8C032708`, `8C034FC0`, `8C03BF78`,
+      `8C03D548`, `8C0584CC`);
+    - o teste "na tela" e o pan;
+    - as 8 rotinas do jogo com as constantes 640,0 ou 320,0 (`8C032838`, `8C0151DC`, `8C063F4C`, `8C09BA04`, `8C063CE0`,
+      `8C0351E0`, `8C01F500`, `8C0221A0`).
+  - **[H]** Um descarte de sprites dentro da biblioteca do SDK, que lê a cópia e a região 2D de `8C2D9CAC`–`9CBC` (montada
+    por `8C172642`, que usa 640 e 320).
+  - **Efeito:** cosmético (as faíscas de um efeito). Sem mudança no estado nem no som. A rotina tem de ser achada antes de
+    aceitar a cena, na fase 1.
+- **Hipóteses descartadas (registro):**
+  - "matriz de projeção do `njSetScreen`";
+  - "as cópias em `0x8C2D96xx`/`9C7x` são telas de outros contextos": são a cópia do desenho e os blocos por desenho;
+  - "o teste na tela causa as faíscas".
+
+### 11.6 HUD e efeitos (impacto)
+
+- **[P] O HUD e os textos do jogo são 2D em coordenadas de tela.** A moldura do alvo, "ELIOT" e a barra de vida, a mensagem
+  "The door is locked." e as telas 2D (passos 6000 e 11660) não andam com o cx.
+  - No 16:9 eles ficam na grade do 4:3, colados à esquerda da imagem larga (107 px antes do centro).
+  - Isso confirma o **B3**: o HUD precisa da marca cena/HUD por desenho e de âncoras (fases 2 e 3). Até lá, o HUD ficaria
+    deslocado.
+- **[P] A classificação diferencial** (cena × tela, por duas IRs) serve de **oráculo** para a marca do B3: a marca de cada
+  desenho tem de bater com a classe medida.
+- **[H] Os efeitos de tela cheia** (fades, filtros) são desenhos "tela" em 640×480 e precisam cobrir a largura nova (fase 3).
+  Nenhum foi capturado nestas cenas.
+
+### 11.7 Os bloqueadores depois da fase 0
+
+| | Situação | Por quê |
+|---|---|---|
+| B1 projeção | **resolvido com prova** | `njSetScreen` `8C1741D4`, a cópia `8C2D9C70`, a fórmula e o caminho (11.1). Hor+ = cx da cópia e da estrutura, dist e cy mantidos |
+| B2 recorte nas laterais | **parcialmente resolvido** | o jogo não descarta geometria pela largura da tela (desenhos inteiros fora do 4:3 continuam sendo enviados) e não houve buraco nas 4 cenas 3D. Falta cobrir as salas e o caso das faíscas |
+| B3 cena/HUD | **em investigação** | o oráculo diferencial existe e mostra quem é 2D. A marca por desenho na captura continua pendente (fase 2) |
+| B4 quadro lógico de 640 | **bloqueado até a fase 1** | o experimento desenhou 854 fora do pipeline (`bs-ir-tela`). O Vulkan, a redução e a apresentação continuam em 640 |
+| B5 software | **parcialmente resolvido** | o rasterizador em software aceita a largura 854 (as imagens das evidências são dele). O recuo 4:3 continua sendo o plano |
+| B6 fidelidade dos estados | **parcialmente resolvido** | o estado ficou igual em todos os passos das duas rotas. O pan e o teste "na tela" foram identificados, e o pan tem a correção provada. As faíscas seguem em investigação |
+
+O widescreen não exige antecipar o N9.6–N9.8: a projeção é do jogo, e nada da iluminação, da água ou das texturas entra
+nela.
+
+### 11.8 Os riscos que ficam
+
+- As faíscas (a rotina não foi achada) e outros efeitos com descarte próprio em salas não medidas.
+- Outros usos do cx fora das rotas medidas (cutscenes em tempo real, mapas, chefes). A fase 1 repete a comparação em mais
+  rotas.
+- No produto, envolver `8C064560` e `8C05D1C0` exige um ponto de entrada sobre chamadas diretas. Pelo N9.2, o
+  `mods::replace` do produto só vale nas chamadas indiretas. Estas são "alvo esperado + chamada direta", com o alvo lido de
+  um literal na RAM.
+- O recálculo de cx = w/2 em `8C0634C0`: a largura da estrutura tem de ser a nova, senão o desenho volta a 320 depois de
+  cada desenho em textura.
+- O zoom do gameplay muda a distância, e o campo vertical muda junto, como no original.
+
+### 11.9 O próximo passo recomendado
+
+A fase 1, com aprovação:
+1. o ponto de entrada da projeção só na Remastered (a cópia e a estrutura com a largura nova, dist e cy intactos);
+2. o pan e o teste "na tela" na projeção do 4:3;
+3. achar a rotina das faíscas;
+4. o quadro lógico largo no Vulkan e na apresentação, com o software e a Original em 4:3;
+5. a comparação 4:3 × 16:9 repetida nas rotas do `test_remaster` e do `newgame_area1`.
