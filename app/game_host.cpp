@@ -461,6 +461,19 @@ void GameHost::vblank() {
     periph_vblank_in();  // N3-0: indice "vblank" dos roteiros e negativo do ponto de amostragem
     applyRequests();  // N7c: pedidos do menu (volumes, idioma das legendas, renderizador)
     transitional::free_camera::vblank(n);  // N7c: um passo da camera livre (nada no modo Original)
+#if BS_VALIDACAO
+    // N9.5, so investigacao (docs/N9-5-AUDITORIA.md): BS_TELA_TESTE=<largura>,<cx> reescreve a largura e o centro da
+    // estrutura de tela do Ninja (8C24CCB8 e 8C24CCC0) a cada VBlank, para medir se a logica do jogo depende deles.
+    static const std::pair<float, float> kTela = [] {
+        std::pair<float, float> t{0.f, 0.f};
+        if (const char* v = std::getenv("BS_TELA_TESTE")) std::sscanf(v, "%f,%f", &t.first, &t.second);
+        return t;
+    }();
+    if (kTela.first > 0 && ram_) {
+        std::memcpy(ram_ + 0x24CCB8, &kTela.first, 4);
+        std::memcpy(ram_ + 0x24CCC0, &kTela.second, 4);
+    }
+#endif
     transitional::sound::vblank(n);  // N6: tempo logico do mixer nativo (nada se os provedores sao o legado)
     if (dialogue_) dialogueVblank(n);
     // Diagnostico: BS_RAM_DUMP=<vblank>[,<vblank>...]:<arquivo> grava os 16 MB da RAM do guest
