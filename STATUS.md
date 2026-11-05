@@ -4325,6 +4325,81 @@ não por uma única bateria contínua** (decisão do mantenedor, 2026-11-02).
 - **Pendências:** H9; D-N8-4 no gate pós-N9; ressalva do 7.1 e D-K1(a); limite de 3 h de `n6_h` no executor, defeito a
   corrigir antes de uma futura integral, sem enfraquecer os testes. N9 e N10 não iniciados.
 
+### N9.2: interface moderna da Remastered (2026-11-04)
+
+Autorizado pelo mantenedor em 2026-11-04, com o N9.1 aceito com ressalvas: a janela do Windows e o Bazzite seguem pendentes
+com ele e **não estão aprovados**. Desenho em `docs/N9-2-INTERFACE.md`; achados e provas dos pontos de entrada em
+`docs/N9-2-PONTOS-DE-ENTRADA.md`. Evidências em `%LOCALAPPDATA%\BlueStingerRecomp\n9-2\evidencias`.
+
+Decisões do mantenedor (2026-11-04):
+- pontos de entrada nativos, não entrada sintética;
+- perfis sem VMU, soquete nem slot;
+- FreeType + Noto Sans nos dois sistemas;
+- a tela de título original continua animada (o logotipo e a personagem) e o menu antigo é **trocado**, não coberto.
+
+**O que mudou**
+- **Remastered** (`EditionProfile::native_menus`):
+  - **menu inicial no lugar do menu do título:** Novo jogo, Continuar (o perfil mais recente), Carregar, Configurações, Extras,
+    Sair. As três rotinas do menu antigo deixam de desenhar: "PRESS START", as opções e o destaque. O fundo animado
+    continua.
+  - **pausa (Esc ou View):** Continuar, Salvar (desativado até o N9.3), Carregar, Configurações, Menu principal, Sair.
+  - **configurações:** o mesmo `SettingsMenu` e a mesma persistência do N7c, no estilo novo.
+  - **perfis:** sem VMU.
+  - **confirmação** das ações que perdem o progresso.
+  - **entrada e saída com fade.** Funciona por teclado, controle e mouse, em pt-BR e en-US.
+- **Pontos de entrada** (`app/remaster/entrada_titulo`):
+  - a espera do VBlank é envolvida no laço do título, só nas chamadas indiretas, que valem no produto;
+  - o NEW GAME tem as escritas da confirmação original;
+  - o LOAD usa a rotina de load do jogo (`8C01CE00`) com o arquivo do perfil, sem o painel;
+  - o "Menu principal" é `GameHost::restart`, porque o jogo não volta ao título sozinho;
+  - cada ação vira um evento com o passo de jogo (`<gravação>.acoes`, `BS_REMASTER_ACOES`, `BS_REMASTER_PEDIR`).
+- **Portabilidade:** o `native/text` (FreeType + Noto) passa a compilar também no Windows (fontes embutidas por
+  `fonts_embed.cmake`). A identidade comum fica em `native/ui/identidade.h`; o instalador a usa, e as 120 capturas dele são
+  idênticas byte a byte. O kit do Windows leva o FreeType e a Noto, com as licenças.
+- **A Original não muda:** é o mesmo executável, sem pontos de entrada e com o menu interno do N7c. Com um roteiro ou uma
+  gravação-base, a Remastered também deixa o título original inteiro.
+
+**Testes (Preview `f032b041…`, com a v0.8.0 `1A75E9C8…` como programa anterior)**
+- **Portão C8:** 8/0, inclusive reproduzir na v0.8.0 e com a Livre + Vulkan. Já tinha passado 8/0 antes das correções do Codex.
+- **`n7_menu_pausa.py`, o menu interno da Original:** 6/0.
+- **`test_edicao.ps1`:** 11/0.
+  - O E8 da Remastered agora entra pelo menu inicial nativo, com um cartão de teste vazio.
+  - Antes disso, o E8 abria o jogo com a pasta de saves padrão do jogador, só para ler e listar.
+- **`tools/dist/test_remaster.ps1`, novo, sem janela: 4/0.**
+  - R1: o reinício é igual a um processo novo em 1480 passos.
+  - R2: o NEW GAME nativo dá a mesma vida e a mesma posição da entrada original em 1030 passos, com o filme no mesmo passo.
+  - R3: o LOAD nativo põe o jogador no mesmo ponto com uma leitura só do cartão, no passo 877 contra 1755.
+  - R4: um roteiro do menu original na Remastered é igual à Original, sem a câmera, em 1030 passos.
+- **Comparação de RAM do LOAD:** o nativo difere do original só nos campos que já mudam entre dois loads originais com
+  tempos diferentes, mais os contadores do botão de confirmação (`docs/N9-2-PONTOS-DE-ENTRADA.md`, seção 4).
+- **`bs_remaster_tests`:** 5/0 no Windows e no Linux (WSL).
+  - Cobrem o modelo, os perfis, a confirmação e o mouse.
+  - O desenho foi conferido em 208 imagens: todas as telas e as páginas das configurações, nos dois idiomas, de 800×600 a
+    3840×2160, com **0 cortes** e 0 glifos ausentes.
+  - Esse detector pegou dois defeitos, corrigidos: as setas sem glifo na ajuda e o detalhe de "Continuar".
+- **Unitários do instalador:** 12/0 no Windows e 11/0 no Linux.
+- **Janela real da Remastered:** controle virtual dentro do processo, imagens do próprio jogo (`BS_MENU_CAPTURA`), sem captura
+  da tela.
+  - O fluxo completo passou: menu inicial sobre o título animado, Novo jogo, filme, pausa, Menu principal com reinício,
+    Configurações, Extras e Sair.
+  - Durante o teste, o mouse e um controle físico ligado ao computador mexiam na seleção. Com `BS_CONTROLE_VIRTUAL`, a
+    interface passou a ignorá-los.
+- **`test_builder.ps1` com o kit novo do Windows, que leva o FreeType e a Noto (distribuição de teste `n9-2uilder-dist`):**
+  24/0.
+- **`ctest --preset msvc-debug`:** 30 testes, 100 %, com e sem disco.
+  - Os testes do kit do Builder passaram a exigir as fontes e o FreeType.
+- **Fumaça final da janela da Remastered com a Preview `f032b041…`:** o fluxo completo passou.
+
+**Original × Remastered no N9.2**
+- **Original:** o menu do jogo e o menu interno, sem nenhuma mudança de comportamento (C8, `n7_menu_pausa`, `test_edicao`).
+- **Remastered:** a interface nativa descrita acima. O núcleo do jogo é o mesmo nas duas.
+
+**Limitações e pendências**
+- "Salvar" na pausa e o gerenciador de saves de PC são do N9.3. O perfil mostra o número, a data e se é válido; o tempo de
+  jogo e o dinheiro do save exigem engenharia reversa do formato (N9.3).
+- O "Menu principal" reinicia o jogo, então a abertura (os logos) aparece de novo.
+- A conferência visual da janela real e o Linux no Bazzite continuam com o mantenedor.
+
 ### N9.1: instalador moderno e identidade visual (2026-11-04)
 
 Autorizado pelo mantenedor em 2026-11-04. Desenho em `docs/N9-1-INSTALADOR.md` e arte em `docs/N9-1-ARTE.md`. Decisões
@@ -4855,6 +4930,16 @@ Contrato em `docs/N9-0-EDICOES.md`. O mesmo executável roda as duas edições, 
 - **Não feito nesta etapa:** tela de edição (N9.1), preset Remastered (N9.5–N9.8).
 
 ## Revisões independentes (Codex)
+
+### 2026-11-04: N9.2, interface da Remastered. Relatório `reviews/codex-20261104-222855.md` (5 achados)
+
+| Achado | Decisão |
+|---|---|
+| MÉDIA: com a interface aberta, os eventos do analógico eram engolidos, e o eixo de antes da pausa ficava preso ao voltar | **aceito**: o eixo chega sempre ao `InputSystem`, como no menu interno do N7c. Na pausa o jogo está parado; no título ele só mexe o cursor original, que não é desenhado e que a ação nativa grava |
+| MÉDIA: com roteiro ou gravação-base, o menu original perdia o desenho mesmo sem a interface nativa | **aceito**: o desenho original só deixa de existir quando o menu nativo conduz o título (a janela com a interface ou `BS_REMASTER_ACOES`/`PEDIR`). Prova: R4 do `test_remaster`, Remastered = Original com o roteiro original |
+| MÉDIA: o `<gravação>.acoes` acumulava execuções anteriores | **aceito**: zerado uma vez por processo; os reinícios da mesma execução acrescentam |
+| MÉDIA: as chamadas nativas não tinham o poll que o `BS_CALL` faz no retorno | **aceito**: `mods::poll` no endereço de continuação, com o contexto restaurado, e recusa se houver longjmp pendente. R2 e R3 refeitos depois disso |
+| BAIXA: os testes unitários não exercitam os pontos de entrada, e a falta de fonte passava como sucesso | **aceito em parte**: a falta de fonte agora falha. Os pontos de entrada, o reinício e a reprodução ficaram com a suíte `tools/dist/test_remaster.ps1` (R1–R4, o jogo real sem janela). Um SH-4 falso para testes unitários não foi feito |
 
 ### 2026-11-04: N9.1, instalador. Relatório `reviews/codex-20261104-195545.md` (5 achados)
 

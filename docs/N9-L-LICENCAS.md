@@ -52,7 +52,7 @@ execução) · **P** = processo externo · **F** = ferramenta de build · **T** 
 | ↳ yuv2rgb (dentro do SDL3) | do SDL 3.2.30 | conversão YUV do SDL | BSD-3-Clause (Adrien Descamps) | SDL `src/video/yuv2rgb/LICENSE` | E | sim | aviso na documentação de quem distribui binário | — | **ajustes** | — |
 | ↳ libm (fdlibm, dentro do SDL3) | do SDL 3.2.30 | matemática quando a libc não tem | aviso da Sun ("provided that this notice is preserved") | SDL `src/libm` | E | sim | preservar o aviso | — | **ajustes** | — |
 | ↳ outros trechos do SDL3 | do SDL 3.2.30 | cabeçalhos Khronos (Apache-2.0/MIT), Valve (controle Steam), Red Hat (EDID), xcb, Igalia, DirectX (MIT) | permissivas | SDL | E (só os do alvo) | sim | avisos | — | **análise**: levantar quais entram em cada alvo e reunir os avisos | — |
-| FreeType | 2.13.3 | texto do menu e das legendas (Linux) | FTL (escolhida) ou GPL-2.0 | github.com/freetype, tag `VER-2-13-3` | E | sim (fontes no kit Linux) | texto da FTL e **crédito na documentação** | — | **ajustes** (falta o crédito nos LEIA-ME) | — |
+| FreeType | 2.13.3 | texto do menu e das legendas (Linux); interface da Remastered nos dois sistemas (N9.2) | FTL (escolhida) ou GPL-2.0 | github.com/freetype, tag `VER-2-13-3` | E | sim (fontes nos kits Linux e, desde o N9.2, Windows) | texto da FTL e **crédito na documentação** | — | **ajustes** (falta o crédito nos LEIA-ME) | — |
 | toml++ | 3.4.0 | configuração | MIT | github.com/marzer/tomlplusplus | E | sim (fontes) | aviso e texto | — | compatível | — |
 | pl_mpeg | do repositório (`third_party/pl_mpeg`) | MPEG-1 e MP2: conversão no Builder Windows; filmes no jogo Linux | MIT | github.com/phoboslab/pl_mpeg | E | sim | aviso e texto | MPEG-1 vídeo e MP2: patentes vencidas (README do pl_mpeg) | compatível | — |
 | Decodificador ADX (Sofdec) | próprio | áudio dos filmes | MIT (projeto) | este repositório | E | sim | — | formato da CRI; nenhuma patente conhecida em vigor; implementação própria | compatível; **análise** de baixa prioridade | — |
@@ -60,7 +60,7 @@ execução) · **P** = processo externo · **F** = ferramenta de build · **T** 
 | libogg | 1.3.6 | OGG de mods de áudio | BSD-3-Clause | downloads.xiph.org (SHA-256 conferido) | E | sim | aviso e texto | Vorbis livre de royalties | compatível | — |
 | libvorbis | 1.3.7 | Vorbis de mods de áudio (só decodificação) | BSD-3-Clause | downloads.xiph.org | E | sim | aviso e texto | idem | compatível | — |
 | Vulkan-Headers | 1.3.282 | cabeçalhos do backend Vulkan | Apache-2.0 (partes MIT) | Khronos | E (só cabeçalhos) | sim (fontes) | texto; conferir se algum usado é MIT | — | compatível; **análise** leve | — |
-| Noto Sans Regular e SemiBold | 2.015 | fonte do texto no Linux, embutida | OFL-1.1, sem nome reservado | notofonts | T (embutida) | sim | `OFL.txt` junto e aviso de copyright | — | compatível | — |
+| Noto Sans Regular e SemiBold | 2.015 | fonte do texto no Linux e da interface da Remastered nos dois sistemas (N9.2), embutida | OFL-1.1, sem nome reservado | notofonts | T (embutida) | sim | `OFL.txt` junto e aviso de copyright | — | compatível | — |
 
 ### 3.2 Toolchain do pacote Linux (`toolchain/`, redistribuído sem modificação)
 
@@ -241,3 +241,17 @@ O instalador e o desinstalador do N9.1 não trazem nenhum componente de terceiro
 componentes do sistema (seção 3.3). No Linux usam o SDL3, o FreeType e a Noto Sans que já estavam no pacote (seção 3.1),
 além dos diálogos do desktop em execução (seção 3.4). A arte é do projeto, em geometria, sob MIT: `docs/N9-1-ARTE.md`.
 O pacote do Builder ganha só executáveis do projeto (`BlueStinger-Desinstalar`).
+
+## 11. N9.2: interface da Remastered (2026-11-04)
+
+Decisão do mantenedor (2026-11-04): o texto da interface nativa da Remastered usa o FreeType e a Noto Sans nos dois sistemas.
+- **Componentes:** nenhum componente novo no projeto. O FreeType 2.13.3 (FTL) e a Noto Sans 2.015 (OFL 1.1), que já iam no
+  pacote do Linux, passam a ir também no do Windows.
+- **Kit do Windows:** `third_party/freetype` (as fontes, sem os testes e a CI) e `third_party/fonts`.
+- **Pacote do Builder:** `licencas/FreeType-LICENSE.txt`, `FreeType-FTL.txt` e `NotoSans-OFL-1.1.txt`.
+- **Jogo instalado:** as mesmas licenças entram pelo `extra_licenses` do Windows.
+- **Crédito da FTL:** já está nos avisos.
+- **Fontes:** no Windows elas entram no executável como vetores C++ gerados na compilação (`native/text/fonts_embed.cmake`),
+  sem modificação.
+- **Arte:** é a do projeto, em geometria, sob MIT (`docs/N9-1-ARTE.md`, `native/ui/identidade.h`). A tela de título por trás
+  da interface é a do próprio jogo do jogador e não é distribuída.

@@ -1,6 +1,6 @@
 # N9 — Blue Stinger Remastered: planejamento
 
-**Situação: N9 autorizado e iniciado em 2026-11-02. O mantenedor considerou o fechamento técnico do N8 suficiente para abrir o N9; as ressalvas do N8 e a campanha completa (seção 14) continuam abertas. N9.0 com fechamento técnico confirmado pelo mantenedor (`docs/N9-0-EDICOES.md`). N9-L (`docs/N9-L-PLANO.md`) L0–L5 e a v0.8.0 Preview publicados, com a validação no Bazzite pelo mantenedor, que não bloqueia a remasterização (2026-11-04). **N9.1 (instalador, `docs/N9-1-INSTALADOR.md`) autorizado, implementado e testado em 2026-11-04, à espera do fechamento pelo mantenedor; o N9.2 só começa depois dele.** Planejamento aprovado em
+**Situação: N9 autorizado e iniciado em 2026-11-02. O mantenedor considerou o fechamento técnico do N8 suficiente para abrir o N9; as ressalvas do N8 e a campanha completa (seção 14) continuam abertas. N9.0 com fechamento técnico confirmado pelo mantenedor (`docs/N9-0-EDICOES.md`). N9-L (`docs/N9-L-PLANO.md`) L0–L5 e a v0.8.0 Preview publicados, com a validação no Bazzite pelo mantenedor, que não bloqueia a remasterização (2026-11-04). N9.1 (instalador, `docs/N9-1-INSTALADOR.md`) com fechamento técnico aceito pelo mantenedor em 2026-11-04, com ressalvas (janela real do Windows e Bazzite pendentes com ele). **N9.2 (interface da Remastered, `docs/N9-2-INTERFACE.md`) autorizado, implementado e testado em 2026-11-04, à espera do fechamento pelo mantenedor.** Planejamento aprovado em
 2026-10-23 e atualizado com as lições do N8 em 2026-10-28 (seção 13). Este documento registra o escopo, a arquitetura e os critérios. A ordem N0–N10 não muda (`docs/PLANO-PORT-NATIVO.md`, seções 4 e 4.2).
 
 Fontes: o pedido do mantenedor de 2026-10-23 ("Planejamento oficial do N9: Remasterização"), a definição do N9 de
@@ -216,6 +216,9 @@ recomendada, **O** = opcional) com complexidade (**P**, **M**, **G**, **GG**).
 - **Aceitação:** cada item dos três menus nas duas línguas, por mouse, teclado e gamepad; nenhuma mudança deixa o jogo
   pausado; a interface original não aparece na Remastered nos caminhos substituídos (roteiros de gameplay); a Original
   sem mudança.
+- **Situação (2026-11-04):** implementado (`docs/N9-2-INTERFACE.md`, `docs/N9-2-PONTOS-DE-ENTRADA.md`); provas no
+  `STATUS.md`. Decisões do mantenedor: pontos de entrada nativos, perfis sem VMU, FreeType + Noto nos dois sistemas, título
+  original animado com o menu antigo trocado. "Salvar" na pausa fica para o N9.3.
 
 ### N9.3 — Saves nativos de PC (E, G)
 
