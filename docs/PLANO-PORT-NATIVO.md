@@ -240,9 +240,9 @@ migração versionada.
   - separação clara entre a remasterização oficial do projeto e os mods dos usuários (N10).
 - **Planejamento oficial (2026-10-23): `docs/N9-PLANO.md`.** Um projeto, **duas edições instaláveis** do mesmo núcleo
   C++: **Blue Stinger Original** (fiel ao Dreamcast; câmera Original ou Livre) e **Blue Stinger Remastered** (câmera
-  Livre obrigatória, legendas ligadas em pt-BR, menus e saves de PC, gráficos modernos, widescreen). O Recompiler escolhe
+  Livre obrigatória, legendas ligadas em pt-BR, menus modernos, gráficos modernos, widescreen). O Recompiler escolhe
   a edição (perfil de edição separado das preferências). Subetapas N9.0–N9.11: perfis de edição, instalador gráfico,
-  interface do jogo, saves de PC, controles, widescreen e HUD, iluminação, água e reflexos, texturas HD e
+  interface do jogo, saves de PC (cancelado em 2026-11-05), controles, widescreen e HUD, iluminação, água e reflexos, texturas HD e
   antialiasing, filmes, áudio e acessibilidade, refinamentos, desempenho e validação. **Só planejamento: começa depois
   do N8**, sem mudar a ordem N0–N10.
 

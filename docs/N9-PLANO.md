@@ -1,6 +1,6 @@
 # N9 — Blue Stinger Remastered: planejamento
 
-**Situação: N9 autorizado e iniciado em 2026-11-02. O mantenedor considerou o fechamento técnico do N8 suficiente para abrir o N9; as ressalvas do N8 e a campanha completa (seção 14) continuam abertas. N9.0 com fechamento técnico confirmado pelo mantenedor (`docs/N9-0-EDICOES.md`). N9-L (`docs/N9-L-PLANO.md`) L0–L5 e a v0.8.0 Preview publicados, com a validação no Bazzite pelo mantenedor, que não bloqueia a remasterização (2026-11-04). N9.1 (instalador, `docs/N9-1-INSTALADOR.md`) com fechamento técnico aceito pelo mantenedor em 2026-11-04, com ressalvas (janela real do Windows e Bazzite pendentes com ele). **N9.2 (interface da Remastered, `docs/N9-2-INTERFACE.md`) autorizado, implementado e testado em 2026-11-04, à espera do fechamento pelo mantenedor.** Planejamento aprovado em
+**Situação: N9 autorizado e iniciado em 2026-11-02. O mantenedor considerou o fechamento técnico do N8 suficiente para abrir o N9; as ressalvas do N8 e a campanha completa (seção 14) continuam abertas. N9.0 com fechamento técnico confirmado pelo mantenedor (`docs/N9-0-EDICOES.md`). N9-L (`docs/N9-L-PLANO.md`) L0–L5 e a v0.8.0 Preview publicados, com a validação no Bazzite pelo mantenedor, que não bloqueia a remasterização (2026-11-04). N9.1 (instalador, `docs/N9-1-INSTALADOR.md`) com fechamento técnico aceito pelo mantenedor em 2026-11-04, com ressalvas (janela real do Windows e Bazzite pendentes com ele). N9.2 (interface da Remastered, `docs/N9-2-INTERFACE.md`) com fechamento técnico aceito pelo mantenedor em 2026-11-05, com as conferências visuais manuais (Windows e Bazzite) pendentes com ele. **N9.3 (saves de PC) cancelado em 2026-11-05 por decisão do mantenedor: o sistema de saves do jogo original fica como está (seção 15). Próximo: N9.5, widescreen e HUD; a remasterização gráfica (N9.5–N9.8) vem antes do N9.4 (seção 15).** Planejamento aprovado em
 2026-10-23 e atualizado com as lições do N8 em 2026-10-28 (seção 13). Este documento registra o escopo, a arquitetura e os critérios. A ordem N0–N10 não muda (`docs/PLANO-PORT-NATIVO.md`, seções 4 e 4.2).
 
 Fontes: o pedido do mantenedor de 2026-10-23 ("Planejamento oficial do N9: Remasterização"), a definição do N9 de
@@ -101,7 +101,7 @@ entregando, do mesmo código, uma **edição Original** fiel à experiência do 
   `camera.mode = Original` num `controles.toml` antigo é ignorado (e registrado no log), sem apagar o arquivo.
 - **Perfil ≠ preset gráfico.** O preset gráfico (Original, Remastered padrão, qualidade) é uma preferência dentro do
   perfil; trocar o preset não muda a edição. A apresentação visual Original pode ser escolhida na Remastered quando for
-  compatível, sem desligar os recursos obrigatórios da edição (câmera livre, menus e saves modernos).
+  compatível, sem desligar os recursos obrigatórios da edição (câmera livre e menus modernos).
 - **Detalhes de edição no núcleo**: só onde o comportamento do jogo depende da política (por exemplo, a instalação dos
   slots da câmera livre). Cada ponto desses é registrado na documentação e tem teste nas duas edições.
 
@@ -156,7 +156,7 @@ entregando, do mesmo código, uma **edição Original** fiel à experiência do 
 | Movimento | do console ou relativo à câmera (na Livre) | relativo à câmera |
 | Legendas | opcionais (padrão: idioma automático dos pacotes) | ligadas, pt-BR inicial |
 | Interface | menu do jogo original + menu interno de configurações | menu inicial, pausa e configurações nativos |
-| Saves | tela original (slots/VMU), cartão nativo do N4 | gerenciador de saves de PC; VMU invisível |
+| Saves | tela original (slots/VMU), cartão nativo do N4 | o sistema original: pontos de save e o painel do jogo (com a VMU) para salvar; no título, o LOAD escolhe o save na lista de perfis do N9.2, sem VMU. N9.3 cancelado (seção 15) |
 | Gráficos padrão | fiel (modo Original Dreamcast) | preset Remastered (ajustável) |
 | Proporção | 4:3 | 16:9 verdadeiro (21:9 avaliado); 4:3 opcional |
 | Texturas | originais (HD opcional se instalado) | HD quando o pacote existe |
@@ -218,23 +218,30 @@ recomendada, **O** = opcional) com complexidade (**P**, **M**, **G**, **GG**).
   sem mudança.
 - **Situação (2026-11-04):** implementado (`docs/N9-2-INTERFACE.md`, `docs/N9-2-PONTOS-DE-ENTRADA.md`); provas no
   `STATUS.md`. Decisões do mantenedor: pontos de entrada nativos, perfis sem VMU, FreeType + Noto nos dois sistemas, título
-  original animado com o menu antigo trocado. "Salvar" na pausa fica para o N9.3.
+  original animado com o menu antigo trocado. "Salvar" na pausa fica desativado ("nos pontos de gravação do jogo"): o
+  jogo salva só nos pontos de save, como o original (N9.3 cancelado, seção 15).
 
-### N9.3 — Saves nativos de PC (E, G)
+### N9.3 — Saves nativos de PC — **CANCELADO** (2026-11-05)
 
-- Na Remastered não aparecem os slots 1 e 2 nem os cartões VMU: o jogador escolhe o save numa lista (arquivo, data e
-  hora, tempo de jogo, local quando disponível, prévia quando viável, nome).
-- Criar, carregar, excluir e organizar; "Continuar" pelo mais recente válido; autosave opcional só em pontos
-  comprovadamente seguros; backups e recuperação de corrupção.
-- Dados na pasta do usuário, separados do executável.
-- Saves antigos lidos e migrados com backup, sem modificar os originais automaticamente.
-- A lógica de VMU do jogo continua no núcleo por um adaptador interno até existir uma camada nativa comprovadamente
-  compatível (o cartão nativo do N4 já é esse adaptador). A interface de VMU some só para o jogador da Remastered.
-- Quantidade de saves: só depois de medir os limites reais da lógica de salvamento do jogo (o que o jogo grava, o
-  tamanho, os blocos, o que ele assume de um slot).
-- **Aceitação:** save e LOAD de gameplay real (inclusive num save point) nas duas edições; saves da Original carregam
-  na Remastered e vice-versa onde o formato permitir; corrupção simulada recuperada do backup; nenhum save original
-  alterado pela migração (hash); o oráculo do Flycast continua aceitando os `.vms` exportados.
+Cancelado por decisão do mantenedor em 2026-11-05, para preservar a fidelidade ao jogo original: nada de autosave,
+salvamento livre, checkpoints automáticos nem gerenciador de saves. Os pontos de save, as restrições e o fluxo de
+SAVE e LOAD do jogo ficam como estão, nas duas edições. Nenhuma etapa depende do N9.3 (seção 15). A pesquisa feita
+antes do cancelamento, sem implementação, fica como referência técnica em `docs/N9-3-SAVES.md`. O escopo de antes,
+só como histórico:
+
+> - Na Remastered não aparecem os slots 1 e 2 nem os cartões VMU: o jogador escolhe o save numa lista (arquivo, data e
+>   hora, tempo de jogo, local quando disponível, prévia quando viável, nome).
+> - Criar, carregar, excluir e organizar; "Continuar" pelo mais recente válido; autosave opcional só em pontos
+>   comprovadamente seguros; backups e recuperação de corrupção.
+> - Dados na pasta do usuário, separados do executável.
+> - Saves antigos lidos e migrados com backup, sem modificar os originais automaticamente.
+> - A lógica de VMU do jogo continua no núcleo por um adaptador interno até existir uma camada nativa comprovadamente
+>   compatível (o cartão nativo do N4 já é esse adaptador). A interface de VMU some só para o jogador da Remastered.
+> - Quantidade de saves: só depois de medir os limites reais da lógica de salvamento do jogo (o que o jogo grava, o
+>   tamanho, os blocos, o que ele assume de um slot).
+> - **Aceitação:** save e LOAD de gameplay real (inclusive num save point) nas duas edições; saves da Original carregam
+>   na Remastered e vice-versa onde o formato permitir; corrupção simulada recuperada do backup; nenhum save original
+>   alterado pela migração (hash); o oráculo do Flycast continua aceitando os `.vms` exportados.
 
 ### N9.4 — Controles e experiência de PC (E, M)
 
@@ -333,13 +340,13 @@ Pré-requisito: **N8 encerrado** (executável sem legado, com a regressão integ
 | 1 | N9.0 perfis de edição | N8 |
 | 2 | N9.1 instalador e identidade visual | 1 |
 | 3 | N9.2 interface do jogo | 1 |
-| 4 | N9.3 saves modernos | 3 (lista e menus), N4 |
+| 4 | ~~N9.3 saves modernos~~ — **cancelado** (2026-11-05) | — |
 | 5 | N9.4 controles e PC | 3 |
 | 6 | N9.5 widescreen e HUD | 1; marca cena/HUD na IR |
 | 7 | N9.6 iluminação e materiais, N9.7 água e reflexos | 6 (projeção), profundidade guardada |
 | 8 | N9.8 texturas HD e AA | 6 (para o AA com a projeção nova) |
 | 9 | N9.9 filmes, áudio e acessibilidade | 3 |
-| 10 | N9.10 refinamentos | 3, 4 |
+| 10 | N9.10 refinamentos | 3 (o 4 foi cancelado; tempo de jogo e perfis leem o sistema original) |
 | 11 | N9.11 otimização e validação final | todos |
 
 Reorganização técnica sugerida: a marca cena/HUD na IR e a profundidade guardada (pré-requisitos do N7) entram no
@@ -353,7 +360,7 @@ marcos 3–5, já que só depende do perfil.
 | Perfil de edição | E | M |
 | Instalador gráfico | E | GG |
 | Menus inicial/pausa/configurações | E | G |
-| Gerenciador de saves | E | G |
+| ~~Gerenciador de saves~~ (N9.3 cancelado) | — | — |
 | Remapeamento por ação | E | M |
 | Widescreen 16:9 e HUD | E | G |
 | 21:9 | R | M |
@@ -419,9 +426,9 @@ marcos 3–5, já que só depende do perfil.
    preferências, e o perfil limita o valor usado sem reescrever o arquivo.
 2. **Fechada em 2026-11-02:** instalador Windows em Win32 + Direct2D.
 3. **Fechada em 2026-11-02:** o instalador e a interface do jogo (N9.2) compartilham só a identidade visual, não o motor.
-4. Formato dos saves de PC: o `.vms` do N4 com metadados ao lado, ou um contêiner novo com o `.vms` dentro; política de
-   quantidade depois de medir os limites do jogo.
-5. Pontos seguros de autosave: critério e prova.
+4. ~~Formato dos saves de PC~~: **cancelada com o N9.3** (2026-11-05). Os saves continuam os do jogo, no cartão nativo
+   do N4.
+5. ~~Pontos seguros de autosave~~: **cancelada com o N9.3** (2026-11-05). Não haverá autosave.
 6. Algoritmo de antialiasing (MSAA, SMAA, FXAA ou TAA) depois das provas.
 7. Técnica de iluminação e sombras (forward com luzes por objeto, deferred parcial ou só pós-processamento com
    profundidade) depois das provas.
@@ -483,6 +490,8 @@ Radeon integrada) sob carga da CPU. Para o N9.11:
 | 7 | N9.6 parte dos volumes fiéis do N8.7 |
 | 11 | N9.11 inclui a APU com carga da CPU na matriz |
 
+Ver também a seção 15, a revisão de 2026-11-05.
+
 ## 14. Gate de campanha completa pós-N9 (D-N8-4 transferida em 2026-11-01)
 
 **Situação: obrigatório, não executado, não aprovado.** É a validação final depois da Remastered e substitui o critério de
@@ -511,7 +520,7 @@ mudar nenhum destes contratos em nenhuma das edições:
 | Controles | o roteiro `indice passo` continua significando o mesmo controle do jogo; mapa, mouse e interface novos entram **antes** da entrada efetiva gravada, nunca depois (N9.4) |
 | Câmera | a entrada gravada é a **efetiva**, depois da movimentação relativa; a câmera Livre muda só a apresentação e o objeto câmera do SDK, excluído da comparação entre edições |
 | Estados | a contagem de passos e o estado lógico por passo (`BS_STATE_PASSO`, com `BS_STATE_PASSO_SEM_CAMERA=1` entre edições) não mudam por causa de apresentação |
-| Saves | cartão, envelope e conteúdo compatíveis: o N9.3 traz os saves de PC como camada de cima, sem mudar o que a reprodução compara, ou com conversão provada e sem perda |
+| Saves | cartão, envelope e conteúdo compatíveis: o sistema de saves do jogo original não muda (o N9.3, que traria uma camada de cima, foi cancelado em 2026-11-05) |
 | Sincronização | a sequência de VBlanks, passos e esperas do jogo fica igual; nenhum efeito gráfico entra nessa sequência |
 | Áudio | fins de fala e de filme alimentam o jogo no mesmo passo lógico; áudio remasterizado com outra duração não pode mudar esse passo (ou a diferença é medida e aprovada) |
 | Vídeo | os filmes terminam no mesmo passo lógico, mesmo com filme substituído por um mod ou uma versão remasterizada |
@@ -524,3 +533,31 @@ divergência é regressão a corrigir, não uma exceção a acrescentar.
 A gravação só começa depois do fechamento do N9 (N9.11), com a edição que o mantenedor escolher para jogar, porque ela fixa o
 programa. Um defeito achado na gravação corrige o programa: as sessões já gravadas continuam válidas se a reprodução seguir
 igual, e o relatório diz qual programa foi usado em cada verificação.
+
+## 15. Replanejamento de 2026-11-05: N9.3 cancelado, remasterização gráfica primeiro
+
+Decisões do mantenedor, em 2026-11-05:
+- **N9.3 cancelado:** o sistema de saves original fica como está, para preservar a fidelidade. Não haverá autosave,
+  salvamento livre, checkpoints nem gerenciador de saves. O código funcional de saves não muda, e os testes e registros
+  históricos ficam.
+- **A numeração não muda:** nenhum marco é renumerado, e o N9.3 só aparece como cancelado.
+- **Ordem nova:** a remasterização gráfica vem primeiro, na ordem N9.5 → N9.6 → N9.7 → N9.8. Depois vêm N9.4 (controles),
+  N9.9, N9.10 e N9.11. Os gates e os critérios de aceitação de cada marco não mudam, e nenhum marco começa sem
+  autorização.
+
+Dependências revistas:
+
+| Marco | Antes | Agora |
+|---|---|---|
+| N9.4 controles e PC | depois do N9.3, antes do N9.5 | depois do N9.8; depende do N9.2 (menus) |
+| N9.5 widescreen e HUD | depois do N9.4 | o próximo; depende do N9.0 e da marca cena/HUD na IR (seção 13.5) |
+| N9.6, N9.7, N9.8 | sem mudança | sem mudança: N9.5 (projeção) e a profundidade guardada; o AA do N9.8 depende do N9.5 |
+| N9.10 refinamentos | N9.2 e N9.3 | N9.2. Tempo de jogo, estatísticas e perfis leem o sistema original, sem mudar os saves |
+| Gate de campanha (seção 14) | sem mudança | sem mudança: obrigatório depois do N9, uma gravação valida as duas edições |
+
+Na Remastered, ficam do N9.2:
+- a lista de perfis do LOAD do título, que só escolhe e carrega um save original, sem VMU;
+- o "Salvar" desativado na pausa.
+
+Nos pontos de save, o painel do jogo (com a VMU) continua o original, nas duas edições.
+

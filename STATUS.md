@@ -2650,7 +2650,8 @@ e D14), `docs/RECOMPILER-UI.md` ("Futuro") e `CLAUDE.md` (regras permanentes). D
 - **um projeto, duas edições instaláveis** do mesmo núcleo C++ (Original e Remastered), escolhidas pelo Recompiler por
   um **perfil de edição** separado das preferências; sem fork nem branch por edição;
 - **Remastered:** câmera Livre obrigatória, legendas ligadas em pt-BR, menus e saves de PC (VMU invisível ao jogador,
-  adaptador interno mantido), gráficos modernos ajustáveis, widescreen; **Original:** fiel ao Dreamcast, validada
+  adaptador interno mantido; **os saves de PC foram cancelados com o N9.3 em 2026-11-05**), gráficos modernos ajustáveis,
+  widescreen; **Original:** fiel ao Dreamcast, validada
   contra as referências do port;
 - subetapas N9.0–N9.11 com requisitos, critérios de aceitação, prioridades (E/R/O) e decisões abertas (12);
 - começa depois do N8; a ordem N0–N10 não muda; ferramentas e APIs de mods continuam no N10.
@@ -3541,7 +3542,7 @@ Plano: `docs/PLANO-PORT-NATIVO.md`, seções 4 e 4.2.
 | N6 Áudio | **concluída** (2026-10-23): H9 aprovado 3/3 com o Vulkan padrão (0 faltas); legado fora do produto no N8.6. H9 reaberto no N8.8: intermitente, não corrigido, não aprovado | 100 |
 | N7 Vulkan | **funcional, em fechamento técnico**: Vulkan padrão da janela com recuo seguro para o software; N7a, N7b e N7c validadas. Os dois bloqueios ganharam evidência no N8.7 (2026-10-28). **AMD:** a causa do `Invalid Read` foi demonstrada e corrigida (descritor não reescrito no realloc de `tris_`; 0/90 depois). **Fog e volumes:** implementados no software e no Vulkan, iguais em 32 bits, com a sombra conferida com o Flycast; falta um quadro de fog pareado. O N7 fica em 95% até o mantenedor encerrar formalmente esses bloqueios. SSAO, 16:9 real e MSAA permanecem no N9 (`docs/N7-PLANO.md` seção 25) | 95 |
 | N8 Sem legado | **iniciada** em 2026-10-24 (D-N8-1 a D-N8-4). N8.0 **concluído** em 2026-10-25 (regressão nível 3, correções, 16 referências validadas e reproduzidas, fixação do áudio nas suítes históricas); N8.1 **concluído** em 2026-10-26 (cadência B, TMU, CCN, cabo e ponte de interrupções no tempo lógico); N8.2 **concluído** em 2026-10-26 (produto × validação: papéis, `BS_VALIDACAO`, catraca do mapa); N8.3 **concluído** em 2026-10-26 (serviço nativo das syscalls; BIOS, drive e flash simulados fora do produto); N8.4 **concluído** em 2026-10-27 (barramento sem dispositivos; Maple, `--controles/--saves legado` fora do produto); N8.5 **concluído** em 2026-10-27 (filme legado e conversor YUV fora do produto); N8.6 **concluído** em 2026-10-27 (área de som nativa; AICA, áudio legado e DMA do G2 fora do produto); N8.7 **concluído** em 2026-10-30: AMD corrigida, fog e volumes nos dois renderizadores, o caminho gráfico do legado (TA, PVR, VRAM, vídeo, interrupções, DMAC, system block, rasterizador de referência) fora do produto e em sombra na validação; a fronteira guest fica no contrato do jogo (D-K1 a); N8.8 com **fechamento técnico em 2026-11-02, com ressalvas**: regressão nível 3 por composição, H9 e campanha completa abertos (`docs/N8-8-FECHAMENTO.md`) | 95 |
-| N9 Remasterização | **iniciada** em 2026-11-02 (`docs/N9-PLANO.md`): duas edições, Original e Remastered, do mesmo núcleo. N9.0 fechado (2026-11-02). N9-L L0–L5 e a v0.8.0 Preview publicados, com a validação no Bazzite pelo mantenedor. **N9.1 (instalador) implementado e testado em 2026-11-04, à espera do fechamento pelo mantenedor** (conferência visual da janela real e Linux no Bazzite). N9.2 não iniciado | 8 |
+| N9 Remasterização | **iniciada** em 2026-11-02 (`docs/N9-PLANO.md`): duas edições, Original e Remastered, do mesmo núcleo. N9.0 fechado (2026-11-02). N9-L L0–L5 e a v0.8.0 Preview publicados (validação no Bazzite com o mantenedor). **N9.1 (instalador) e N9.2 (interface da Remastered) com fechamento técnico aceito** (2026-11-04 e 2026-11-05), com as conferências visuais manuais pendentes com o mantenedor. **N9.3 (saves de PC) cancelado em 2026-11-05** por decisão do mantenedor. Próximo: N9.5 (widescreen e HUD), não iniciado; ordem gráfica N9.5 → N9.8 e depois N9.4, N9.9–N9.11. A campanha completa continua sendo o gate obrigatório depois do N9 | 27 |
 | N10 Mods e elevação | não iniciada (extensões preparadas: mídia do N5/N6, texturas HD por conteúdo e shaders validados do N7) | 0 |
 
 Progresso geral: ~81 % (onze etapas de peso igual; N8 em 95 % é estimativa, com campanha e H9 abertos).
@@ -4325,6 +4326,40 @@ não por uma única bateria contínua** (decisão do mantenedor, 2026-11-02).
 - **Pendências:** H9; D-N8-4 no gate pós-N9; ressalva do 7.1 e D-K1(a); limite de 3 h de `n6_h` no executor, defeito a
   corrigir antes de uma futura integral, sem enfraquecer os testes. N9 e N10 não iniciados.
 
+### Replanejamento do N9: N9.3 cancelado (2026-11-05)
+
+Decisão do mantenedor (2026-11-05):
+- o **N9.3, saves de PC, foi cancelado**, para preservar a fidelidade ao jogo original;
+- não haverá autosave, salvamento livre, checkpoints automáticos nem gerenciamento adicional de saves;
+- os pontos de save, as restrições e o fluxo de SAVE e LOAD do jogo ficam como estão, nas duas edições;
+- a numeração não muda, e o N9.3 só aparece como cancelado;
+- a remasterização gráfica vem primeiro: N9.5 → N9.6 → N9.7 → N9.8, depois N9.4, N9.9, N9.10 e N9.11. O mantenedor escolheu
+  manter os números e o conteúdo oficiais dos marcos.
+
+Detalhes em `docs/N9-PLANO.md`, seção 15.
+
+- **Trabalho que já tinha começado:** só pesquisa, sem código nem commit. Ela fica como histórico em `docs/N9-3-SAVES.md`,
+  com o aviso de cancelamento.
+- **Código:** nenhuma mudança. Três comentários (`app/remaster/interface.h`, `app/main_sdl.cpp`) e um teste
+  (`tests/unit/test_remaster.cpp`) ainda citam o N9.3. Eles descrevem o "Salvar" desativado, que fica, e serão
+  atualizados numa próxima mudança de código.
+- **Dependências revistas:**
+  - o N9.10 dependia do marco do N9.3; agora depende só do N9.2, e o tempo de jogo e os perfis leem o sistema original;
+  - o contrato 14.2 da campanha fica mais simples: o cartão, o envelope e o conteúdo são os do jogo;
+  - o Monitor de Campanha e a instalação e distribuição não citavam o N9.3;
+  - nenhum teste foi removido.
+- **Progresso do N9:** a metodologia é a usada até aqui, subetapas fechadas sobre o total. Não há pesos por subetapa no
+  plano, e os tamanhos M/G/GG da seção 8 nunca foram usados como peso.
+
+  | Situação | Conta | N9 |
+  |---|---|---|
+  | No quadro antes desta revisão (desatualizado: só o N9.0) | 1 de 12 | 8 % |
+  | Com N9.1 e N9.2 aceitos, ainda com 12 subetapas | 3 de 12 | 25 % |
+  | **Sem o N9.3 (11 subetapas ativas)** | 3 de 11 | **27 %** |
+
+  O N9.3 cancelado não conta como concluído. O projeto inteiro não tem percentual próprio, só o de cada etapa N0–N10, e
+  por isso não foi calculado.
+
 ### N9.2: interface moderna da Remastered (2026-11-04)
 
 Autorizado pelo mantenedor em 2026-11-04, com o N9.1 aceito com ressalvas: a janela do Windows e o Bazzite seguem pendentes
@@ -4395,8 +4430,8 @@ Decisões do mantenedor (2026-11-04):
 - **Remastered:** a interface nativa descrita acima. O núcleo do jogo é o mesmo nas duas.
 
 **Limitações e pendências**
-- "Salvar" na pausa e o gerenciador de saves de PC são do N9.3. O perfil mostra o número, a data e se é válido; o tempo de
-  jogo e o dinheiro do save exigem engenharia reversa do formato (N9.3).
+- "Salvar" na pausa e o gerenciador de saves de PC eram do N9.3, **cancelado em 2026-11-05** (entrada "Replanejamento do
+  N9"). O "Salvar" fica desativado e o jogo salva só nos pontos de save. O perfil mostra o número, a data e se é válido.
 - O "Menu principal" reinicia o jogo, então a abertura (os logos) aparece de novo.
 - A conferência visual da janela real e o Linux no Bazzite continuam com o mantenedor.
 

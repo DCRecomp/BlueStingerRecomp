@@ -97,6 +97,6 @@ Toda a arte do instalador é geometria desenhada pelo código (`gui/arte.cpp`) e
 
 ## 7. Fora do N9.1
 
-- A interface do jogo (N9.2), os saves de PC (N9.3), o preset gráfico Remastered (N9.5–N9.8) e os pacotes de dublagem e HD
+- A interface do jogo (N9.2), os saves de PC (N9.3, depois cancelado), o preset gráfico Remastered (N9.5–N9.8) e os pacotes de dublagem e HD
   (N9.8 e N9.9).
 - Detecção de atualização pela rede (N9.10).

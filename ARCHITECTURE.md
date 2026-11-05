@@ -818,7 +818,7 @@ Planejamento aprovado em 2026-10-23; **não iniciado** (começa depois do N8). D
   legendas/controles.toml): o perfil define padrões e restrições (`clamp_to`, como as capacidades do renderizador
   hoje), as preferências escolhem dentro delas. Saves e atualizações não mudam o perfil. Perfil não é preset gráfico.
 - **Remastered:** câmera Livre obrigatória (as rotinas originais ficam no núcleo para eventos roteirizados e para a
-  Original), legendas ligadas em pt-BR, menus e saves de PC (a lógica de VMU continua atrás do cartão nativo do N4),
+  Original), legendas ligadas em pt-BR, menus modernos (os saves continuam os do jogo original: o N9.3 foi cancelado em 2026-11-05),
   gráficos modernos ajustáveis.
 - **Camadas:** núcleo (o mesmo) → apresentação (UI nativa, HUD, pós-processamento, iluminação, água, texturas HD,
   widescreen) → preferências → perfil de edição → instalador. O núcleo expõe eventos e estados; a apresentação não

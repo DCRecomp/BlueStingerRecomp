@@ -47,7 +47,7 @@ sensibilidade, só ela é gravada (`for_file`). Isso fecha a decisão 1 da seç�
 
 - **Legendas:** o modo automático já escolhe pt-BR quando o pacote está instalado. Sem o pacote, usa en-US. Nada depende da edição.
 - **Gráficos:** o preset Remastered ainda não existe. Ele nasce com os recursos gráficos do N9.5 ao N9.8.
-- **Saves, menus de jogo e widescreen:** ficam no N9.2, N9.3 e N9.5.
+- **Saves, menus de jogo e widescreen:** ficam no N9.2, N9.3 e N9.5. (N9.3 cancelado em 2026-11-05: os saves continuam os do jogo original, `docs/N9-PLANO.md` seção 15)
 
 ## Provas
 

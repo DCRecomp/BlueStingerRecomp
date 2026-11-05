@@ -46,7 +46,8 @@ original e o menu interno de configurações do N7c (matriz da seção 4 do plan
   opções nativas ficam no lugar delas, entre o logotipo e o copyright.
 - **Pausa** (Esc ou View durante o jogo), com o jogo parado entre VBlanks:
   - Continuar;
-  - Salvar (desativado até o N9.3, "nos pontos de gravação do jogo");
+  - Salvar (desativado: "nos pontos de gravação do jogo". Com o N9.3 cancelado em 2026-11-05, o jogo salva só nos pontos
+    de save, como o original);
   - Carregar;
   - Configurações;
   - Menu principal;
