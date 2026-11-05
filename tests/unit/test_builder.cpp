@@ -378,7 +378,10 @@ BS_TEST(builder_rejects_bad_inputs_without_side_effects) {
                              L"runtime/CMakeLists.txt", L"tools/extractor/CMakeLists.txt", L"tools/dist/LEIA-ME.txt",
                              L"tools/dcmap/CMakeLists.txt", L"native/CMakeLists.txt", L"legacy/CMakeLists.txt",
                              L"transitional/CMakeLists.txt", L"tools/build/msvc_srcdeps.cmake",
-                             L"third_party/SDL3/CMakeLists.txt", L"app/bluestinger.rc.in"})
+                             L"third_party/SDL3/CMakeLists.txt", L"app/bluestinger.rc.in",
+                             // N9.2: o texto da interface da Remastered (FreeType + Noto Sans tambem no Windows)
+                             L"third_party/fonts/noto-sans/NotoSans-Regular.ttf", L"third_party/fonts/noto-sans/NotoSans-SemiBold.ttf",
+                             L"third_party/fonts/noto-sans/OFL.txt"})
         writeFile(kit / f, "");
     // sem o icone do executavel o kit esta incompleto (o .rc o inclui)
     BS_CHECK(check_kit(kit, kit / L"third_party" / L"SDL3").find("bluestinger.ico") != std::string::npos);
@@ -390,6 +393,9 @@ BS_TEST(builder_rejects_bad_inputs_without_side_effects) {
     writeFile(kit / L"icone-local/bluestinger.ico", ico.substr(0, 24));  // o local (opcional) tambem e conferido
     BS_CHECK(check_kit(kit, kit / L"third_party" / L"SDL3").find("icone-local") != std::string::npos);
     writeFile(kit / L"icone-local/bluestinger.ico", ico);
+    // N9.2: sem as fontes do FreeType (nem no kit nem ao lado do SDL3) o kit esta incompleto
+    BS_CHECK(check_kit(kit, kit / L"third_party" / L"SDL3").find("FreeType") != std::string::npos);
+    writeFile(kit / L"third_party/freetype/CMakeLists.txt", "");
     // N3-1: sem as fontes do toml++ (nem no kit nem ao lado do SDL3) o kit esta incompleto
     BS_CHECK(check_kit(kit, kit / L"third_party" / L"SDL3").find("toml++") != std::string::npos);
     writeFile(kit / L"third_party/tomlplusplus/CMakeLists.txt", "");

@@ -169,6 +169,15 @@ bool ico_valid(const fs::path& p) {
 
 } // namespace
 
+// N9.2: o FreeType do kit (third_party/freetype); sem ele (o repositorio como kit), o do build, ao lado das fontes do SDL3
+// (_deps/freetype-src), como o toml++ (toml_dir em builder_core.cpp)
+fs::path freetype_dir(const fs::path& kit, const fs::path& sdl3) {
+    std::error_code ec;
+    const fs::path  inKit = kit / L"third_party" / L"freetype";
+    if (fs::is_regular_file(inKit / L"CMakeLists.txt", ec)) return inKit;
+    return sdl3.parent_path() / L"freetype-src";
+}
+
 std::string check_kit_platform(const fs::path& kit, const fs::path& sdl3) {
     std::error_code ec;
     for (const wchar_t* f : {L"CMakeLists.txt", L"LICENSE", L"config/bluestinger_us.toml", L"app/CMakeLists.txt",
@@ -176,22 +185,33 @@ std::string check_kit_platform(const fs::path& kit, const fs::path& sdl3) {
                              L"runtime/CMakeLists.txt", L"tools/extractor/CMakeLists.txt", L"tools/dist/LEIA-ME.txt",
                              L"tools/dcmap/CMakeLists.txt", L"native/CMakeLists.txt", L"legacy/CMakeLists.txt",
                              L"tools/build/msvc_srcdeps.cmake",
-                             L"transitional/CMakeLists.txt"})
+                             L"transitional/CMakeLists.txt",
+                             // N9.2: o texto da interface da Remastered (FreeType + Noto Sans, como no Linux)
+                             L"third_party/fonts/noto-sans/NotoSans-Regular.ttf", L"third_party/fonts/noto-sans/NotoSans-SemiBold.ttf",
+                             L"third_party/fonts/noto-sans/OFL.txt"})
         if (!fs::is_regular_file(kit / f, ec)) return "kit de fontes incompleto: falta " + path_text(kit / f);
     for (const wchar_t* f : {L"app/res/bluestinger.ico", L"icone-local/bluestinger.ico"})  // o local e opcional
         if (fs::exists(kit / f, ec) && !ico_valid(kit / f)) return "icone invalido no kit: " + path_text(kit / f);
     if (!fs::is_regular_file(sdl3 / L"CMakeLists.txt", ec))
         return "fontes do SDL3 nao encontradas em " + path_text(sdl3);
+    if (!fs::is_regular_file(freetype_dir(kit, sdl3) / L"CMakeLists.txt", ec))
+        return "fontes do FreeType nao encontradas em " + path_text(freetype_dir(kit, sdl3));
     return {};
 }
 
 fs::path default_sdl3(const fs::path& kit) { return kit / L"third_party" / L"SDL3"; }
 
-std::vector<std::wstring> dependency_args(const fs::path&, const fs::path& sdl3, const fs::path& toml) {
-    return {L"-DFETCHCONTENT_SOURCE_DIR_SDL3=" + cmake_path(sdl3), L"-DFETCHCONTENT_SOURCE_DIR_TOMLPLUSPLUS=" + cmake_path(toml)};
+std::vector<std::wstring> dependency_args(const fs::path& kit, const fs::path& sdl3, const fs::path& toml) {
+    return {L"-DFETCHCONTENT_SOURCE_DIR_SDL3=" + cmake_path(sdl3), L"-DFETCHCONTENT_SOURCE_DIR_TOMLPLUSPLUS=" + cmake_path(toml),
+            L"-DFETCHCONTENT_SOURCE_DIR_FREETYPE=" + cmake_path(freetype_dir(kit, sdl3))};
 }
 
-std::vector<std::pair<fs::path, std::wstring>> extra_licenses(const fs::path&, const fs::path&) { return {}; }
+// N9.2: o FreeType (FTL) e a Noto Sans (OFL 1.1) entram no jogo do Windows pela interface da Remastered
+std::vector<std::pair<fs::path, std::wstring>> extra_licenses(const fs::path& kit, const fs::path& sdl3) {
+    const fs::path ft = freetype_dir(kit, sdl3);
+    return {{ft / L"LICENSE.TXT", L"FreeType-LICENSE.txt"}, {ft / L"docs" / L"FTL.TXT", L"FreeType-FTL.txt"},
+            {kit / L"third_party" / L"fonts" / L"noto-sans" / L"OFL.txt", L"NotoSans-OFL-1.1.txt"}};
+}
 
 void make_executable(const fs::path&) {}
 

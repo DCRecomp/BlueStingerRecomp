@@ -84,7 +84,7 @@ $kit = Join-Path $stage "kit"
 # O que o .gitignore exclui (game-data, generated, ISO, ...) nunca entra (revisao Codex).
 $kitEntries = @("CMakeLists.txt", "LICENSE", "app", "runtime", "tools/extractor", "tools/dist/LEIA-ME.txt", "config",
                 "tools/dcmap", "native", "legacy", "transitional", "tools/build", "third_party/dr_libs", "third_party/xiph",
-                "third_party/vulkan", "mods-padrao")
+                "third_party/vulkan", "mods-padrao", "third_party/fonts")  # N9.2: Noto Sans (OFL 1.1) da interface
 # release (-Versao): so os arquivos do commit (rastreados); um arquivo solto na arvore de trabalho nunca entra
 if ($Versao) { $kitList = @(git -C $repo -c core.quotepath=off ls-files --cached -- @kitEntries) }
 else { $kitList = @(git -C $repo -c core.quotepath=off ls-files --cached --others --exclude-standard -- @kitEntries) }
@@ -153,10 +153,24 @@ Get-ChildItem -LiteralPath $tomlSrc -Force | Where-Object { $tomlSkip -notcontai
     Copy-Item -Recurse -LiteralPath $_.FullName -Destination (Join-Path $tomlKit $_.Name)
 }
 
+# N9.2: FreeType 2.13.3 (FTL) em fontes, para o texto da interface da Remastered: sem os testes e a CI (o FTL.TXT e o
+# LICENSE.TXT ficam)
+$ftSrc = Join-Path $build "_deps\freetype-src"
+if (-not (Test-Path (Join-Path $ftSrc "CMakeLists.txt"))) { Fail "falta o FreeType em $ftSrc (compile o msvc-release antes)" }
+$ftKit = Join-Path $kit "third_party\freetype"
+New-Item -ItemType Directory -Force -Path $ftKit | Out-Null
+$ftSkip = @(".git", ".github", ".gitlab-ci.yml", "tests", "testing", "subprojects")
+Get-ChildItem -LiteralPath $ftSrc -Force | Where-Object { $ftSkip -notcontains $_.Name } | ForEach-Object {
+    Copy-Item -Recurse -LiteralPath $_.FullName -Destination (Join-Path $ftKit $_.Name)
+}
+
 # licencas e textos
 Copy-Item -LiteralPath (Join-Path $repo "LICENSE") -Destination "$stage\licencas\BlueStingerRecompiled-MIT.txt"
 Copy-Item -LiteralPath (Join-Path $sdl "LICENSE.txt") -Destination "$stage\licencas\SDL3-zlib.txt"
 Copy-Item -LiteralPath (Join-Path $build "_deps\tomlplusplus-src\LICENSE") -Destination "$stage\licencas\tomlplusplus-MIT.txt"
+Copy-Item -LiteralPath (Join-Path $ftSrc "LICENSE.TXT") -Destination "$stage\licencas\FreeType-LICENSE.txt"  # N9.2
+Copy-Item -LiteralPath (Join-Path $ftSrc "docs\FTL.TXT") -Destination "$stage\licencas\FreeType-FTL.txt"
+Copy-Item -LiteralPath (Join-Path $repo "third_party\fonts\noto-sans\OFL.txt") -Destination "$stage\licencas\NotoSans-OFL-1.1.txt"
 Copy-Item -LiteralPath (Join-Path $repo "third_party\pl_mpeg\LICENSE") -Destination "$stage\licencas\pl_mpeg-MIT.txt"  # N5: decodificador MPEG-1 do conversor de filmes
 Copy-Item -LiteralPath (Join-Path $repo "third_party\dr_libs\LICENSE") -Destination "$stage\licencas\dr_flac-MIT0.txt"  # N6: FLAC de mods
 Copy-Item -LiteralPath (Join-Path $repo "third_party\xiph\libogg\COPYING") -Destination "$stage\licencas\libogg-BSD.txt"  # N6: OGG de mods

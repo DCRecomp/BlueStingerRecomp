@@ -15,7 +15,7 @@ namespace bs::builder {
 
 // N0: tools/dcmap (mapa de regioes, usado pela sonda do runtime), native, legacy e transitional
 // sao alvos do CMake raiz e entram no kit.
-const wchar_t* const kKitEntries[18] = {L"CMakeLists.txt", L"LICENSE", L"VERSION", L"app", L"runtime",
+const wchar_t* const kKitEntries[20] = {L"CMakeLists.txt", L"LICENSE", L"VERSION", L"app", L"runtime",
                                         L"tools/extractor", L"tools/dist/LEIA-ME.txt", L"config",
                                         L"tools/dcmap", L"native", L"legacy", L"transitional",
                                         L"tools/build",           // N2b: dependencias do MSVC por JSON (D10)
@@ -23,6 +23,8 @@ const wchar_t* const kKitEntries[18] = {L"CMakeLists.txt", L"LICENSE", L"VERSION
                                         L"third_party/xiph",      // N6: OGG/Vorbis de mods (libogg + libvorbis)
                                         L"third_party/vulkan",    // N7b: cabecalhos Vulkan (Khronos, Apache-2.0)
                                         L"mods-padrao",           // N7c: mods padrao (legendas), em toda instalacao
+                                        L"third_party/fonts",     // N9.2: Noto Sans (OFL 1.1), o texto da interface nos dois sistemas
+                                        L"third_party/freetype",  // N9.2: FreeType 2.13.3 (FTL) em fontes, sem internet
                                         L"icone-local"};          // icone a partir da capa do usuario (so local; opcional)
 
 namespace {
@@ -206,6 +208,7 @@ const char* const kPresets = R"JSON({
         "BS_GENERATED_DIR": "${sourceDir}/generated",
         "FETCHCONTENT_SOURCE_DIR_SDL3": "${sourceDir}/third_party/SDL3",
         "FETCHCONTENT_SOURCE_DIR_TOMLPLUSPLUS": "${sourceDir}/third_party/tomlplusplus",
+        "FETCHCONTENT_SOURCE_DIR_FREETYPE": "${sourceDir}/third_party/freetype",
         "FETCHCONTENT_FULLY_DISCONNECTED": "ON",
         "BS_VERSION_OVERRIDE": "@VERSAO@"
       }
@@ -226,7 +229,7 @@ std::string check_project(const fs::path& dir) {
     std::error_code ec;
     for (const wchar_t* f : {L"CMakeLists.txt", L"generated/generated.cmake", L"generated/funcs.h", L"runtime/CMakeLists.txt",
                              L"app/CMakeLists.txt", L"third_party/SDL3/CMakeLists.txt", L"third_party/tomlplusplus/CMakeLists.txt",
-                             L"config/bluestinger_us.toml"})
+                             L"third_party/freetype/CMakeLists.txt", L"config/bluestinger_us.toml"})
         if (!fs::is_regular_file(dir / f, ec)) return "projeto incompleto: falta " + path_text(dir / f);
     return {};
 }
