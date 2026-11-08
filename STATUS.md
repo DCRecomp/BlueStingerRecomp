@@ -4326,7 +4326,7 @@ não por uma única bateria contínua** (decisão do mantenedor, 2026-11-02).
 - **Pendências:** H9; D-N8-4 no gate pós-N9; ressalva do 7.1 e D-K1(a); limite de 3 h de `n6_h` no executor, defeito a
   corrigir antes de uma futura integral, sem enfraquecer os testes. N9 e N10 não iniciados.
 
-### N9.5 fase 1: o widescreen hor+ da Remastered (2026-11-05, fechada tecnicamente em 2026-11-08)
+### N9.5 fase 1: o widescreen hor+ da Remastered (2026-11-05, aprovada e publicada em 2026-11-08 como v0.9.5-1)
 
 Detalhes, tabelas e o método em `docs/N9-5-AUDITORIA.md`, seção 12. Autorizada pelo mantenedor em 2026-11-05 (só a fase 1),
 com a arquitetura escolhida por ele: **translação da IR no Vulkan**. O jogo continua projetando em 4:3, e a mesma IR é
@@ -4348,9 +4348,13 @@ desenhada deslocada de 107 px num alvo de 854 colunas.
   continua sem teste automático).
 - **`test_remaster` R1–R4 aprovados** (2026-11-08 à tarde, cartão reconstruído das referências do N8; cada caso com uma
   execução completa; duas execuções encerradas pelo vigia de memória por processos externos, seção 12.8 da auditoria).
-  **Pendentes por falta de memória** (o mantenedor usando a máquina): Preview nova e `test_edicao`, J1–J5 e a Original
-  contra as referências do N8.7; a fase 1 não está aprovada sem elas. Não refeitos: a rota de combate inteira e a bateria
-  de janela J1–J5 (2026-11-05). Nenhuma medição de desempenho.
+  Não refeita: a rota de combate inteira (2026-11-05). Nenhuma medição de desempenho.
+- **Aprovação (2026-11-08 à noite, seção 12.10 da auditoria):** Original × `referencias_n87` **10 casos, 0 diferentes** (5
+  rotas × `--tempo nativo` e `experimental`); Preview nova em `tmp/` pelo Builder (`v0.8.0-15-g96e2339`) e `test_edicao`
+  **11/0**; J1–J5 na janela **0 falha** (J2 e J3 repetidos uma vez: na 1ª rodada as capturas saíram com 3840×2019, a janela
+  maximizada, sem código do jogo que faça isso; na 2ª, 1024×768 e 1280×720 corretos). Fase 1 aprovada nos critérios pedidos,
+  com o C8 bloqueado por dados (abaixo). Publicada como `v0.9.5-1` (só o pacote do Windows; os insumos do Linux no WSL foram
+  apagados em 2026-11-07).
 - **Pendências:** HUD centrado no 4:3 virtual (fases 2 e 3); vazio fora da sala e sprites descartadas além do 4:3 nas faixas
   (fase 4); menu, 21:9 e desempenho (fase 5); validação visual e Bazzite com o mantenedor.
 - **C8 bloqueado por dados:** `%LOCALAPPDATA%\BlueStingerRecomp` foi esvaziado em 2026-11-08 às 03:07. Perderam-se o `g1`, as

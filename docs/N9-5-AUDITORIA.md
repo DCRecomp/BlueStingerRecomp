@@ -548,8 +548,8 @@ Executáveis do worktree só com a fase 1 (`tmp/wt-n95f1`, sem o protótipo de �
   encerrado pelo vigia de memória (`tmp/`): o commit livre do sistema caiu abaixo de 2,5 GB por processos de outros
   trabalhos (um `nup verify` de 15 GB e, depois, um emulador em uso pelo mantenedor). O jogo ficou em 226–227 MB por
   instância. Os logs mostram a saída cortada sem o resumo final e o caso seguinte começando no mesmo segundo.
-- **Pendentes por falta de memória livre (o mantenedor usando a máquina):** a Preview nova em `tmp/` e o `test_edicao`, a
-  bateria de janela J1–J5 e a conferência da Original contra as referências do N8.7. Sem elas, a fase 1 **não** está aprovada.
+- **Feitas em 2026-11-08 à noite (fase 1 aprovada nos critérios pedidos pelo mantenedor; seção 12.10):** a Original contra
+  as referências do N8.7, a Preview nova em `tmp/` com o `test_edicao` e a bateria de janela J1–J5.
 - **Aviso do filme NEWGAME:** toda execução sem janela que passa pelo filme registra uma "falta de progresso" (thread 1 em
   `8C174AAA`) e continua; aparece também nas execuções aprovadas. Não é deste trabalho.
 - **C8 bloqueado por dados:** em 2026-11-08, às 03:07, `%LOCALAPPDATA%\BlueStingerRecomp` foi esvaziado (sobraram `build` e
@@ -593,3 +593,26 @@ Avaliado em 2026-11-08 a pedido do mantenedor. **Classificação: protótipo.** 
   1. manter o protótipo na árvore de trabalho até o N9.7 (o estado atual);
   2. guardá-lo numa branch local sobre o commit da fase 1, para não depender da árvore de trabalho;
   3. no N9.7, refazer o commit por cima da fase 1 com as interferências acima corrigidas e as provas de aceitação do plano.
+
+### 12.10 Aprovação da fase 1 (2026-11-08, à noite)
+
+Executáveis do worktree em `96e2339` (só a fase 1, sem o protótipo de água). Uma instância pesada por vez, com o vigia de
+memória em `tmp/` (encerra só o jogo se o commit livre cair abaixo de 2,5 GB; não disparou em nenhuma destas).
+
+| Prova | Resultado |
+|---|---|
+| Original × `analysis/n8/referencias_n87` (`n8_conferir`, exe de validação com o layout de mods): `newgame_area1`, `cgate`, `heliporto`, `load_opcoes` e `combate`, cada uma com `--tempo nativo` e `experimental` | **10 casos, 0 diferentes**; pico do jogo 347 MB |
+| Preview pelo próprio Builder (`make_preview.ps1 -Out tmp/...`, `BS_BUILDER_CACHE` em `tmp/`) | `v0.8.0-15-g96e2339`; a de `dist/` (v0.8.0) intocada |
+| `test_edicao.ps1 -Preview <tmp> -Saida <tmp>` | **11 ok, 0 falha** (E0–E8) |
+| J1–J5 (`n95_janela.py`, exe da Preview, cartão importado em `tmp/` do mesmo save do R3) | J1, J4 e J5 ok na 1ª rodada; **J2 e J3 ok** na 2ª (abaixo); 0 falha |
+
+- **J2 e J3 na 1ª rodada:** as dez capturas saíram com **3840×2019** (a janela maximizada no monitor 4K, sem a barra de
+  tarefas) em vez de 1024×768 e 1280×720. O jogo não tem código que maximize a janela, cada caso tem o próprio
+  `graficos.toml`, e o J4, com a mesma janela de 1280×720 do J3, passou logo depois. Repetidos uma vez, com `--manter` para
+  guardar o log e as capturas e com o aviso de não mexer nas janelas: 1024×768 com a imagem larga em 1024×575 a partir da
+  linha 96 (J2) e 4:3 em 960×720 a partir da coluna 160 (J3). A causa provável é externa (a janela maximizada durante o
+  teste); não foi provada.
+- **C8 continua bloqueado por dados** (seção 12.8): as gravações reais de 2026-10-21 não existem mais e não foram trocadas
+  por dados sintéticos. A fase 1 foi aprovada sem ele, com essa ressalva.
+- **Publicação:** o mantenedor pediu cada etapa publicada; a fase 1 sai como `v0.9.5-1`, só com o pacote do Windows (os
+  insumos do pacote Linux no WSL foram apagados em 2026-11-07; o Linux volta numa release seguinte).
