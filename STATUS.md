@@ -4346,8 +4346,10 @@ desenhada deslocada de 107 px num alvo de 854 colunas.
   no alvo largo) e `codex-20261108-134326` (confirmou as correções; 1 médio aceito e corrigido, slot largo antigo depois da
   troca para o software com o jogo pausado, `use_slot` com teste; 1 baixo aceito em parte, o recuo real Vulkan → SDL
   continua sem teste automático).
-- **Incompleto hoje:** `test_remaster` R1 e R2 aprovados, R3 e R4 não rodados (interrompido por falta de memória no sistema);
-  `test_edicao` não rodado (11/0 e 4/0 em 2026-11-05). Não refeitos: a rota de combate inteira e a bateria
+- **`test_remaster` R1–R4 aprovados** (2026-11-08 à tarde, cartão reconstruído das referências do N8; cada caso com uma
+  execução completa; duas execuções encerradas pelo vigia de memória por processos externos, seção 12.8 da auditoria).
+  **Pendentes por falta de memória** (o mantenedor usando a máquina): Preview nova e `test_edicao`, J1–J5 e a Original
+  contra as referências do N8.7; a fase 1 não está aprovada sem elas. Não refeitos: a rota de combate inteira e a bateria
   de janela J1–J5 (2026-11-05). Nenhuma medição de desempenho.
 - **Pendências:** HUD centrado no 4:3 virtual (fases 2 e 3); vazio fora da sala e sprites descartadas além do 4:3 nas faixas
   (fase 4); menu, 21:9 e desempenho (fase 5); validação visual e Bazzite com o mantenedor.

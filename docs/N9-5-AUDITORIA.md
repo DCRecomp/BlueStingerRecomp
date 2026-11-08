@@ -542,11 +542,16 @@ Executáveis do worktree só com a fase 1 (`tmp/wt-n95f1`, sem o protótipo de �
 - **Fase 5:** a opção no menu (ainda "em breve"), o 21:9, as medições de desempenho e de VRAM.
 - **Validação manual com o mantenedor:** a janela 16:9 em uso real, o redimensionamento, o recuo para o SDL e o Linux nativo
   no Bazzite.
-- **`test_remaster` e `test_edicao` incompletos hoje:** o `test_remaster` (exe de validação do worktree, cartão equivalente ao
-  `g1`) aprovou **R1** (reinício no processo × processo novo, 1480 passos) e **R2** (NEW GAME nativo × original, 1030 passos,
-  0 diferenças) e foi interrompido pelo Claude Code por falta de memória no sistema antes do R3 e do R4. O `test_edicao` testa
-  a Preview em `dist\`, que é anterior a esta fase, e não foi rodado. Os resultados de 2026-11-05 (11/0 e 4/0) são da árvore
-  de então.
+- **`test_remaster` (2026-11-08, à tarde; exe de validação do worktree, cartão reconstruído das referências do N8, não o
+  `g1` original): R1, R2, R3 e R4 aprovados**, cada um com ao menos uma execução completa: R1 e R3 nas duas rodadas, R2 na
+  segunda (0 diferenças em 1030 passos) e R4 na primeira (0 diferenças em 1030 passos). Nas duas rodadas, um caso foi
+  encerrado pelo vigia de memória (`tmp/`): o commit livre do sistema caiu abaixo de 2,5 GB por processos de outros
+  trabalhos (um `nup verify` de 15 GB e, depois, um emulador em uso pelo mantenedor). O jogo ficou em 226–227 MB por
+  instância. Os logs mostram a saída cortada sem o resumo final e o caso seguinte começando no mesmo segundo.
+- **Pendentes por falta de memória livre (o mantenedor usando a máquina):** a Preview nova em `tmp/` e o `test_edicao`, a
+  bateria de janela J1–J5 e a conferência da Original contra as referências do N8.7. Sem elas, a fase 1 **não** está aprovada.
+- **Aviso do filme NEWGAME:** toda execução sem janela que passa pelo filme registra uma "falta de progresso" (thread 1 em
+  `8C174AAA`) e continua; aparece também nas execuções aprovadas. Não é deste trabalho.
 - **C8 bloqueado por dados:** em 2026-11-08, às 03:07, `%LOCALAPPDATA%\BlueStingerRecomp` foi esvaziado (sobraram `build` e
   `recompiler.ini`). Perderam-se o `g1`, as **gravações reais de 2026-10-21** (`gravacoes\sessao-20261021-140145` e
   `-145006`, bases do C8 e da campanha), o estado da regressão e as evidências da fase 1. As referências do N8 em
