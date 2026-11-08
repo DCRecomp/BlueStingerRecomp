@@ -4355,6 +4355,15 @@ desenhada deslocada de 107 px num alvo de 854 colunas.
   maximizada, sem código do jogo que faça isso; na 2ª, 1024×768 e 1280×720 corretos). Fase 1 aprovada nos critérios pedidos,
   com o C8 bloqueado por dados (abaixo). Publicada como `v0.9.5-1` (só o pacote do Windows; os insumos do Linux no WSL foram
   apagados em 2026-11-07).
+- **Pacote `v0.9.5-1` (Windows, 2026-11-08):** `make_builder.ps1 -Versao v0.9.5-1` no worktree em `62b5e5d` (o
+  `known_versions.h` público do commit; o particular da árvore principal intocado; conteúdo do jogo conferido por bytes com o
+  `game-data` local). `test_builder` **24/0** sobre o pacote. ZIP `BlueStinger-Builder-v0.9.5-1-win-x64.zip`, 14 567 686 B,
+  `018031b2…2051b`; extraído, os 2 859 arquivos são iguais aos do pacote testado. Varredura do pacote: nenhum caminho local,
+  nome de usuário, CDI, SFD, MP4, ADX, VMS ou `1ST_READ` (só o `INSTALL.VMS` da FreeType, documentação).
+  - Na 1ª tentativa do `test_builder`, a pasta de trabalho em `tmp/` era longa: o cache passava dos 90 caracteres
+    (`max_cache_path`), o Builder o descartou em silêncio e usou `%LOCALAPPDATA%\BlueStingerRecomp\build` (2 pastas, 592 MB,
+    apagadas; as anteriores ficaram). Repetido com `-Work tmp\tb`: nada novo fora da pasta de trabalho. O recuo silencioso é
+    do desenho (o usuário sempre tem um cache); fica a anotação para os testes.
 - **Pendências:** HUD centrado no 4:3 virtual (fases 2 e 3); vazio fora da sala e sprites descartadas além do 4:3 nas faixas
   (fase 4); menu, 21:9 e desempenho (fase 5); validação visual e Bazzite com o mantenedor.
 - **C8 bloqueado por dados:** `%LOCALAPPDATA%\BlueStingerRecomp` foi esvaziado em 2026-11-08 às 03:07. Perderam-se o `g1`, as
