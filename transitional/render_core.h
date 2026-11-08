@@ -64,6 +64,8 @@ private:
     std::shared_ptr<nr::VulkanDevice> vk_;  // o dispositivo do processo (o mesmo da apresentacao direta)
     bool                              vkTried_ = false, vkOk_ = false;
     std::vector<uint32_t>             vkImage_;
+    nr::CommandList                   wideCl_;   // N9.5 fase 1: a IR do quadro largo (a do jogo deslocada)
+    std::vector<uint32_t>             wideImg_;  // o quadro largo lido de volta (o recorte central vai ao framebuffer)
     TexCache                          vkTex_;
     std::vector<uint8_t>              raw_;
     std::vector<uint32_t>             argb_;

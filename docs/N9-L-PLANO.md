@@ -244,6 +244,38 @@ Ubuntu, que fica preservada como alternativa.
   - Nenhuma foi iniciada.
 - **A release v0.8.0** depende também das obrigações de distribuição (pendências da seção 7 de `N9-L-LICENCAS.md`).
 
+### 6.5 Retorno do teste real em Linux: duas pendências (2026-11-08)
+
+O mantenedor testou a versão Linux num ambiente real e relatou duas coisas. Nenhuma das duas foi iniciada: ficam registradas
+para uma etapa posterior, na ordem oficial, sem mudar a v0.8.0 publicada.
+
+**P-L1, desempenho insatisfatório.** É o relato do mantenedor. Nenhum número foi medido ou registrado ainda, então o
+desempenho no Linux **não está aprovado** (critério A12 aberto). O diagnóstico vem antes de qualquer otimização:
+
+| Medir | Como |
+|---|---|
+| FPS e tempo de quadro (média, p99, picos) | o log de custo da apresentação e do renderizador (`[render]`/`stats()`), na mesma rota roteirizada no Windows e no Linux, na mesma máquina quando possível |
+| CPU por thread | jogo (SH-4 recompilado), áudio, renderizador e apresentação separados; `perf` no Linux |
+| GPU | o tempo de GPU que o Vulkan já mede (`gpu_ms_total`/`gpu_ms_max`) e as esperas entre CPU e GPU |
+| Memória | RSS, falhas de página (risco B2 da seção 8) e VRAM |
+| Driver e sessão | Mesa/RADV ou NVIDIA, versão; X11, Wayland ou gamescope; V-Sync e o modo de apresentação |
+| Recuos | se o renderizador caiu para o software (`std::execution::par` sem TBB, seção 1) ou a apresentação para o SDL |
+
+O diagnóstico separa o que é do Linux (driver, sessão, falhas de página, threads) do que vale nas duas plataformas.
+**Ligações:** N9-L (L6, critério A12) e N9.11 (perfis, frame time, matriz de GPUs). Uma otimização só entra com prova de
+que o estado por passo e as referências da Original não mudam.
+
+**P-L2, instalação no Linux.** O pedido do mantenedor é uma instalação mais simples, intuitiva e bonita:
+- interface moderna, no nível do instalador do Windows (N9.1);
+- menos passos manuais (hoje: `.tar.gz` com `instalar.sh`, decisão D-L5);
+- escolha da edição clara, seleção e validação do CDI original;
+- progresso e erros compreensíveis;
+- integração com o desktop e, quando viável, com o modo de jogo (Steam/gamescope, L6).
+
+Formas de pacote a avaliar: AppImage, Flatpak ou outra compatível com a arquitetura (o jogo é gerado na máquina do usuário a
+partir do CDI dele) e com a política de licenças. A D-L5 só muda com uma decisão nova do mantenedor. **Ligações:** N9.1
+(identidade e telas do instalador) e N9-L (L5/L6). O instalador não muda nesta retomada.
+
 ## 7. Publicação da v0.8.0
 
 Autorizada antecipadamente, condicionada a todos os critérios acima:

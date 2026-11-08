@@ -142,7 +142,8 @@ GraphicsSettings clamp_to(const GraphicsSettings& in, const Capabilities& caps, 
     off(f.filtering, s.filter != o.filter, [&] { s.filter = o.filter; }, "filtragem");
     off(f.window_modes, s.window != WindowMode::Windowed, [&] { s.window = WindowMode::Windowed; }, "modo de tela");
     off(f.vsync, !s.vsync, [&] { s.vsync = true; }, "V-Sync");
-    off(f.aspect_wide, s.aspect != Aspect::Original4x3, [&] { s.aspect = Aspect::Original4x3; }, "16:9");
+    off(f.aspect_wide || caps.wide_frame, s.aspect != Aspect::Original4x3, [&] { s.aspect = Aspect::Original4x3; }, "16:9");
+    if (!f.aspect_wide && s.aspect == Aspect::Auto) s.aspect = Aspect::Original4x3, note("proporcao automatica: 4:3 ate o HUD em 16:9");
     off(f.hd_textures, s.hd_textures, [&] { s.hd_textures = false; }, "texturas HD");
     off(f.lighting, s.lighting, [&] { s.lighting = false; }, "iluminacao");
     off(f.shadows, s.shadows != Shadows::Original, [&] { s.shadows = Shadows::Original; }, "sombras");
@@ -169,7 +170,7 @@ GraphicsSettings clamp_to(const GraphicsSettings& in, const Capabilities& caps, 
     while (s.msaa > caps.max_msaa) s.msaa /= 2, note("MSAA reduzido para o suportado");
     if (s.filter == Filter::Anisotropic && caps.max_anisotropy < 2) s.filter = Filter::Bilinear, note("sem filtragem anisotropica");
     if (s.filter == Filter::Anisotropic) s.anisotropy = std::min(s.anisotropy, caps.max_anisotropy);
-    if (s.aspect == Aspect::Wide16x9 && !caps.wide_hud) s.aspect = Aspect::Original4x3, note("16:9 ainda indisponivel");
+    if (s.aspect == Aspect::Wide16x9 && !caps.wide_hud && !caps.wide_frame) s.aspect = Aspect::Original4x3, note("16:9 ainda indisponivel");
     return s;
 }
 

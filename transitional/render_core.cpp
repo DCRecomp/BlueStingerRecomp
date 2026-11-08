@@ -2,6 +2,7 @@
 // das texturas, a resolucao interna, as estatisticas e o resumo. No produto ele desenha a IR que o ListSink decodificou
 // (PvrListRenderer); na validacao o adaptador do decodificador do legado (render_capture.cpp) monta a IR e o chama.
 #include "render_core.h"
+#include "render/wide_frame.h"
 
 #include "debug/gfx_probe.h"
 #include "pvr/pvr_regs.h"
@@ -30,6 +31,7 @@ namespace {
 nr::ITextureReplacements* g_replacements = nullptr;  // texturas HD (set_texture_replacements)
 Fault                     g_fault        = Fault::None;     // testes do recuo (inject_fault)
 float                     g_scale        = 1.f;             // resolucao interna (set_scale)
+uint32_t                  g_wide         = 0;               // N9.5 fase 1: largura do quadro largo (set_wide; 0 = 4:3)
 
 std::unique_ptr<Renderer> g_core;
 
@@ -110,35 +112,49 @@ void Renderer::account() {
 
 HiresImage Renderer::hires_for(std::span<const uint32_t> shown, uint32_t w, uint32_t h) {
     if (hires_.empty()) return {};
-    if (g_scale == 1.f) {
+    if (g_scale == 1.f && !g_wide) {
         hires_.clear();
         return {};
     }
     // o video pode mostrar so parte das linhas do render (entrelacado: 640 x 476 de um render de 640 x 480): procura a
-    // linha do render em que a imagem exibida comeca (ate 8 de deslocamento)
+    // linha do render em que a imagem exibida comeca (ate 8 de deslocamento). N9.5 fase 1: entre os renders aceitaveis,
+    // o que MELHOR confere (menos amostras fora; empate: a menor soma das diferencas). Numa cena quase parada o render
+    // vizinho tambem passa na tolerancia, e o primeiro aceitavel podia ser ele (o personagem um quadro adiante).
+    const Hires* best = nullptr;
+    uint32_t     bestDy = 0;
+    uint64_t     bestBad = ~0ull, bestSum = ~0ull;
     for (const Hires& e : hires_) {
         if (e.w != w || h > e.h || shown.size() != size_t(w) * h) continue;
         for (uint32_t dy = 0; dy <= std::min<uint32_t>(8, e.h - h); ++dy) {
             // amostra de 1 pixel em 4 nas duas direcoes; diferenca por canal <= 16 (565/555/4444 perdem ate 4 bits)
-            uint32_t n = 0, bad = 0;
+            uint64_t n = 0, bad = 0, sum = 0;
             for (uint32_t y = 1; y < h && bad * 1000 <= n + 1000; y += 4)
                 for (uint32_t x = 1; x < w; x += 4, ++n) {
                     const uint32_t a = shown[size_t(y) * w + x], b = e.down[size_t(y + dy) * w + x];
-                    for (int s = 0; s < 24; s += 8)
-                        if (std::abs(int((a >> s) & 0xFF) - int((b >> s) & 0xFF)) > 16) {
-                            ++bad;
-                            break;
-                        }
+                    bool           off = false;
+                    for (int s = 0; s < 24; s += 8) {
+                        const int d = std::abs(int((a >> s) & 0xFF) - int((b >> s) & 0xFF));
+                        sum += uint64_t(d), off = off || d > 16;
+                    }
+                    bad += off;
                 }
-            if (n && bad * 1000 <= n) {  // ate 0,1 % fora (bordas de recorte do framebuffer)
-                ++st.hires_shown;
-                HiresImage r{e.seq, e.iw, e.ih};
-                // as linhas da imagem maior que correspondem as exibidas
-                r.y0 = uint32_t(std::lround(double(dy) * e.ih / e.h)), r.rows = uint32_t(std::lround(double(h) * e.ih / e.h));
-                r.rows = std::min(r.rows, e.ih - r.y0);
-                return r;
-            }
+            // ate 0,1 % fora (bordas de recorte do framebuffer)
+            if (n && bad * 1000 <= n && (bad < bestBad || (bad == bestBad && sum < bestSum)))
+                best = &e, bestDy = dy, bestBad = bad, bestSum = sum;
+            // sem o quadro largo, o primeiro aceitavel (o N7c como era: a Original nao muda; o achado do render vizinho
+            // fica para o mantenedor decidir, docs/N9-5-AUDITORIA.md secao 12)
+            if (best && !g_wide) break;
         }
+        if (best && !g_wide) break;
+    }
+    if (best) {
+        ++st.hires_shown;
+        HiresImage r{best->seq, best->iw, best->ih};
+        // as linhas da imagem maior que correspondem as exibidas
+        r.y0   = uint32_t(std::lround(double(bestDy) * best->ih / best->h));
+        r.rows = uint32_t(std::lround(double(h) * best->ih / best->h));
+        r.rows = std::min(r.rows, best->ih - r.y0);
+        return r;
     }
     ++st.hires_missed;
     return {};
@@ -344,21 +360,37 @@ bool Renderer::vk_attempt(uint32_t w, uint32_t h, std::vector<uint32_t>& out, st
     uint32_t   rw = 0, rh = 0;
     // N7c: a escala so no nativo (o modo comparar compara na resolucao do jogo)
     const float    sc = mode == Mode::Native ? g_scale : 1.f;
+    // N9.5 fase 1: o quadro largo so no nativo e so no render do framebuffer 640x480 (a IR do jogo deslocada; o jogo e o
+    // framebuffer continuam em 4:3). Um render de outro tamanho (desenho em textura, 8C063400: 256x256) fica como esta.
+    const uint32_t wideW = mode == Mode::Native && g_wide > w && w == 640 && h == 480 ? g_wide : 0;
     vk_->set_scale(sc);
-    if (sc == 1.f) hires_.clear();
+    vk_->set_always_slot(wideW != 0);
+    if (sc == 1.f && !wideW) hires_.clear();
+    const nr::CommandList* cl = &frame.cl;
+    if (wideW) {
+        wideCl_ = frame.cl;
+        nr::widen(wideCl_, wideW);
+        cl = &wideCl_;
+    }
     // testes: Device falha esta tentativa e a da recuperacao; DeviceOnce so esta
     const bool injected = g_fault == Fault::Device || g_fault == Fault::DeviceOnce || g_fault == Fault::DeviceAgain;
     if (g_fault == Fault::Device) g_fault = Fault::DeviceAgain;
     else if (injected) g_fault = Fault::None;
     const auto t0 = std::chrono::steady_clock::now();
-    const bool submitted = !injected && vk_->submit(frame.cl).ok();
+    const bool submitted = !injected && vk_->submit(*cl).ok();
     const auto t1        = std::chrono::steady_clock::now();
-    // a leitura de volta e sempre na resolucao do jogo (com a escala, a reducao feita na GPU)
-    const bool ok = submitted && vk_->read_frame(out, rw, rh).ok() && rw == w && rh == h;
+    // a leitura de volta e sempre na resolucao do jogo (com a escala, a reducao feita na GPU); no quadro largo, o
+    // quadro inteiro volta e o framebuffer recebe o recorte central (o 4:3 do jogo)
+    const uint32_t ew = wideW ? wideW : w;
+    bool           ok = submitted && vk_->read_frame(wideW ? wideImg_ : out, rw, rh).ok() && rw == ew && rh == h;
+    if (ok && wideW) {
+        out.resize(size_t(w) * h);
+        nr::crop_center(wideImg_.data(), wideW, h, out.data(), w);
+    }
     frame.cl.draws = saved;
     uint32_t       iw = 0, ih = 0;
-    const uint64_t seq = ok && sc != 1.f ? vk_->last_slot(iw, ih) : 0;
-    if (ok && sc != 1.f) {
+    const uint64_t seq = ok && (sc != 1.f || wideW) ? vk_->last_slot(iw, ih) : 0;
+    if (ok && (sc != 1.f || wideW)) {
         ++st.hires_renders, st.hires_w = iw, st.hires_h = ih;
         st.hires_cpu_ms_total += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t1).count();
     }
@@ -377,8 +409,8 @@ bool Renderer::vk_attempt(uint32_t w, uint32_t h, std::vector<uint32_t>& out, st
     }
     *why = injected                           ? std::string("falha injetada")
            : !vk_->stats().last_error.empty() ? vk_->stats().last_error
-           : (rw != w || rh != h)             ? "tamanho " + std::to_string(rw) + "x" + std::to_string(rh) + " em vez de " +
-                                                    std::to_string(w) + "x" + std::to_string(h)
+           : (rw != ew || rh != h)            ? "tamanho " + std::to_string(rw) + "x" + std::to_string(rh) + " em vez de " +
+                                                    std::to_string(ew) + "x" + std::to_string(h)
                                               : std::string("leitura do quadro");
     return false;
 }
@@ -598,6 +630,9 @@ void set_texture_replacements(nr::ITextureReplacements* provider) { g_replacemen
 
 void  set_scale(float s) { g_scale = s > 0 ? s : 1.f; }
 float scale() { return g_scale; }
+
+void     set_wide(uint32_t width) { g_wide = width; }
+uint32_t wide() { return g_wide; }
 
 HiresImage hires_for(std::span<const uint32_t> shown, uint32_t width, uint32_t height) {
     return g_core ? g_core->hires_for(shown, width, height) : HiresImage{};

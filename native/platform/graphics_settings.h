@@ -89,6 +89,10 @@ struct Capabilities {
     uint32_t max_anisotropy = 1;
     uint32_t max_height     = 480;  // maior altura interna que cabe na memoria/limites da GPU
     bool     wide_hud       = false;  // correcao do HUD em 16:9 disponivel
+    // N9.5 fase 1: o quadro largo (hor+) existe nesta edicao e neste renderizador (Remastered + Vulkan com apresentacao
+    // direta). Libera Aspect::Wide16x9 no graficos.toml mesmo sem a opcao no menu (features.aspect_wide, fase 5); o HUD
+    // fica centrado num 4:3 virtual ate as fases 2 e 3, e Aspect::Auto continua 4:3 enquanto o HUD nao for corrigido.
+    bool     wide_frame     = false;
 };
 
 GraphicsSettings preset(Preset p);                   // o preset (Custom = Original)

@@ -47,6 +47,10 @@ struct PostSpec {
 
 // A area do jogo na saida w x h: o maior retangulo 4:3 centrado (faixas pretas nas sobras).
 SDL_FRect game_area(int w, int h);
+// N9.5 fase 1: o maior retangulo fw:fh centrado na saida (o quadro largo) e, dentro de um retangulo de largura logica
+// `outer_w`, a parte central de largura logica `inner_w` (o 4:3 do jogo dentro do quadro largo), em pixels inteiros.
+SDL_FRect frame_area(int w, int h, uint32_t fw, uint32_t fh);
+SDL_FRect center_area(const SDL_FRect& outer, uint32_t inner_w, uint32_t outer_w);
 
 class WindowPresenter {
 public:
@@ -56,7 +60,10 @@ public:
     virtual void        set_vsync(bool on)          = 0;
     // Desenha e apresenta. frameSeq muda a cada quadro novo do jogo; capture != nullptr recebe a imagem apresentada
     // (ARGB, o tamanho da saida). false = falhou (o chamador conta as falhas seguidas e pode recuar para o SDL).
-    virtual bool present(const GameFrame& f, uint64_t frameSeq, const SDL_FRect& area, std::span<const WindowLayer> layers,
+    // N9.5 fase 1: `area` e a da imagem do slot (o quadro largo no 16:9) e `cpuArea` a da imagem da CPU (640 x 480: o 4:3
+    // do jogo). Quem apresenta escolhe pela fonte que usou de fato (sem slot, nunca estica a imagem 4:3 no 16:9).
+    virtual bool present(const GameFrame& f, uint64_t frameSeq, const SDL_FRect& area, const SDL_FRect& cpuArea,
+                         std::span<const WindowLayer> layers,
                          std::vector<uint32_t>* capture) = 0;
     virtual std::string stats() const { return {}; }  // resumo do custo (log no fim)
     // Os efeitos (so a apresentacao Vulkan os aplica). Devolve vazio, ou o motivo de o shader de mod nao poder ser usado

@@ -379,3 +379,212 @@ A fase 1, com aprovação:
 3. achar a rotina das faíscas;
 4. o quadro lógico largo no Vulkan e na apresentação, com o software e a Original em 4:3;
 5. a comparação 4:3 × 16:9 repetida nas rotas do `test_remaster` e do `newgame_area1`.
+
+## 12. Fase 1: o widescreen verdadeiro na Remastered (2026-11-05, fechada em 2026-11-08)
+
+Autorizada pelo mantenedor em 2026-11-05: **só a fase 1** (o hor+ e o quadro largo no Vulkan). Sem HUD (fases 2 e 3), sem as
+bordas por sala (fase 4), sem a opção no menu nem as medições (fase 5). A implementação é de 2026-11-05. A sessão foi
+interrompida antes do registro, e em 2026-11-08 as provas foram **refeitas** num worktree só com a fase 1, separada do
+protótipo de água do N9.7 (seção 12.9). As evidências de 2026-11-05 em `%LOCALAPPDATA%\BlueStingerRecomp\n9-5` não existem
+mais. Os números abaixo são os de 2026-11-08, menos onde está escrito "2026-11-05".
+
+### 12.1 Decisão de arquitetura: translação no Vulkan
+
+A fase 0 provou duas coisas:
+- todo vértice 3D do 16:9 é **exatamente** o do 4:3 + 107 (sx = cx + dist·ax·x/z: mudar o cx é uma translação pura);
+- o jogo **já envia** a geometria que fica fora do 4:3, e o conjunto de desenhos é o mesmo nas duas larguras.
+
+Com isso, o hor+ pode ser feito sem tocar no jogo. Foram apresentadas ao mantenedor duas opções:
+- **projeção no jogo** (cx 427 na estrutura e na cópia), que exigiria isolar o pan, o teste "na tela" e as faíscas com
+  ganchos novos no gerador (chamadas diretas);
+- **translação no Vulkan**: o jogo continua projetando em 4:3, e o renderizador desenha a mesma IR deslocada num alvo
+  mais largo.
+
+O mantenedor escolheu a **translação no Vulkan** (2026-11-05). Consequências:
+- **Por construção:** a RAM, o `njSetScreen`, o pan do som, os testes "na tela" e os efeitos ficam os do Original. O estado
+  e o som não mudam.
+- **Fica na apresentação:** o quadro largo e o tratamento das faixas.
+- **Nenhum endereço do jogo** entra no produto para isso.
+
+### 12.2 Arquitetura implementada
+
+```
+ jogo (4:3, intocado) -> IR 640x480 (geometria alem do 4:3 inclusa)
+      |
+ transitional/render_core (Mode::Native, render 640x480, quadro largo ligado)
+      |   native/render/wide_frame: widen() -> x + 107 em todos os vertices e recortes; largura 854;
+      |   faixas de largura inteira sem textura, de cor e 1/w uniformes (fades, barras) cobrem a largura larga
+      v
+ Vulkan: alvo 854e x 480e; o quadro inteiro vai para um slot (tambem na escala 1: set_always_slot)
+      |                                   |
+      |  read_frame 854 x 480 -> recorte central 640 x 480 -> framebuffer emulado (o jogo, capturas, hash: 4:3)
+      v
+ apresentacao (Vulkan direta): o slot no maior 16:9 da janela; a imagem da CPU (filmes, telas da CPU, recuo) e as
+ camadas (legendas, menus N7c/N9.2) no 4:3 central desse 16:9
+```
+
+| Peça | Arquivo | O que faz |
+|---|---|---|
+| Adaptador do quadro largo | `native/render/wide_frame.{h,cpp}` | `widen`, `crop_center`, `fit_area`/`center_part`, `kWideWidth` = 854 (deslocamento 107) |
+| Renderizador | `transitional/render_core.cpp`, `render_capture.h` | `set_wide(854)`: a IR larga só no `Mode::Native` e só no render 640×480 (o desenho em textura, 256×256, fica como está); o recorte central para o framebuffer; o slot largo para a apresentação |
+| Dispositivo Vulkan | `native/render/vulkan/vk_device.*` | `set_always_slot`: o slot também na escala 1; o mesmo caminho de cópia e de semáforo do N7c |
+| Apresentação | `native/render/vulkan/vk_present.cpp`, `app/window_present.*` | a área do slot (16:9) e a da imagem da CPU (4:3 central) separadas: sem slot, a imagem 4:3 nunca é esticada |
+| Política | `native/platform/edition.*`, `graphics_settings.*` | `EditionProfile::wide_frame` (só a Remastered); `Capabilities::wide_frame` (Remastered + Vulkan com a apresentação direta); `aspect = "16:9"` no `graficos.toml` |
+| Aplicação | `app/main_sdl.cpp`, `app/game_host.*` | `--proporcao 4:3\|16:9` (só nesta execução); `GameHost::setWideWidth` na thread do jogo; a janela padrão 16:9; o recuo para o SDL desliga o quadro largo; o limite de resolução interna reduzido para caber no alvo largo |
+| Validação | `tools/dev/n95_headless.py` (H1–H5), `tools/dev/n95_janela.py` (J1–J5), `tests/unit/test_widescreen.cpp`, `test_render_capture.cpp` | provas da seção 12.4 |
+
+- **Ativação:** só na Remastered, com o Vulkan e a apresentação direta, e com `aspect = "16:9"` no `graficos.toml` ou
+  `--proporcao 16:9`. O padrão continua 4:3.
+  - A opção no menu continua "em breve" (`Features::aspect_wide`, fase 5).
+  - `Aspect::Auto` continua 4:3 enquanto o HUD não for corrigido.
+- **Original:** `wide_frame` falso. O `graficos.toml` com 16:9 volta a 4:3 com o motivo, e `--proporcao 16:9` sem janela é
+  recusado (saída 2).
+- **Recuos:**
+  - sem Vulkan, ou com o software: 4:3, também recusado com saída 2;
+  - perda transitória do dispositivo: recriado, e o quadro continua largo;
+  - perda definitiva: software em 4:3 até o fim da sessão;
+  - apresentação SDL: 4:3.
+
+  O software **não** oferece widescreen e não é declarado como tal.
+
+### 12.3 As faíscas do cais (investigação concluída)
+
+1. **A rotina responsável** (achada em 2026-11-05 por varredura do binário e confirmada pelo experimento do item 3):
+   - a **região de recorte 2D das sprites do Ninja** é montada por `8C1736A0` a partir da largura e da altura da tela;
+   - essas medidas ficam na cópia do desenho: `8C2D9C74` (float, 640) e `8C2D9C78` (480), e os inteiros `8C2D9CBC`/`9CC0`;
+   - quem as fixa é a inicialização do modo de vídeo `8C172642`;
+   - o `njSetScreen` (`8C1741D4`) **não** atualiza essa largura.
+
+   Com o cx 427, as sprites andam 107 px, mas a região continua [0, 640]: as que caem além de 640 são descartadas.
+2. **Causa:** descarte (culling) 2D contra uma largura fixa. Não é RNG, nem a transformação, nem a projeção dos modelos.
+3. **Experimento (2026-11-08, build de validação, rota `passo_combate` desde o NEW GAME, IR do render 15581 = a cena do
+   cais, `bs-ir-tela comparar`):**
+
+   | Variante (Remastered) | Comparada com o 4:3 | Estado |
+   |---|---|---|
+   | projeção larga no jogo, `BS_TELA_TESTE=854,427` (cópia com largura 640) | 1800 × 1789 desenhos: **11 só no 4:3** (as faíscas que faltam) | vida, posição, passo e VBlank iguais em 2054 passos; o hash da RAM muda (a estrutura de tela gravada pelo diagnóstico) |
+   | a mesma com a largura da cópia, `854,427,427,854` | 1800 × 1818: **0 só no 4:3**, 18 sprites a mais, todas nas faixas | idem |
+   | **o produto: translação, `--proporcao 16:9`** | 1800 = 1800, **todos idênticos** (deslocamento 0) | **idêntico**, inclusive o hash da RAM |
+
+4. **Tratamento:** com a translação, o jogo projeta e descarta exatamente como o Original, e as faíscas são as mesmas.
+5. **Limitação que fica (fase 4):** as sprites que o jogo descarta além das bordas do 4:3 não aparecem nas faixas, como no
+   Original fora da tela. Partículas que cruzam a borda são enviadas inteiras e aparecem. Alargar a região 2D do jogo é uma
+   opção medida (18 sprites a mais), mas muda a RAM do jogo: fica para a fase 4, com prova de estado.
+
+### 12.4 Resultados (2026-11-08)
+
+Executáveis do worktree só com a fase 1 (`tmp/wt-n95f1`, sem o protótipo de água). Sem janela, com o Vulkan offscreen.
+
+| Prova | Resultado |
+|---|---|
+| `n95_headless.py` H1, H2 (produto) | Original com `--proporcao 16:9` e Remastered no software: recusados, saída 2 |
+| H3: rota de LOAD (`passo_load_slot1`), Remastered 4:3 × 16:9 (produto, escala 1) | estado por passo idêntico **2326/2326**; efeitos sonoros idênticos em **6 915 908** amostras; imagem larga com 854 colunas; o centro dela (no formato 555 do framebuffer) **igual pixel a pixel** ao quadro do jogo nas duas capturas; o quadro do jogo 16:9 × 4:3 difere em 2 pixels (máx. 8 e 9 níveis), nas bordas de triângulos (x + 107 em float); laterais com cena 100 % / 100 % (corredor de frente) e 8 % / 76 % no fim do corredor (vazio fora da sala, B2) |
+| H4: 1080, 1440 e 2160 linhas | larguras 1922, 2562 e 3843; centro reduzido × quadro do jogo: PSNR 37,3, 37,5 e 37,4 dB; laterais com cena; estado idêntico |
+| H5: Remastered 4:3 na escala 1 | nenhuma imagem larga (o caminho do N7c como antes) |
+| Faíscas (12.3) | IR do jogo idêntica entre 4:3 e 16:9 na cena do cais; estado idêntico |
+| `ctest --preset msvc-debug` | 30/30 aprovados (6 pulados por falta do disco); `bs_unit_tests` 361/0, `bs_render_tests` 83/0 (com `wide_frame_slot_choice`), `bs_remaster_tests` 5/0 |
+
+- O cartão da rota de LOAD é o das referências do N8 (`analysis/n8/referencias/passo_load_slot1_nativo/saves`, o `g1`
+  carregado sem SAVE). O `g1` original sumiu de `%LOCALAPPDATA%` (seção 12.8).
+- **2026-11-05, não refeito hoje** (registro da sessão anterior; as evidências não existem mais): a rota de combate inteira
+  (11 680 passos, 75,6 milhões de amostras de efeitos) idêntica entre 4:3 e 16:9; o escurecimento de tela cheia cobrindo as
+  faixas; e a bateria de janela J1–J5 (`n95_janela.py`), que abre a própria janela e captura só a apresentação dela.
+- **Nenhuma medição de desempenho** foi feita nesta fase (fica para a fase 5 e o N9.11).
+
+### 12.5 Achados e decisões desta fase
+
+- **Fades e barras de largura inteira:** o escurecimento do jogo é um retângulo translúcido de tela cheia, sem textura,
+  `C0000000`, com o mesmo 1/w. Só deslocado, deixava as faixas acesas. Uma cor uniforme estendida não distorce nada;
+  imagens e gradientes nunca são esticados.
+- **O render exibido (N7c):** a apresentação acha o slot do render exibido comparando amostras com tolerância. Ela aceitava
+  o **primeiro** dos últimos três renders aceitáveis, e numa cena quase parada o vizinho também passava (o personagem um
+  quadro adiante).
+  - No quadro largo ela escolhe o que **melhor** confere, e o centro ficou igual pixel a pixel.
+  - Sem o quadro largo, o comportamento do N7c fica como era, para a Original não mudar.
+  - **Para o mantenedor decidir:** o mesmo defeito existe na Original com resolução interna maior que 480.
+- **Vazio fora da sala (B2):** no fim do corredor RCG02, uma lateral mostra o vazio fora da sala (8 % de cena). É o caso
+  previsto da fase 4 (pilares ou recorte por sala).
+
+### 12.6 Revisões Codex
+
+**`reviews/codex-20261105-180747.md`** (2026-11-05):
+- **Média, aceita:** sem o slot (o apresentador Vulkan não o fixou, ou recuou para o SDL), a imagem 640×480 da CPU seria
+  desenhada na área 16:9, esticada. **Corrigido:** o apresentador recebe as duas áreas (a do slot e a da imagem da CPU) e usa
+  a da fonte que desenhou; o recuo para o SDL desliga o quadro largo.
+- **Baixa, aceita:** o limite de resolução interna era calculado para o alvo 4:3. Com o 16:9 pedido, ele cai pelo fator
+  (480/854)/(3/4), o mais conservador entre a memória e a dimensão máxima.
+
+**`reviews/codex-20261108-134326.md`** (2026-11-08, conferência das correções):
+- Confirmou as duas correções no caminho nominal, a translação de vértices, volumes e recortes, o recorte central, o caminho
+  inerte com o quadro largo desligado, a política Original/software e o `BS_TELA_TESTE` só na validação.
+- **Média, aceita:** depois de trocar para o software pelo menu, com o jogo pausado, nenhum quadro novo chega, e o slot largo
+  antigo podia ser desenhado na área 4:3, comprimido. **Corrigido:** `use_slot` (`wide_frame.h`) só deixa a apresentação usar
+  um slot largo com o quadro largo ligado; senão vale a imagem da CPU. Teste `wide_frame_slot_choice`.
+- **Baixa, aceita em parte:** faltava teste dirigido da escolha da fonte. A decisão agora é uma função pura com teste. O
+  recuo real Vulkan → SDL depois de 120 falhas continua **sem teste automático** (exige janela e falha injetada na
+  apresentação). Fica para a validação manual e para a fase 5.
+
+### 12.7 Bloqueadores depois da fase 1
+
+| | Situação | Por quê |
+|---|---|---|
+| B1 projeção | **resolvido com prova** | a translação é equivalente à projeção larga para a geometria 3D (fase 0) e não toca o jogo (fase 1) |
+| B2 recorte nas laterais | **parcialmente resolvido** | geometria nas faixas na maior parte das cenas medidas; o vazio fora da sala aparece onde o jogo não tem geometria, e as sprites que o jogo descarta além do 4:3 não aparecem nas faixas. Fase 4 |
+| B3 cena/HUD | **em investigação** | o HUD e os textos ficam centrados no 4:3 virtual (o plano até a fase 3); a marca por desenho continua pendente (fase 2) |
+| B4 quadro lógico de 640 | **resolvido com prova** | o Vulkan desenha 854 (×e) colunas, o framebuffer do jogo continua 640×480 (o recorte central), e a apresentação mostra o slot largo |
+| B5 software | **resolvido (recuo 4:3)** | o software continua 4:3 e é o recuo; `--proporcao 16:9` com ele é recusado; nada o declara widescreen |
+| B6 fidelidade dos estados | **resolvido com prova nas rotas medidas** | estado e som idênticos na rota de LOAD (hoje) e na de combate (2026-11-05); as faíscas como no Original (IR idêntica) |
+
+### 12.8 Pendências e limites
+
+- **HUD (fases 2 e 3):** o HUD, as mensagens e os menus do jogo ficam centrados no 4:3 virtual.
+- **Bordas por sala (fase 4):** o vazio fora da sala nas faixas e as sprites descartadas além do 4:3.
+- **Fase 5:** a opção no menu (ainda "em breve"), o 21:9, as medições de desempenho e de VRAM.
+- **Validação manual com o mantenedor:** a janela 16:9 em uso real, o redimensionamento, o recuo para o SDL e o Linux nativo
+  no Bazzite.
+- **`test_remaster` e `test_edicao` incompletos hoje:** o `test_remaster` (exe de validação do worktree, cartão equivalente ao
+  `g1`) aprovou **R1** (reinício no processo × processo novo, 1480 passos) e **R2** (NEW GAME nativo × original, 1030 passos,
+  0 diferenças) e foi interrompido pelo Claude Code por falta de memória no sistema antes do R3 e do R4. O `test_edicao` testa
+  a Preview em `dist\`, que é anterior a esta fase, e não foi rodado. Os resultados de 2026-11-05 (11/0 e 4/0) são da árvore
+  de então.
+- **C8 bloqueado por dados:** em 2026-11-08, às 03:07, `%LOCALAPPDATA%\BlueStingerRecomp` foi esvaziado (sobraram `build` e
+  `recompiler.ini`). Perderam-se o `g1`, as **gravações reais de 2026-10-21** (`gravacoes\sessao-20261021-140145` e
+  `-145006`, bases do C8 e da campanha), o estado da regressão e as evidências da fase 1. As referências do N8 em
+  `analysis/n8` guardam as saídas, mas não as entradas. Sem um backup do mantenedor, o C8 não pode rodar. A causa não foi
+  identificada.
+
+### 12.9 O protótipo de água do Codex (N9.7) diante do N9.5
+
+Avaliado em 2026-11-08 a pedido do mantenedor. **Classificação: protótipo.** Não é o N9.7 iniciado nem concluído.
+
+- **Onde está:** só na árvore de trabalho, sem commit e sem branch (feito na madrugada de 2026-11-08). Cópia de segurança do
+  diff completo em `analysis/n9/backup-arvore-20261108/`. Ficou **fora** do commit da fase 1.
+- **Arquivos só dele:** `native/render/water.{h,cpp}`, `tests/unit/test_water.cpp`, `docs/N9-7-AGUA.md`, os shaders
+  `pvr.frag`/`pvr.vert` e os seis SPIR-V gerados, `app/settings_menu.cpp`, `tests/unit/test_edition.cpp`,
+  `tests/unit/test_graphics_settings.cpp`, a entrada N9.7 do `STATUS.md`, os subcomandos `materiais`, `agua` e `telacheia`
+  do `bs-ir-tela` e a mudança no `CMakeLists.txt` raiz. **Arquivos compartilhados com a fase 1:** `vk_device.cpp`,
+  `render_core.{h,cpp}`, `render_capture.h`, `game_host.{h,cpp}`, `main_sdl.cpp`, `edition.{h,cpp}`,
+  `graphics_settings.{h,cpp}`, `native/CMakeLists.txt` e `tests/CMakeLists.txt`. Foram separados hunk a hunk.
+- **Técnica:** o mar do cais RCG00 é escolhido por um único `TextureId` (`32x32-7458e3539d31cd8d`, 46 desenhos). Usa três
+  ondas nas UVs da cópia da IR e, no fragment shader, normais procedurais, cópia da cena opaca entre os passes A e B,
+  refração e reflexo espelhado em espaço de tela em torno do horizonte da malha, Fresnel, especular e cristas. A qualidade
+  (`original`/`aprimorada`/`alta`) vai no `graficos.toml` e no menu.
+- **Só na Remastered:** `EditionProfile::enhanced_water` e o menu forçam `original` na Original. Sem janela, a água nunca
+  liga (o `--headless` não pede a qualidade). **Prova de hoje:** a edição Original com o produto com e sem o protótipo deu
+  **60 de 60 quadros iguais byte a byte** e estado igual em 1039 passos (rota `passo_cgate`, que sem save não sai do
+  título). O mar ainda não foi coberto por essa comparação.
+- **Dependências:** não depende do N9.6. Com o N9.5 é **compatível**: o horizonte e o fundo da água vêm só do y dos
+  vértices, que a translação não muda; a cópia da cena e o reflexo usam o tamanho do alvo, que já é o largo.
+- **Interferências a resolver no N9.7:**
+  - o shader muda em todas as pipelines (um ramo por `water.x`), e o push constant passa de 64 para 80 bytes;
+  - a imagem `waterScene_`, do tamanho do alvo, é criada **sempre**, inclusive na Original e com a água desligada, e o
+    limite de resolução interna (N7c e seção 12.6) não conta com ela;
+  - a marca de qualidade usa os 2 bits altos do `TextureHandle` (handles reais limitados a 30 bits);
+  - o `CMakeLists.txt` raiz passa a montar o `bs-ir-tela` também fora da validação, contra o registrado na seção 11.4.
+- **Evidências do Codex** (não refeitas hoje): `bs_render_tests` 85/85, `bs_unit_tests` 341/341 (o worktree da fase 1
+  tem 361 testes; a diferença não foi explicada), a prova Vulkan sintética e a IR do cais com 35 189 pixels diferentes entre
+  Original e Alta.
+- **Opções de integração** (decisão do mantenedor, no N9.7):
+  1. manter o protótipo na árvore de trabalho até o N9.7 (o estado atual);
+  2. guardá-lo numa branch local sobre o commit da fase 1, para não depender da árvore de trabalho;
+  3. no N9.7, refazer o commit por cima da fase 1 com as interferências acima corrigidas e as provas de aceitação do plano.

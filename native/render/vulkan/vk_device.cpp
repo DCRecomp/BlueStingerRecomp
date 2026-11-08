@@ -241,7 +241,7 @@ public:
         // N7c: com a escala, a imagem maior vai para um slot livre (nenhuma apresentacao usando); sem slot livre, o quadro
         // sai so na resolucao do jogo
         writeSlot_ = -1;
-        if (scale_ != 1.f) {
+        if (scale_ != 1.f || alwaysSlot_) {
             std::lock_guard<std::mutex> lock(slotMutex_);
             for (int i = 0; i < kSlots; ++i)
                 if (!slots_[i].pins && (writeSlot_ < 0 || slots_[i].seq < slots_[writeSlot_].seq)) writeSlot_ = i;
@@ -291,6 +291,7 @@ public:
     }
 
     void  set_scale(float s) override { scale_ = s > 0 ? s : 1.f; }
+    void  set_always_slot(bool on) override { alwaysSlot_ = on; }
     float scale() const override { return scale_; }
 
     bool remakeReady(int i) {
@@ -535,6 +536,7 @@ private:
     VulkanStats      st_;
     bool             floatControls_ = false, denormPreserve_ = false, rawDepth_ = false;
     float            scale_ = 1.f;  // resolucao interna (N7c)
+    bool             alwaysSlot_ = false;  // N9.5 fase 1: slot tambem na escala 1 (o quadro largo)
     bool             surfaceExt_ = false, swapchainExt_ = false;  // apresentacao direta possivel (N7c)
     std::unique_ptr<PresenterImpl> presenter_;
     std::unique_ptr<PostChain>     post_;
@@ -1429,10 +1431,27 @@ private:
         }
         bufferBarrier(heads_.buf, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
                       VK_ACCESS_TRANSFER_READ_BIT);
+        // N7c: a imagem do alvo vai para o slot da apresentacao (a escrita do color_ ja terminou: barreira de quem chama)
+        auto copySlot = [&] {
+            if (writeSlot_ < 0) return;
+            Slot& sl = slots_[writeSlot_];
+            // GENERAL sempre (amostrado pela apresentacao e copiado pelas capturas sem transicoes); a leitura
+            // anterior terminou (a fixacao so cai depois da cerca da apresentacao)
+            imageBarrier(sl.image.img, sl.shaderRead ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL,
+                         VK_PIPELINE_STAGE_TRANSFER_BIT, 0, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT);
+            VkImageCopy ic{};
+            ic.srcSubresource = ic.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1}, ic.extent = {w_, h_, 1};
+            f_.vkCmdCopyImage(cmd_, color_.img, VK_IMAGE_LAYOUT_GENERAL, sl.image.img, VK_IMAGE_LAYOUT_GENERAL, 1, &ic);
+            imageBarrier(sl.image.img, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                         VK_ACCESS_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
+                         VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_TRANSFER_READ_BIT);
+            sl.shaderRead = true;
+        };
         if (w_ == downW_ && h_ == downH_) {  // resolucao do jogo: a imagem inteira volta (o modo fiel)
             VkBufferImageCopy rc{};
             rc.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1}, rc.imageExtent = {w_, h_, 1};
             f_.vkCmdCopyImageToBuffer(cmd_, color_.img, VK_IMAGE_LAYOUT_GENERAL, readback_.buf, 1, &rc);
+            copySlot();  // N9.5 fase 1 (set_always_slot): o quadro largo tambem na escala 1; as duas copias so leem
         } else {
             // N7c: a imagem maior fica na GPU (slot, para a apresentacao) e so a reducao volta para a CPU
             imageBarrier(color_.img, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL,
@@ -1440,20 +1459,7 @@ private:
                          VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_SHADER_WRITE_BIT,
                          VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
                          VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_TRANSFER_READ_BIT);
-            if (writeSlot_ >= 0) {
-                Slot& sl = slots_[writeSlot_];
-                // GENERAL sempre (amostrado pela apresentacao e copiado pelas capturas sem transicoes); a leitura
-                // anterior terminou (a fixacao so cai depois da cerca da apresentacao)
-                imageBarrier(sl.image.img, sl.shaderRead ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL,
-                             VK_PIPELINE_STAGE_TRANSFER_BIT, 0, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT);
-                VkImageCopy ic{};
-                ic.srcSubresource = ic.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1}, ic.extent = {w_, h_, 1};
-                f_.vkCmdCopyImage(cmd_, color_.img, VK_IMAGE_LAYOUT_GENERAL, sl.image.img, VK_IMAGE_LAYOUT_GENERAL, 1, &ic);
-                imageBarrier(sl.image.img, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                             VK_ACCESS_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
-                             VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_TRANSFER_READ_BIT);
-                sl.shaderRead = true;
-            }
+            copySlot();
             f_.vkCmdBindPipeline(cmd_, VK_PIPELINE_BIND_POINT_COMPUTE, downPipe_);
             f_.vkCmdBindDescriptorSets(cmd_, VK_PIPELINE_BIND_POINT_COMPUTE, downPipeLayout_, 0, 1, &downSet_, 0, nullptr);
             const uint32_t sizes[4] = {w_, h_, downW_, downH_};
@@ -1476,7 +1482,7 @@ private:
         f_.vkEndCommandBuffer(cmd_);
         VkSubmitInfo si{VK_STRUCTURE_TYPE_SUBMIT_INFO};
         si.commandBufferCount = 1, si.pCommandBuffers = &cmd_;
-        if (writeSlot_ >= 0 && w_ != downW_ && presentQueue_ != queue_ && slots_[writeSlot_].ready) {
+        if (writeSlot_ >= 0 && presentQueue_ != queue_ && slots_[writeSlot_].ready) {
             // a apresentacao (outra fila) espera a escrita do slot por este semaforo
             si.signalSemaphoreCount = 1, si.pSignalSemaphores = &slots_[writeSlot_].ready;
         }

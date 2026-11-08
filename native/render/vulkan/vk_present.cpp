@@ -120,6 +120,7 @@ public:
         VkSemaphore   slotWait = VK_NULL_HANDLE;  // a escrita do slot na fila do renderizador (primeira apresentacao dele)
         uint32_t      w = 0, h = 0;
         uint64_t      slotVersion = 0;
+        const float*  area = r.area;  // N9.5: a imagem da CPU vai para cpu_area quando ha uma (o slot nao veio)
         if (r.slot_seq && slots_.pin(r.slot_seq, img, gameView, w, h, pinned_, slotWait, slotVersion)) {
             // o slot foi recriado (outra resolucao interna): a vista nova pode ter o mesmo handle da destruida, e o
             // conjunto em cache apontaria para ela (revisao Codex 20261028-030202). No inicio do quadro o anterior ja
@@ -135,6 +136,7 @@ public:
         } else if (r.argb && r.width && r.height) {
             if (!stage(game_, r.argb, r.width, r.height, r.argb_version)) return resync("imagem do jogo");
             gameView = game_.image.view, ++st_.cpu_frames;
+            if (r.cpu_area[2] > 0) area = r.cpu_area;
         }
         bool layerOn[2] = {};
         for (uint32_t i = 0; i < r.layer_count && i < 2; ++i) {
@@ -185,8 +187,8 @@ public:
         f_.vkCmdSetViewport(cmd_, 0, 1, &vp);
         f_.vkCmdSetScissor(cmd_, 0, 1, &sc);
         if (gameView) {
-            const float x0 = r.area[0] / float(sw_) * 2 - 1, y0 = r.area[1] / float(sh_) * 2 - 1;
-            const float x1 = (r.area[0] + r.area[2]) / float(sw_) * 2 - 1, y1 = (r.area[1] + r.area[3]) / float(sh_) * 2 - 1;
+            const float x0 = area[0] / float(sw_) * 2 - 1, y0 = area[1] / float(sh_) * 2 - 1;
+            const float x1 = (area[0] + area[2]) / float(sw_) * 2 - 1, y1 = (area[1] + area[3]) / float(sh_) * 2 - 1;
             quad(opaque_, gameView, gameLayout, linear ? linear_ : nearest_, {x0, y0, x1, y1}, uv, kOpaque);
         }
         for (int i = 0; i < 2; ++i)

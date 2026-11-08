@@ -4326,6 +4326,40 @@ não por uma única bateria contínua** (decisão do mantenedor, 2026-11-02).
 - **Pendências:** H9; D-N8-4 no gate pós-N9; ressalva do 7.1 e D-K1(a); limite de 3 h de `n6_h` no executor, defeito a
   corrigir antes de uma futura integral, sem enfraquecer os testes. N9 e N10 não iniciados.
 
+### N9.5 fase 1: o widescreen hor+ da Remastered (2026-11-05, fechada tecnicamente em 2026-11-08)
+
+Detalhes, tabelas e o método em `docs/N9-5-AUDITORIA.md`, seção 12. Autorizada pelo mantenedor em 2026-11-05 (só a fase 1),
+com a arquitetura escolhida por ele: **translação da IR no Vulkan**. O jogo continua projetando em 4:3, e a mesma IR é
+desenhada deslocada de 107 px num alvo de 854 colunas.
+- **Só na Remastered**, com o Vulkan e a apresentação direta, por `aspect = "16:9"` no `graficos.toml` ou `--proporcao 16:9`.
+  A Original e o software ficam em 4:3 (16:9 recusado com saída 2 sem janela). A opção no menu fica para a fase 5.
+- **Retomada de 2026-11-08:** a sessão de 2026-11-05 parou antes do registro. O código dela foi separado do protótipo de
+  água do Codex, que estava misturado nos mesmos arquivos, num worktree só com a fase 1. As provas foram refeitas ali.
+- **Provas de 2026-11-08** (produto e validação do worktree, sem janela):
+  - `n95_headless` H1–H5: 0 falhas. Na rota de LOAD, estado por passo idêntico 2326/2326 e efeitos sonoros idênticos em
+    6 915 908 amostras; centro da imagem larga igual pixel a pixel ao quadro do jogo; 1080, 1440 e 2160 linhas corretos.
+  - **Faíscas do cais (causa achada):** o recorte 2D das sprites do Ninja (`8C1736A0`) usa a largura da cópia do desenho
+    (`8C2D9C74`, fixada em 640 por `8C172642`). Com a projeção larga no jogo faltam 11 desenhos; com a largura da cópia em
+    854, 0; com a translação do produto, a IR do jogo é idêntica à do 4:3 (1800 = 1800) e o estado também.
+  - `ctest --preset msvc-debug`: 30/30 aprovados (6 pulados por falta do disco); `bs_unit_tests` 361/0, `bs_render_tests` 83/0 (com `wide_frame_slot_choice`), `bs_remaster_tests` 5/0.
+- **Revisões Codex:** `codex-20261105-180747` (2 achados aceitos e corrigidos: área da imagem da CPU e limite de resolução
+  no alvo largo) e `codex-20261108-134326` (confirmou as correções; 1 médio aceito e corrigido, slot largo antigo depois da
+  troca para o software com o jogo pausado, `use_slot` com teste; 1 baixo aceito em parte, o recuo real Vulkan → SDL
+  continua sem teste automático).
+- **Incompleto hoje:** `test_remaster` R1 e R2 aprovados, R3 e R4 não rodados (interrompido por falta de memória no sistema);
+  `test_edicao` não rodado (11/0 e 4/0 em 2026-11-05). Não refeitos: a rota de combate inteira e a bateria
+  de janela J1–J5 (2026-11-05). Nenhuma medição de desempenho.
+- **Pendências:** HUD centrado no 4:3 virtual (fases 2 e 3); vazio fora da sala e sprites descartadas além do 4:3 nas faixas
+  (fase 4); menu, 21:9 e desempenho (fase 5); validação visual e Bazzite com o mantenedor.
+- **C8 bloqueado por dados:** `%LOCALAPPDATA%\BlueStingerRecomp` foi esvaziado em 2026-11-08 às 03:07. Perderam-se o `g1`, as
+  gravações reais de 2026-10-21 (bases do C8 e da campanha), o estado da regressão e as evidências de 2026-11-05. Causa não
+  identificada.
+- **Protótipo de água do Codex (N9.7):** classificado como protótipo, fora deste commit e preservado na árvore de trabalho
+  (seção 12.9 da auditoria). Na Original, o produto com e sem ele deu 60/60 quadros iguais. O N9.7 não está iniciado.
+- **Linux (relato do mantenedor, 2026-11-08):** desempenho insatisfatório num teste real (P-L1, sem números medidos, A12 aberto)
+  e instalação a simplificar (P-L2). Registrados em `docs/N9-L-PLANO.md` seção 6.5; nada iniciado.
+- **Regra nova (2026-11-08):** nada é criado fora da pasta de trabalho; temporários em `tmp/` (no `.gitignore`).
+
 ### N9.5 fase 0: a projeção hor+ (2026-11-05)
 
 O mantenedor autorizou **só a fase 0**: investigação e prova, no build de validação, sem mudar o executável de distribuição.

@@ -266,6 +266,12 @@ só como histórico:
 - **Fase 0 (2026-11-05, autorizada só ela):** a projeção hor+ foi provada no build de validação (seção 11 da auditoria). O
   `njSetScreen` `8C1741D4` usa a cópia `8C2D9C70`; o estado ficou igual nas duas rotas; o pan do som foi corrigido pela
   projeção 4:3; as faíscas do cais seguem em investigação. A fase 1 espera aprovação.
+- **Fase 1 (autorizada em 2026-11-05, provas refeitas e fechada tecnicamente em 2026-11-08):** o hor+ por translação da IR
+  no Vulkan (escolha do mantenedor): o jogo continua projetando em 4:3, e o Vulkan desenha a mesma IR deslocada num alvo de
+  854 colunas. Só na Remastered com o Vulkan; a Original e o software ficam em 4:3. Estado por passo e som idênticos ao
+  4:3; a causa das faíscas do cais foi achada (seção 12 da auditoria). O HUD fica centrado no 4:3 virtual até as fases 2
+  e 3, e a opção no menu fica para a fase 5. A validação visual na janela real fica com o mantenedor. As fases 2 a 5
+  esperam autorização.
 
 ### N9.6 — Iluminação, sombras e materiais (R, GG)
 
@@ -284,6 +290,10 @@ só como histórico:
 - Só nas superfícies identificadas (material, textura ou malha), nunca reflexo genérico na cena inteira.
 - **Aceitação:** lista das superfícies de água e molhadas por área, com a identificação usada; nenhuma superfície
   errada nas rotas de referência; custo dentro do orçamento de quadro do perfil.
+- **Situação (2026-11-08): não iniciado oficialmente.** Existe um **protótipo** feito pelo Codex em 2026-11-08 (o mar do
+  cais RCG00, uma textura por `TextureId`, ondas de UV, normais, reflexo e refração em espaço de tela). Ele fica **fora dos
+  commits**, preservado na árvore de trabalho para avaliação no N9.7, na ordem oficial (depois do N9.6). Avaliação e
+  compatibilidade com o N9.5 na seção 12.9 de `docs/N9-5-AUDITORIA.md`.
 
 ### N9.8 — Texturas HD, antialiasing e pós-processamento (E para texturas e AA; R para o resto; G)
 
@@ -318,6 +328,8 @@ objetivos preservam a descoberta e as regras do jogo, sem revelar conteúdo ante
   campanha completa, câmera livre, combate, transições, menus, filmes e áudio; determinismo onde exigido; Original
   comparada com as referências validadas.
 - Nunca sacrificar a correção do gameplay por ganho gráfico.
+- Inclui o diagnóstico do desempenho no Linux relatado pelo mantenedor em 2026-11-08 (P-L1, `docs/N9-L-PLANO.md` seção
+  6.5), junto com a L6 do N9-L. Sem números medidos ainda; nada otimizado antes do diagnóstico.
 - **Aceitação:** matriz de GPUs com os três fabricantes, em três resoluções, sem falha nem perda do dispositivo nas
   rotas; percentil 99 do tempo de quadro dentro do orçamento do perfil; 0 faltas de áudio no H9 em cada perfil; campanha
   completa nas duas edições, com **uma única gravação** (gate pós-N9, seção 14).

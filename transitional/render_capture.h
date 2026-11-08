@@ -145,6 +145,12 @@ void         set_compare_dump(const std::string& dir, uint32_t every);  // BMP d
 // 1 = o modo fiel. Vale a partir do proximo render; chamar na thread do jogo.
 void  set_scale(float scale);
 float scale();
+// N9.5 fase 1 (native/render/wide_frame.h): o quadro largo da Remastered (hor+), so no Mode::Native com o Vulkan. Com
+// largura > a do jogo, o Vulkan desenha a IR deslocada de (largura - 640) / 2 num alvo dessa largura (na escala), a
+// imagem inteira fica num slot para a apresentacao e o framebuffer emulado recebe o recorte central (o 4:3 do jogo).
+// 0 = desligado (o padrao; a Original nunca liga). O software (recuo) continua em 4:3. Thread do jogo.
+void     set_wide(uint32_t width);
+uint32_t wide();
 
 // A imagem maior do que esta sendo EXIBIDO: `shown` e o quadro que o video do PVR leu da VRAM (pvr_video_frame). Se
 // ele e um dos ultimos renders na escala (o conteudo confere com a imagem reduzida que foi para a VRAM, tolerando a

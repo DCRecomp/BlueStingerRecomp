@@ -33,6 +33,7 @@
 #include "platform/graphics_settings.h"
 #include "platform/user_settings.h"
 #include "render/vulkan/vk_device.h"
+#include "render/wide_frame.h"
 #include "gdfs_adapter.h"
 #include "input/input.h"
 #include "input_bridge.h"
@@ -102,6 +103,7 @@ struct Args {
     int render = -1;  // --render nativo|software (N7b; -1 = nao dado)
     bool renderExplicit = false;  // --render ou BS_RENDER dados (valem sobre o graficos.toml do menu)
     uint32_t internalHeight = 0;  // --resolucao-interna <altura> (N7c; 0 = a do graficos.toml)
+    int      aspect = 0;          // --proporcao 4:3|16:9 (N9.5 fase 1; 0 = a do graficos.toml; 16:9 so na Remastered com o Vulkan)
     int      cameraMode = -1;     // --camera original|livre (N7c; -1 = a do controles.toml, ou Original sem janela)
     int      present = -1;        // --apresentacao vulkan|sdl (N7c; -1 = Vulkan quando houver)
     bs::AudioEffectsProvider audioEffects = bs::AudioEffectsProvider::Legacy;  // --audio-efeitos nativo|legado (N6)
@@ -183,6 +185,11 @@ bool parseArgs(Args& a) {
         else if (s == L"--camera" && (v = next())) {
             if (*v == L"original") a.cameraMode = 0;
             else if (*v == L"livre" || *v == L"hibrida") a.cameraMode = 1;  // hibrida: modo retirado (2026-10-23)
+            else return false;
+        }
+        else if (s == L"--proporcao" && (v = next())) {
+            if (*v == L"4:3") a.aspect = 1;
+            else if (*v == L"16:9") a.aspect = 2;
             else return false;
         }
         else if (s == L"--resolucao-interna" && (v = next())) {
@@ -803,6 +810,18 @@ public:
     }
 
     // As preferencias que ja valem na partida (no inicio e a cada mudanca do menu); `start` = so aplica, sem gravar.
+    // N9.5 fase 1: o quadro largo ativo (0 = 4:3): a janela desenha a imagem larga e poe as camadas no 4:3 central
+    uint32_t wide_width() const { return wide_; }
+    void     set_wide_frame(bool allowed) { wideAllowed_ = allowed; }
+    void     set_aspect_override() { aspectOverride_ = true; }
+    // a apresentacao recuou para o SDL (sem slots): o quadro largo deixa de existir nesta execucao
+    void drop_wide() {
+        if (!wideAllowed_) return;
+        wideAllowed_ = false, wide_ = 0;
+        host_.setWideWidth(0);
+        std::fprintf(stderr, "[menu] proporcao: 4:3 (a apresentacao SDL nao desenha o quadro largo)\n");
+    }
+
     void apply(const bs::Preferences& p, bool start) {
         const bs::Preferences old = applied_;
         applied_                  = p;
@@ -844,6 +863,13 @@ public:
                 }
             }
         }
+        // N9.5 fase 1: o quadro largo (so a Remastered com o Vulkan; o software e a Original ficam em 4:3)
+        if (const uint32_t w = wideAllowed_ && g.vulkan && g.aspect == st::Aspect::Wide16x9 ? bs::native::render::kWideWidth : 0;
+            start || w != wide_) {
+            wide_ = w;
+            host_.setWideWidth(w);
+            if (w || !start) std::fprintf(stderr, "[menu] proporcao: %s\n", w ? "16:9 (quadro largo)" : "4:3");
+        }
         // resolucao interna (so o Vulkan; o software desenha na do jogo): altura interna / 480
         if (start || g.vulkan != old.graphics.vulkan || st::internal_height(g) != st::internal_height(old.graphics))
             host_.setRenderScale(g.vulkan ? float(st::internal_height(g)) / 480.f : 1.f);
@@ -883,6 +909,7 @@ public:
         d.graphics.window = confirmed_.window, d.graphics.window_w = confirmed_.window_w, d.graphics.window_h = confirmed_.window_h;
         d.graphics.resolution = confirmed_.resolution, d.graphics.scale_pct = confirmed_.scale_pct;
         if (renderOverride_) d.graphics.vulkan = persisted_.graphics.vulkan;
+        if (aspectOverride_) d.graphics.aspect = persisted_.graphics.aspect;
         d.subtitles = applied_.subtitles;
         if (subtitleOverride_) d.subtitles.enabled = persisted_.subtitles.enabled, d.subtitles.language = persisted_.subtitles.language;
         d.camera = bs::native::edition::for_file(applied_.camera, persisted_.camera, editionProfile());
@@ -925,6 +952,10 @@ private:
     bs::MenuOverlay                   overlay_;
     bs::Preferences                   applied_, persisted_;
     bool                              renderOverride_ = false, subtitleOverride_ = false, cameraOverride_ = false;
+    // N9.5 fase 1: o quadro largo (16:9 hor+) pode existir (Remastered + Vulkan direta), o ativo (0 = 4:3) e se a
+    // proporcao veio da linha de comando (so nesta execucao)
+    bool                              wideAllowed_ = false, aspectOverride_ = false;
+    uint32_t                          wide_ = 0;
     st::GraphicsSettings              confirmed_;  // a ultima tela aceita (a que vai para o arquivo)
 
     static bool sameDisplay(const st::GraphicsSettings& a, const st::GraphicsSettings& b) {
@@ -1237,6 +1268,11 @@ private:
         if (g.window == st::WindowMode::Windowed) {
             ok = SDL_SetWindowFullscreen(window_, false);
             if (ok && g.window_w && g.window_h) ok = SDL_SetWindowSize(window_, int(g.window_w), int(g.window_h));
+            else if (ok && wide_) {  // N9.5: sem tamanho salvo, a janela padrao fica 16:9 (a mesma altura)
+                int w = 0, h = 0;
+                SDL_GetWindowSize(window_, &w, &h);
+                if (h > 0 && w * 9 < h * 16 - 9) ok = SDL_SetWindowSize(window_, (h * 16 + 8) / 9, h);
+            }
         } else if (g.window == st::WindowMode::Borderless) {
             ok = SDL_SetWindowFullscreenMode(window_, nullptr) && SDL_SetWindowFullscreen(window_, true);  // area de trabalho
         } else {
@@ -1342,7 +1378,17 @@ int runWindow(bs::GameHost& host, ni::InputSystem& input, const Args& a, SDL_Win
         menu.update();
         int ow = 0, oh = 0;
         pres.p->output_size(ow, oh);
-        const SDL_FRect              area = bs::game_area(ow, oh);
+        // N9.5 fase 1: com o quadro largo, a imagem larga ocupa o maior 16:9 da saida, e o 4:3 do jogo (camadas, filmes,
+        // telas da CPU) e o centro dele
+        const uint32_t               wideW    = menu.wide_width();
+        const SDL_FRect              wideArea = wideW ? bs::frame_area(ow, oh, wideW, 480) : SDL_FRect{};
+        const SDL_FRect              area     = wideW ? bs::center_area(wideArea, 640, wideW) : bs::game_area(ow, oh);
+        const bool wideSlot  = frame.hiresSeq && bs::native::render::is_wide_slot(frame.hiresWidth, frame.hiresHeight);
+        // um slot largo que sobrou de antes do 4:3 (o quadro largo desligado com o jogo pausado, ex.: troca para o
+        // software no menu: nenhum quadro novo e publicado) nunca e desenhado na area 4:3: a imagem da CPU no lugar
+        // (revisao Codex 20261108-134326)
+        if (!bs::native::render::use_slot(frame.hiresSeq, frame.hiresWidth, frame.hiresHeight, wideW != 0)) frame.hiresSeq = 0;
+        const bool wideImage = wideW && wideSlot;
         std::vector<bs::WindowLayer> layers;
         bool                         shot = false;
         menu.layers(subs, frame.subtitle, ow, oh, area, layers, shot);
@@ -1362,7 +1408,7 @@ int runWindow(bs::GameHost& host, ni::InputSystem& input, const Args& a, SDL_Win
         const bool winShot = winDir && *winDir && frame.vblank && frame.vblank / winEvery != lastWinShot &&
                              frame.vblank >= winRange.first && frame.vblank <= winRange.second;
         std::vector<uint32_t> image;
-        ok &= pres.p->present(frame, seq, area, layers, shot || winShot ? &image : nullptr);
+        ok &= pres.p->present(frame, seq, wideImage ? wideArea : area, area, layers, shot || winShot ? &image : nullptr);
         if (shot && !image.empty()) menu.captured(image, ow, oh);
         if (const std::string why = pres.p->take_post_error(); !why.empty()) menu.shader_failed(why);
         if (winShot && !image.empty() && image.size() >= size_t(ow) * oh) {
@@ -1376,8 +1422,10 @@ int runWindow(bs::GameHost& host, ni::InputSystem& input, const Args& a, SDL_Win
             writeBmp(fs::path(winDir) / name, f);
         }
         gfxFailures = ok ? 0 : gfxFailures + 1;
-        if (gfxFailures >= 120 && std::strcmp(pres.p->name(), "Vulkan") == 0 && fallbackToSdl(window, pres, renderer))
+        if (gfxFailures >= 120 && std::strcmp(pres.p->name(), "Vulkan") == 0 && fallbackToSdl(window, pres, renderer)) {
             gfxFailures = 0;
+            menu.drop_wide();  // N9.5: o SDL nao desenha o slot; o quadro volta ao 4:3 (revisao Codex 20261105-180747)
+        }
         if (gfxFailures >= 120) {
             gfxError = std::string("falha ao apresentar o quadro: ") + SDL_GetError();
             break;
@@ -1776,12 +1824,18 @@ int mainHeadless(Args& a) {
     }
     else input = setupInput(a, false, warning);
     bs::GameOptions opt = gameOptions(a);
+    // N9.5 fase 1: o quadro largo so existe na Remastered e no Vulkan (o software e a Original ficam em 4:3)
+    if (a.aspect == 2 && (!editionProfile().wide_frame || opt.render != bs::RenderProvider::Native)) {
+        std::fprintf(stderr, "erro: --proporcao 16:9 so na edicao Remastered com --render nativo\n");
+        return 2;
+    }
     opt.input           = input.get();
     if (assist) opt.vblankHook = [&assist](const bs::GameOptions::VblankView& v) { return assist->onVblank(v); };
     bs::GameHost host;
     if (a.dumpEvery && !a.capture.empty()) opt.captureEvery = a.dumpEvery, opt.capture = headlessCapture(a);
     host.start(std::move(opt));
     if (a.internalHeight) host.setRenderScale(float(a.internalHeight) / 480.f);
+    if (a.aspect == 2) host.setWideWidth(bs::native::render::kWideWidth);  // validado antes de comecar (headlessAspect)
 #if BS_VALIDACAO
     // N9.2: prova do reinicio (GameHost::restart, "Menu principal" da Remastered): BS_REINICIO_TESTE=<vblanks> reinicia a
     // sessao uma vez depois desses VBlanks; a sessao nova tem de dar o mesmo estado por passo de um processo novo
@@ -2016,7 +2070,14 @@ int mainWindow(Args& a) {
         caps.features.scaling = true, caps.max_height = (std::min)(2160u, gpuMaxHeight);
         caps.features.color = caps.features.shaders = true;  // N7c (secao 21): pos-processamento na apresentacao direta
         caps.features.tonemap = caps.features.sharpen = caps.features.bloom = caps.features.crt = true;
+        caps.wide_frame = editionProfile().wide_frame;  // N9.5 fase 1: o quadro largo vai pelo slot da apresentacao direta
     }
+    if (a.aspect) prefs.graphics.aspect = a.aspect == 2 ? st::Aspect::Wide16x9 : st::Aspect::Original4x3;  // so nesta execucao
+    // N9.5 (revisao Codex 20261105-180747): o limite da GPU (max_internal_height) e calculado para um alvo 4:3; o quadro
+    // largo tem 854/640 da largura. Com ele pedido, o limite cai pelo fator da largura ((480/854) / (3/4), o mais
+    // conservador entre a memoria e a dimensao maxima da imagem), para a altura aceita sempre caber no alvo largo.
+    if (caps.wide_frame && prefs.graphics.aspect == st::Aspect::Wide16x9)
+        caps.max_height = (std::max)(480u, (std::min)(caps.max_height, uint32_t(double(gpuMaxHeight) * (480.0 / 854.0) / 0.75)));
     // shaders de pos-processamento de mods (mods\shaders\<nome>): validados aqui; os invalidos ficam com o motivo
     auto postShaders = bs::native::render::discover_post_shaders(modsPath(L"shaders"));
     for (const auto& p : postShaders)
@@ -2061,6 +2122,8 @@ int mainWindow(Args& a) {
         // N9.2: a interface da Remastered, menos quando um roteiro ou uma gravacao conduz o titulo original
         if (editionProfile().native_menus && !g_spectator.on && !std::getenv("BS_GRAVAR_BASE")) menu.set_remaster(savesRoot(a), BS_VERSION);
         menu.set_shaders(std::move(postShaders));
+        menu.set_wide_frame(caps.wide_frame);
+        if (a.aspect) menu.set_aspect_override();
         menu.set_speakers_available(speakers);
         menu.apply(prefs, true);
         if (a.internalHeight) host.setRenderScale(float(a.internalHeight) / 480.f);  // so nesta execucao

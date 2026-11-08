@@ -189,6 +189,8 @@ public:
     void           setSubtitleSpeaker(bool on) { subtitleSpeaker_.store(on); }  // "Nome: texto" quando o pacote diz quem fala
     void           setRenderer(RenderProvider r);
     void           setRenderScale(float scale);  // N7c: resolucao interna do Vulkan (1 = fiel; altura interna / 480)
+    // N9.5 fase 1: largura logica do quadro largo da Remastered (render_capture::set_wide; 0 = 4:3). So o Vulkan.
+    void           setWideWidth(uint32_t width);
     void           setCamera(const native::settings::CameraSettings& s);  // N7c: camera livre (modo e opcoes)
     RenderProvider renderer() const { return RenderProvider(renderer_.load()); }
 
@@ -240,6 +242,7 @@ private:
     bool                                           voicesNative_ = false;  // o servico de legendas das falas existe
     std::atomic<bool>                              requestsPending_{false};  // acorda a pausa para aplicar pedidos
     std::atomic<float>                             scalePending_{0.f};         // 0 = nenhum pedido
+    std::atomic<int64_t>                           widePending_{-1};           // N9.5: -1 = nenhum pedido
     bool                                           cameraPending_ = false;     // protegido por reqMutex_
     native::settings::CameraSettings               camera_;
     void                                           notifyRequest();

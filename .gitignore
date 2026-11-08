@@ -44,3 +44,6 @@ __pycache__/
 
 # icone feito da capa do proprio usuario (tools/dev/gerar_icone.py --capa): arte do jogo, so uso local. Nao versionar.
 /icone-local/
+
+# Arquivos temporarios de trabalho (worktrees, logs, evidencias locais): nunca versionar
+tmp/

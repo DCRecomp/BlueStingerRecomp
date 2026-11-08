@@ -494,6 +494,112 @@ BS_TEST(render_capture_native_vulkan_and_hd_replacement) {
     }
     rc::set_texture_replacements(nullptr);
 }
+
+// N9.5 fase 1: o quadro largo (set_wide) no Vulkan, num framebuffer 640x480. Um quad de x = -100 a 740 (alem do 4:3): o
+// framebuffer recebe o recorte central (o 4:3 do jogo), a apresentacao acha o slot largo (854 de largura) e as faixas
+// tem o quad. Sem o quadro largo, nenhum slot na escala 1; numa falha do dispositivo, o software segue em 4:3 (sem slot
+// largo); um render de outro tamanho (desenho em textura) nao e alargado.
+BS_TEST(render_capture_wide_frame_on_vulkan) {
+    {
+        std::string err;
+        if (!nr::VulkanDevice::create(&err)) BS_SKIP("dispositivo Vulkan");
+    }
+    auto tela640 = [](CaptureScene& s) {
+        // TA_GLOB_TILE_CLIP: 20 x 15 blocos de 32 (o tamanho do render); linha do framebuffer e recorte de 640 x 480
+        s.reg(0x13C, (14u << 16) | 19u), s.reg(0x04C, 640 * 2 / 8), s.reg(0x068, 639u << 16), s.reg(0x06C, 479u << 16);
+        const uint32_t plane[3 + 3 * 4] = {0, 0, 0, 0, 0, 1, 0xFF102030, 640, 0, 1, 0xFF102030, 0, 480, 1, 0xFF102030};
+        std::memcpy(texture_memory(), plane, sizeof plane);
+    };
+    auto quad = [](CaptureScene& s) {  // opaco, vermelho, sem textura, de x -100 a 740 e y 100 a 300
+        s.ta({0x80000000u, kIspAlways, kTspOpaque, 0});
+        s.vtx(-100, 100, 1, 0, 0, 0xFFFF0000u);
+        s.vtx(740, 100, 1, 0, 0, 0xFFFF0000u);
+        s.vtx(-100, 300, 1, 0, 0, 0xFFFF0000u);
+        s.vtx(740, 300, 1, 0, 0, 0xFFFF0000u, true);
+        s.endList();
+        s.render();
+    };
+    auto exibido = []() {  // o framebuffer 565 lido como o video o mostraria (ARGB)
+        std::vector<uint32_t> v(640u * 480);
+        for (uint32_t y = 0; y < 480; ++y)
+            for (uint32_t x = 0; x < 640; ++x) {
+                uint16_t p;
+                std::memcpy(&p, texture_memory() + 0x100000 + y * 1280 + x * 2, 2);
+                const uint32_t r = (p >> 11) & 31, g = (p >> 5) & 63, b = p & 31;
+                v[size_t(y) * 640 + x] = 0xFF000000u | ((r << 3 | r >> 2) << 16) | ((g << 2 | g >> 4) << 8) | (b << 3 | b >> 2);
+            }
+        return v;
+    };
+    {
+        CaptureScene s(rc::Mode::Native);
+        tela640(s);
+        rc::set_wide(854);
+        quad(s);
+        BS_CHECK(rc::stats().vk_frames == 1 && rc::stats().vk_failures == 0);
+        const std::vector<uint32_t> fbv = exibido();
+        BS_CHECK((fbv[200u * 640 + 0] & 0xFFFFFF) == 0xFF0000 && (fbv[200u * 640 + 639] & 0xFFFFFF) == 0xFF0000);
+        BS_CHECK((fbv[50u * 640 + 320] & 0xF8FCF8) == 0x102030);  // o fundo (565: os bits baixos se perdem)
+        const rc::HiresImage h = rc::hires_for(fbv, 640, 480);
+        BS_CHECK(h.seq != 0 && h.width == 854 && h.height == 480);
+        std::vector<uint32_t> larga;
+        BS_CHECK(rc::read_hires(h, larga) && larga.size() == 854u * 480);
+        if (larga.size() == 854u * 480) {
+            // as faixas: x 0..106 e 747..853 com o quad (que no 4:3 saia da tela), fora dele o fundo
+            BS_CHECK((larga[200u * 854 + 10] & 0xFFFFFF) == 0xFF0000 && (larga[200u * 854 + 840] & 0xFFFFFF) == 0xFF0000);
+            BS_CHECK((larga[50u * 854 + 10] & 0xFFFFFF) == 0x102030);
+            bool centro = true;  // o centro do largo e o que foi para o framebuffer (o mesmo render)
+            for (uint32_t y = 0; y < 480 && centro; y += 7)
+                for (uint32_t x = 0; x < 640; x += 5)
+                    centro = centro && (larga[size_t(y) * 854 + 107 + x] & 0xF8FCF8) == (fbv[size_t(y) * 640 + x] & 0xF8FCF8);
+            BS_CHECK(centro);
+        }
+        rc::set_wide(0);  // 4:3 de novo: na escala 1, nenhum slot
+        s.reg(0x144, 0x80000000);
+        quad(s);
+        BS_CHECK(rc::hires_for(exibido(), 640, 480).seq == 0);
+    }
+    {  // perda transitoria: o dispositivo e recriado, o mesmo render sai pelo Vulkan e o quadro continua largo
+        CaptureScene s(rc::Mode::Native);
+        tela640(s);
+        rc::set_wide(854);
+        rc::inject_fault(rc::Fault::DeviceOnce);
+        quad(s);
+        rc::inject_fault(rc::Fault::None);
+        BS_CHECK(rc::stats().vk_recoveries == 1 && rc::stats().vk_frames == 1 && rc::stats().vk_error.empty());
+        const rc::HiresImage h = rc::hires_for(exibido(), 640, 480);
+        BS_CHECK(h.seq != 0 && h.width == 854 && h.height == 480);
+        rc::set_wide(0);
+    }
+    {  // perda que se repete: software ate o fim da sessao, em 4:3 (sem slot largo), e o framebuffer continua certo
+        CaptureScene s(rc::Mode::Native);
+        tela640(s);
+        rc::set_wide(854);
+        rc::inject_fault(rc::Fault::Device);
+        quad(s);
+        rc::inject_fault(rc::Fault::None);
+        BS_CHECK(rc::stats().vk_frames == 0 && rc::stats().soft_frames == 1);
+        const std::vector<uint32_t> fbv = exibido();
+        BS_CHECK((fbv[200u * 640 + 320] & 0xFFFFFF) == 0xFF0000 && rc::hires_for(fbv, 640, 480).seq == 0);
+        rc::set_wide(0);
+    }
+    {  // outro tamanho (32x32, como um desenho em textura): nao alarga
+        CaptureScene s(rc::Mode::Native);
+        rc::set_wide(854);
+        s.ta({0x80000000u, kIspAlways, kTspOpaque, 0});
+        s.vtx(0, 0, 1, 0, 0, 0xFF00FF00u);
+        s.vtx(32, 0, 1, 0, 0, 0xFF00FF00u);
+        s.vtx(0, 32, 1, 0, 0, 0xFF00FF00u);
+        s.vtx(32, 32, 1, 0, 0, 0xFF00FF00u, true);
+        s.endList();
+        s.render();
+        uint16_t px;
+        std::memcpy(&px, texture_memory() + 0x100000 + 16 * 64 + 16 * 2, 2);
+        BS_CHECK(px == 0x07E0 && rc::stats().vk_frames == 1);
+        std::vector<uint32_t> v(32u * 32, 0xFF00FF00u);
+        BS_CHECK(rc::hires_for(v, 32, 32).seq == 0);
+        rc::set_wide(0);
+    }
+}
 #if BS_VALIDACAO  // o modo comparar: o rasterizador do caminho do TA (N8.7: so na validacao)
 
 // N7b (revisao Codex 2026-10-21): a IMAGEM INTEIRA do Vulkan contra a do software (BS_RENDER_IR=comparar) em cenas

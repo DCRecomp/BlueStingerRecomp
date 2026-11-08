@@ -1,6 +1,7 @@
 #include "window_present.h"
 
 #include "render/vulkan/vk_device.h"
+#include "render/wide_frame.h"
 
 #include <SDL3/SDL_vulkan.h>
 
@@ -22,6 +23,16 @@ SDL_FRect game_area(int w, int h) {
     return {std::floor((sw - aw) / 2), std::floor((sh - ah) / 2), std::floor(aw), std::floor(ah)};
 }
 
+SDL_FRect frame_area(int w, int h, uint32_t fw, uint32_t fh) {
+    const nr::AreaRect a = nr::fit_area(w, h, fw, fh);  // N9.5: a conta fica em native/render/wide_frame (testada)
+    return {a.x, a.y, a.w, a.h};
+}
+
+SDL_FRect center_area(const SDL_FRect& outer, uint32_t inner_w, uint32_t outer_w) {
+    const nr::AreaRect a = nr::center_part({outer.x, outer.y, outer.w, outer.h}, inner_w, outer_w);
+    return {a.x, a.y, a.w, a.h};
+}
+
 namespace {
 
 // ---- SDL (recuo) ----
@@ -39,7 +50,8 @@ public:
     }
     void set_vsync(bool on) override { SDL_SetRenderVSync(r_, on ? 1 : SDL_RENDERER_VSYNC_DISABLED); }
 
-    bool present(const GameFrame& f, uint64_t frameSeq, const SDL_FRect& area, std::span<const WindowLayer> layers,
+    bool present(const GameFrame& f, uint64_t frameSeq, const SDL_FRect& area, const SDL_FRect& cpuArea,
+                         std::span<const WindowLayer> layers,
                  std::vector<uint32_t>* capture) override {
         bool ok = true;
         if (f.width && f.height && frameSeq != seq_) {
@@ -54,7 +66,7 @@ public:
         }
         SDL_SetRenderDrawColor(r_, 0, 0, 0, 255);
         ok &= SDL_RenderClear(r_);
-        if (game_) ok &= SDL_RenderTexture(r_, game_, nullptr, &area);
+        if (game_) ok &= SDL_RenderTexture(r_, game_, nullptr, &cpuArea);  // o SDL so tem a imagem da CPU
         for (size_t i = 0; i < layers.size() && i < 2; ++i) {
             const WindowLayer& l = layers[i];
             if (!l.argb || l.argb->size() < size_t(l.width) * l.height) continue;
@@ -124,7 +136,8 @@ public:
     }
     void set_vsync(bool on) override { vsync_ = on; }
 
-    bool present(const GameFrame& f, uint64_t frameSeq, const SDL_FRect& area, std::span<const WindowLayer> layers,
+    bool present(const GameFrame& f, uint64_t frameSeq, const SDL_FRect& area, const SDL_FRect& cpuArea,
+                         std::span<const WindowLayer> layers,
                  std::vector<uint32_t>* capture) override {
         // o renderizador perdeu o dispositivo e criou outro: a apresentacao vai junto (outra superficie)
         if (nr::vulkan_shared_generation() != generation_ && !reattach()) return false;
@@ -134,6 +147,7 @@ public:
         nr::PresentRequest r;
         r.out_w = uint32_t(std::max(w, 0)), r.out_h = uint32_t(std::max(h, 0)), r.vsync = vsync_;
         r.area[0] = area.x, r.area[1] = area.y, r.area[2] = area.w, r.area[3] = area.h;
+        r.cpu_area[0] = cpuArea.x, r.cpu_area[1] = cpuArea.y, r.cpu_area[2] = cpuArea.w, r.cpu_area[3] = cpuArea.h;
         r.slot_seq = f.hiresSeq, r.slot_y0 = f.hiresY0, r.slot_rows = f.hiresRows;
         if (f.width && f.height) r.argb = f.argb.data(), r.width = f.width, r.height = f.height, r.argb_version = frameSeq;
         r.post = passes_.data(), r.post_count = uint32_t(passes_.size());

@@ -416,6 +416,11 @@ void GameHost::setRenderScale(float scale) {
     notifyRequest();
 }
 
+void GameHost::setWideWidth(uint32_t width) {
+    widePending_.store(int64_t(width));
+    notifyRequest();
+}
+
 void GameHost::setCamera(const native::settings::CameraSettings& s) {
     {
         std::lock_guard<std::mutex> lock(reqMutex_);
@@ -467,6 +472,10 @@ void GameHost::applyRequests() {
             std::fprintf(stderr, "[legenda] idioma: %s\n", language.empty() ? "desligadas" : language.c_str());
         }
     }
+    if (const int64_t wv = widePending_.exchange(-1); wv >= 0 && uint32_t(wv) != transitional::render_capture::wide()) {
+        transitional::render_capture::set_wide(uint32_t(wv));
+        std::fprintf(stderr, "[render] quadro: %s\n", wv ? ("largo " + std::to_string(wv) + "x480 (hor+)").c_str() : "4:3");
+    }
     if (const float s = scalePending_.exchange(0.f); s > 0 && s != transitional::render_capture::scale()) {
         transitional::render_capture::set_scale(s);
         std::fprintf(stderr, "[render] resolucao interna: escala %.3g (%ux%u)\n", s, unsigned(640 * s + 0.5f), unsigned(480 * s + 0.5f));
@@ -492,14 +501,17 @@ void GameHost::vblank() {
     // (8C2D9C7C: o njSetScreen 8C1741D4 copia distancia, cx e cy para 8C2D9C70, e cada modelo le dali). Com
     // ",estrutura", so a estrutura (o experimento da auditoria: o quadro nao muda, porque a copia e rara). Com um terceiro
     // numero (<largura>,<cx>,<cx_copia>), a copia recebe esse valor: separa o efeito da estrutura do efeito do desenho.
+    // Um quarto numero (<largura>,<cx>,<cx_copia>,<largura_copia>) grava tambem a largura da copia (8C2D9C74, float, e
+    // 8C2D9CBC, inteiro), que o modo de video do Ninja (8C172642) fixa em 640 e da qual 8C1736A0 monta a regiao de recorte
+    // 2D das sprites (N9.5 fase 1: a causa das faiscas do cais).
     struct Tela {
-        float largura = 0, cx = 0, cxCopia = 0;
+        float largura = 0, cx = 0, cxCopia = 0, larguraCopia = 0;
         bool  copia = true;
     };
     static const Tela kTela = [] {
         Tela t;
         if (const char* v = std::getenv("BS_TELA_TESTE")) {
-            if (std::sscanf(v, "%f,%f,%f", &t.largura, &t.cx, &t.cxCopia) < 3) t.cxCopia = t.cx;
+            if (std::sscanf(v, "%f,%f,%f,%f", &t.largura, &t.cx, &t.cxCopia, &t.larguraCopia) < 3) t.cxCopia = t.cx;
             t.copia = std::strstr(v, ",estrutura") == nullptr;
         }
         return t;
@@ -508,6 +520,10 @@ void GameHost::vblank() {
         std::memcpy(ram_ + 0x24CCB8, &kTela.largura, 4);
         std::memcpy(ram_ + 0x24CCC0, &kTela.cx, 4);
         if (kTela.copia) std::memcpy(ram_ + 0x2D9C7C, &kTela.cxCopia, 4);
+        if (kTela.larguraCopia > 0) {
+            const uint32_t li = uint32_t(kTela.larguraCopia);
+            std::memcpy(ram_ + 0x2D9C74, &kTela.larguraCopia, 4), std::memcpy(ram_ + 0x2D9CBC, &li, 4);
+        }
     }
 #endif
     transitional::sound::vblank(n);  // N6: tempo logico do mixer nativo (nada se os provedores sao o legado)

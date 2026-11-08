@@ -83,6 +83,9 @@ struct PresentRequest {
     uint32_t        out_w = 0, out_h = 0;  // tamanho da janela em pixels
     bool            vsync = true;
     float           area[4] = {};          // area do jogo em pixels da saida (x, y, largura, altura)
+    // N9.5 fase 1: a area da imagem da CPU quando ela difere da do slot (o quadro largo: o slot no 16:9, a imagem da CPU
+    // de 640 x 480 no 4:3 central, sem esticar). Largura 0 = a mesma `area`.
+    float           cpu_area[4] = {};
     // a imagem do jogo: um slot (render na resolucao interna; slot_seq != 0) ou a da CPU (argb)
     uint64_t        slot_seq = 0;
     uint32_t        slot_y0 = 0, slot_rows = 0;  // as linhas do slot que correspondem ao exibido
@@ -117,6 +120,9 @@ public:
     // imagem maior num slot (last_slot) e read_frame devolve a reducao dela.
     virtual void     set_scale(float scale) = 0;
     virtual float    scale() const          = 0;
+    // N9.5 fase 1: o slot tambem na escala 1 (o quadro largo da Remastered: a apresentacao desenha o slot, e read_frame
+    // devolve o quadro inteiro, do qual a CPU tira o recorte do jogo). Desligado = so com escala, como no N7c.
+    virtual void     set_always_slot(bool on) = 0;
     virtual uint64_t last_slot(uint32_t& width, uint32_t& height) const = 0;  // 0 = o ultimo submit nao tem slot
     // Le de volta as linhas [y0, y0 + rows) de um slot (capturas e testes; nao no caminho normal). false = o slot ja foi
     // reaproveitado.
