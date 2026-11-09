@@ -4353,7 +4353,10 @@ Original.
   `split` quando diferem) e o `cruzar` que contava pares divergentes (agora erro). Aceitos em parte: a tabela (as entradas de
   tela só valem com o chamador do jogo medido, porque `8C1736A0` também recebe sprites projetados da cena) e os testes
   integrados (acrescentada a chamada de cauda). Detalhe na seção 13.7 da auditoria.
-- **Publicação:** `v0.9.5-2`, só com o pacote do Windows, como a `v0.9.5-1`.
+- **Publicação:** `v0.9.5-2`, só com o pacote do Windows, como a `v0.9.5-1`. Pacote: `make_builder.ps1 -Versao v0.9.5-2` no
+  worktree em `2d5849e` (o `known_versions.h` público; conteúdo do jogo conferido por bytes); `test_builder` **24/0** sobre o
+  pacote, sem nada novo em `%LOCALAPPDATA%`; ZIP `BlueStinger-Builder-v0.9.5-2-win-x64.zip`, 14 574 094 B, `d7caa1b7…4bdb8`;
+  extraído, os 2 861 arquivos são iguais aos do pacote testado; varredura sem caminho local, nome de usuário nem mídia do jogo.
 - **Pendências:** a ambiguidade do DMA; levar a proveniência ao produto (o custo no código gerado não foi medido); cobrir
   mais salas e menus; fases 3–5 esperam autorização.
 
