@@ -36,6 +36,8 @@ CENAS = {
     "heliporto": dict(roteiro="passo_heliporto.txt", cartao=False,
                       passos=[7900, 8840, 11240, 11345, 11500, 11800, 12100, 12190]),
     "cgate": dict(roteiro="passo_cgate.txt", cartao=False, passos=[4000, 7900]),
+    # N9.5 fase 3B: logos, titulo, menu de LOAD e a escolha do slot (renders antes do gameplay)
+    "titulo": dict(roteiro="passo_load_slot1.txt", cartao=True, passos=[100, 300, 600, 1000, 1400, 1700]),
 }
 
 
@@ -53,6 +55,8 @@ def capturar(a):
     for nome in cenas:
         c = CENAS[nome]
         for variante, tela in (("4x3", None), ("larga", "854,427")):
+            if a.variantes and variante not in a.variantes.split(","):
+                continue
             d = os.path.join(a.saida, "%s_%s" % (nome, variante))
             if os.path.isdir(d):
                 shutil.rmtree(d)
@@ -66,6 +70,10 @@ def capturar(a):
                 env["BS_PROVENIENCIA_DMA"] = "1"
             else:
                 env.pop("BS_PROVENIENCIA_DMA", None)
+            if a.marca:  # N9.5 fase 3B: a marca leve de HUD do produto ligada (o papel de cada desenho no TSV)
+                env["BS_HUD_MARCA"] = "1"
+            else:
+                env.pop("BS_HUD_MARCA", None)
             extra = ""
             if c["cartao"]:
                 saves = os.path.join(d, "saves")
@@ -102,6 +110,7 @@ def cruzar(a):
     por_cadeia = collections.defaultdict(collections.Counter)  # (escritor, rotina, cadeia) -> classe -> n
     marca = collections.Counter()  # (marca do jogo, classe do oraculo) -> n: a marca (kamui/draw_class) contra o oraculo
     divergentes = 0
+    papel = collections.Counter()  # (tabela, produto) -> n
     exemplos = {}
     resumo = []
     for nome, c in CENAS.items():
@@ -143,6 +152,10 @@ def cruzar(a):
                     cls = l["classe"]
                     classes[cls] += 1
                     marca[(o.get("marca", "-"), cls)] += 1
+                    # N9.5 fase 3B: a marca leve do produto contra a tabela (so o canto esquerdo e marcado no produto)
+                    pt, pp = o.get("papel_tabela", ""), o.get("papel_produto", "")
+                    if pp not in ("", "-1"):
+                        papel[("canto" if pt == "1" else "outro", "canto" if pp == "1" else "outro")] += 1
                     k = (esc, rot, cad, o["dma"], o["tipo"])
                     por_cadeia[k][cls] += 1
                     exemplos.setdefault(k, "%s p%d desenho %s" % (nome, p, l["desenho_4x3"]))
@@ -175,6 +188,10 @@ def cruzar(a):
         resumo.append("marca errada (cena<->tela): %d; desconhecida: %d; ambigua: %d" % (
             erros, sum(n for (m, _), n in marca.items() if m == "desconhecida"),
             sum(n for (m, _), n in marca.items() if m == "ambiguo")))
+    if papel:
+        resumo.append("marca do produto x tabela (canto esquerdo): " + ", ".join(
+            "tabela %s/produto %s %d" % (t, q, n) for (t, q), n in sorted(papel.items())))
+        resumo.append("marca do produto errada: %d" % (papel[("canto", "outro")] + papel[("outro", "canto")]))
     texto = "\n".join(resumo) + "\n"
     open(os.path.join(out, "resumo.txt"), "w", encoding="utf-8").write(texto)
     print(texto, end="")
@@ -192,6 +209,8 @@ def main():
     c.add_argument("--saida", required=True)
     c.add_argument("--cenas", default="")
     c.add_argument("--escritor-dma", action="store_true", help="BS_PROVENIENCIA_DMA=1: a cadeia de quem escreveu o buffer do DMA")
+    c.add_argument("--variantes", default="", help="so estas variantes (4x3,larga); a conferencia da marca so precisa da 4x3")
+    c.add_argument("--marca", action="store_true", help="BS_HUD_MARCA=1: a marca leve de HUD do produto (papel_produto no TSV)")
     x = sub.add_parser("cruzar")
     x.add_argument("pasta")
     x.add_argument("--ir-tela", required=True)

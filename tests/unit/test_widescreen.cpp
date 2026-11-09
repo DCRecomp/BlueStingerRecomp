@@ -202,3 +202,23 @@ BS_TEST(wide_frame_policy_and_settings) {
     n7.wide_hud = false;
     BS_CHECK(st::clamp_to(s, n7).aspect == st::Aspect::Original4x3);
 }
+
+// N9.5 fase 3B: a ancora por desenho. O desenho ancorado a esquerda (o HUD do canto) nao anda, nem o recorte dele; o resto
+// anda o deslocamento como antes; uma lista de ancoras de outro tamanho e ignorada (todos no centro).
+BS_TEST(wide_frame_left_anchored_draws_stay_at_the_left_edge) {
+    const nr::CommandList a = quadro_teste();
+    nr::CommandList       b = a;
+    nr::widen(b, nr::kWideWidth, {nr::kAnchorCenter, nr::kAnchorLeft});
+    bool ok = true;
+    for (uint32_t k = 0; k < 3; ++k) ok = ok && b.vertices[k].x == a.vertices[k].x + 107.f;  // o triangulo: centro
+    for (uint32_t k = 3; k < 7; ++k) ok = ok && b.vertices[k].x == a.vertices[k].x;          // o quad: na borda
+    for (uint32_t k = 7; k < 10; ++k) ok = ok && b.vertices[k].x == a.vertices[k].x + 107.f; // o volume: centro
+    BS_CHECK(ok);
+    BS_CHECK(b.draws[1].state.clip_x0 == 100 && b.draws[1].state.clip_x1 == 539 && b.frame.width == 854);
+    nr::CommandList c = a;
+    nr::widen(c, nr::kWideWidth, {nr::kAnchorLeft});  // tamanho errado: nada ancorado
+    BS_CHECK(c.vertices[3].x == a.vertices[3].x + 107.f && c.draws[1].state.clip_x0 == 207);
+    nr::CommandList d = a;  // sem quadro largo, a ancora nao muda nada
+    nr::widen(d, 640, {nr::kAnchorCenter, nr::kAnchorLeft});
+    BS_CHECK(d.vertices[3].x == a.vertices[3].x && d.frame.width == 640);
+}

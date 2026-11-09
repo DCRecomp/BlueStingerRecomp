@@ -1,6 +1,7 @@
 #pragma once
 // Acesso a memoria do guest. RAM principal (area 3, com espelhos em P0-P3) tem
 // caminho rapido inline; o resto vai para o despacho por regiao (memory/).
+#include "cpu/hud_scope.h"
 #include "cpu/sh4_context.h"
 #include "cpu/write_watch.h"
 
@@ -70,6 +71,7 @@ inline void sh4_write8(Sh4Context* c, uint32_t a, uint32_t v) {
 #if BS_VALIDACAO
     if (sh4_is_ram(a)) ram_origin_write(c, a & kRamMask, 1);
 #endif
+    if (c->hud_role && sh4_is_ram(a)) hud_role_write(c, a & kRamMask);  // N9.5 fase 3B
     if (sh4_is_ram(a)) c->ram[a & kRamMask] = uint8_t(v);
     else sh4_write8_slow(c, a, uint8_t(v));
 }
@@ -83,6 +85,7 @@ inline void sh4_write16(Sh4Context* c, uint32_t a, uint32_t v) {
 #if BS_VALIDACAO
         ram_origin_write(c, a & kRamMask, 2);
 #endif
+        if (c->hud_role) hud_role_write(c, a & kRamMask);  // N9.5 fase 3B
         std::memcpy(c->ram + (a & kRamMask), &w, 2);
     } else {
         sh4_write16_slow(c, a, uint16_t(v));
@@ -97,6 +100,7 @@ inline void sh4_write32(Sh4Context* c, uint32_t a, uint32_t v) {
 #if BS_VALIDACAO
         ram_origin_write(c, a & kRamMask, 4);
 #endif
+        if (c->hud_role) hud_role_write(c, a & kRamMask);  // N9.5 fase 3B
         std::memcpy(c->ram + (a & kRamMask), &v, 4);
     } else {
         sh4_write32_slow(c, a, v);

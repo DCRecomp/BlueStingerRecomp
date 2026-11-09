@@ -857,3 +857,124 @@ papel por bloco usado. Não medido: o custo dentro das rotinas de HUD (poucas es
 - **Entradas curinga na tabela.** Corrigido: só os pares exatos observados; um chamador não medido fica desconhecido
   (teste negativo para cada entrada que era curinga).
 - Não verificado pelo revisor: as evidências ficam em `tmp/` (fora do repositório); os números estão nesta seção.
+
+### 14.6 Parte B: a marca leve no produto (arquitetura A1, escolhida pelo mantenedor em 2026-11-09)
+
+| Peça | Onde | O que faz |
+|---|---|---|
+| Pontos de chamada do HUD | `config/bluestinger_us.toml` (`[remaster] hud_chamadas_canto_esquerdo`) | os cinco retornos medidos (14.7): `8C0605CE`, `8C061346`, `8C060838`, `8C0608DE`, `8C0609EC` |
+| Gerador | `translator/codegen` (`Options::hud_sites`, `hudScope`), `translator/app/config` | põe a chamada (direta, indireta de alvo resolvido ou pelo despacho) dentro de `BS_HUD_SCOPE(1)`; a chave é o retorno. O C++ gerado difere do anterior **só nessas cinco linhas** |
+| Escopo | `runtime/cpu/hud_scope.{h,cpp}` (`HudScope`, RAII) | liga `Sh4Context::hud_role` durante a chamada e devolve o anterior em qualquer saída; só com `hud_marks_enable` |
+| Interrupções e threads | `irq_bridge.cpp`, `sh4_intc.cpp`, `sh4_threads.cpp` | o tratador não herda a marca; cada thread do guest guarda a sua |
+| Escritas na RAM | `runtime/cpu/sh4_mem.h` | com a marca ligada, a escrita anota no bloco de 32 bytes o papel e o render corrente (fora a pilha corrente) |
+| Cópia do canal 2 | `system/dma_bus.cpp` (produto), `pvr/ta.cpp` + `sh4_dmac.cpp` (validação) | lê e consome o papel do bloco copiado; só vale a marca do render corrente ou do anterior |
+| Escrita direta no TA | `system/area4_bus.cpp` (produto), `pvr/ta.cpp` (validação) | o parâmetro leva a marca em vigor |
+| IR | `kamui/list_sink` (`ListParam::role`, `ListFrame::roles`) | o papel de cada desenho, só quando a lista recebeu papéis; o parâmetro de 64 bytes fica com o da 1ª metade |
+| Quadro largo | `native/render/wide_frame` (`widen(cl, 854, âncoras)`), `transitional/render_core` | os desenhos ancorados à esquerda não andam (vértices e recorte); o resto anda +107 como na fase 1 |
+| Ligar | `app/game_host.cpp` | `hud_marks_enable` junto com o quadro largo (a Remastered 16:9); desligada no 4:3, na Original e no software; a troca 16:9 ↔ 4:3 descarta as marcas pendentes |
+| Só validação | `pr_ring` (o PR em cada entrada da cadeia), a coluna `sitio` do TSV, `BS_HUD_MARCA=1`, `papel_tabela`/`papel_produto`, `n95_proveniencia.py --marca --variantes` | o ponto de chamada de cada desenho e a conferência da marca do produto contra a tabela |
+| Diagnóstico | `BS_HUD_ANCORAS_LOG=<arquivo>` (`render_core`, inerte sem a variável) | o retângulo dos desenhos ancorados de cada render, para o critério H3 |
+
+**Custo.** O termo que pesa é o teste da marca em cada escrita na RAM: medido no protótipo (14.4) em +1,6 % de CPU na
+média, dentro do ruído. Memória: 2 MiB para o mapa de blocos (4 bytes por bloco), alocados só na primeira vez que a marca
+liga; 1 byte de papel por desenho com a marca. O código gerado só muda nos cinco pontos de chamada.
+
+### 14.7 Parte B: o erro das rotinas genéricas e a marca por ponto de chamada
+
+- **O erro.** A primeira versão marcava a **entrada** de `8C060278` e `8C0899D6`. O H3 com o diagnóstico de âncoras mostrou
+  desenhos ancorados de tela cheia em todos os renders anteriores ao gameplay (renders 6–1768: logos, título, LOAD). As
+  duas rotinas são **genéricas** (sprite 2D e retângulo 2D): o título, os menus de LOAD e o inventário também as chamam. A
+  tabela da Parte A tinha o mesmo defeito (as 16 cenas não incluíam o título), e a marca do produto concordava com ela.
+- **A medição.** A validação passou a gravar o PR de cada entrada (o retorno do ponto de chamada), e o TSV, o ponto de
+  chamada da 1ª rotina do jogo e o retângulo do desenho. Em 17 cenas (as 16 e o título, `passo_load_slot1` 100–1700):
+
+| Rotina | Chamador | Retorno | Retângulo (4:3) | Cenas | O que é |
+|---|---|---|---|---|---|
+| `8C060278` | `8C060380` | `8C0605CE` | x 72–176 | 16 | o nome ("ELIOT") |
+| `8C060278` | `8C061312` | `8C061346` | x −8–64 | 7 | a moldura do alvo (animada) |
+| `8C0899D6` | `8C060380` | `8C060838`, `8C0608DE`, `8C0609EC` | x 179–339 | 16 | a barra de vida |
+| `8C060278` | `8C0797C0`, `8C079940`, `8C079AAC`, `8C079D20` | vários | até a tela cheia | título | **não é HUD** |
+| `8C0899D6` | `8C078FC0` | `8C0792BC` | tela cheia | título | **não é HUD** |
+| `8C0899D6` | `8C08A054` | `8C08A1C2` | tela cheia | inventário | **não é HUD** (a sobreposição do menu) |
+
+  O y chega a ~620 em alguns quadros: o HUD escondido abaixo da tela. Das 7 chamadas de `8C060380` a `8C060278`, só
+  `8C0605CE` apareceu; as outras 6 ficam sem âncora (centralizadas, como na fase 1).
+- **A correção.** A tabela ganhou o campo do ponto de chamada (`hud_table.h`, `site`): o HUD do canto só nesses cinco
+  retornos; qualquer outro é desconhecido. O gerador põe o escopo só nesses pontos (duas das chamadas da barra de vida são
+  `jsr @r2`, pelo despacho em execução: o escopo envolve o despacho, e a validação mediu que dali sai a barra de vida).
+
+**Resultados da Parte B** (builds da worktree com o C++ gerado em `tmp/`; uma instância pesada por vez):
+
+| Prova | Resultado |
+|---|---|
+| C++ gerado × o anterior | só os cinco `BS_HUD_SCOPE(1)` nos pontos de chamada medidos |
+| Marca do produto × tabela (`BS_HUD_MARCA=1`, 17 cenas com o título, 15 442 desenhos do 4:3) | canto 204 / 204, **0 errados**; título, LOAD e a sobreposição do inventário sem âncora |
+| Original × `referencias_n87` (exe de validação desta parte) | **10 casos, 0 diferentes** |
+| H1, H2 | Original e software recusam o 16:9 (saída 2) |
+| H3 (rota de LOAD, Remastered 4:3 × 16:9) | estado por passo idêntico 2326/2326; efeitos sonoros idênticos em 6 915 908 amostras; HUD ancorado em x 23–339, y 407–448 (4,7 % do quadro); fora dele, o framebuffer difere em 2 px (bordas de triângulo, máx. 8–9 níveis); o HUD aparece no quadro largo na posição x do 4:3 (1 811 e 1 796 px, 100 % iguais) |
+| H4 (1080, 1440, 2160 linhas) | estado idêntico; larguras 1922, 2562, 3843; centro reduzido × quadro do jogo PSNR 37,3 / 37,5 / 37,4 dB (os mesmos da fase 1) |
+| H5 (Remastered 4:3) | nenhuma imagem larga |
+| `test_remaster` R1–R4 | **4/0** |
+| J1–J5 (janela) | **0 falhas** (J1 e J2 16:9 com o HUD ancorado; J3 Original continua 4:3; J4 Remastered 4:3; J5 SDL fica 4:3) |
+| ctest | validação 30/30, produto 23/23; `bs_unit_tests` 368/0, `bs_render_tests` 88/0 |
+
+**Comparação visual 4:3 × 16:9** (imagens do próprio jogo, `tmp/sessao-20261109/fase3/vis`): no corredor RCG02 (J1, janela
+1280×720), a moldura do alvo, "ELIOT" e a barra de vida ficam no canto inferior esquerdo da tela, com a cena na largura
+inteira; na Remastered 4:3 (J4), no canto do 4:3, entre as faixas pretas. Tamanho e proporção iguais.
+
+**Desempenho:** o teste da marca em cada escrita foi medido no protótipo (14.4: +1,6 % de CPU, no ruído); nenhuma outra
+medição de desempenho foi feita nesta fase (fica para a fase 5).
+
+### 14.8 Parte B: elementos reposicionados
+
+| Elemento | Papel | Na Remastered 16:9 |
+|---|---|---|
+| Moldura do alvo, nome ("ELIOT") e barra de vida | canto inferior esquerdo | presos à borda esquerda do quadro largo (x como no 4:3, sem os +107) |
+| Mensagens ("The door is locked.") | centro | continuam centralizadas (+107, como na fase 1) |
+| Menus do jogo (pausa, inventário, terminal ESER, título, LOAD) | menu | continuam no 4:3 centralizado, desenho preservado |
+| Fades e faixas de tela cheia | — | como na fase 1: cor uniforme estendida à largura inteira |
+| Partículas, faíscas, sprites presos ao mundo, modelos | cena | seguem a projeção (+107); nunca ancorados |
+| Arma, munição, mira de combate, GAME OVER | — | **não identificados** (nenhuma rota os mostra); centralizados como na fase 1 |
+
+### 14.9 Parte B: o critério H3 (decisão do mantenedor, 2026-11-09)
+
+O framebuffer de 640 colunas é o recorte central do quadro largo, e o HUD ancorado (x ≈ 23–339 no quadro largo) fica fora
+dele ou deslocado: com a primeira medição, 3 033 e 2 550 px (~1 %) diferentes no "quadro do jogo 16:9 × 4:3". A tela mostra
+sempre o quadro largo; a apresentação SDL (que mostra o framebuffer) desliga o quadro largo e a marca; a lógica do jogo
+não lê pixels. **Não provado:** se o jogo reaproveita a imagem do framebuffer em algum efeito. O mantenedor escolheu
+**ajustar o H3** (`tools/dev/n95_headless.py`): na Remastered 16:9,
+- o "quadro do jogo 16:9 × 4:3" compara o framebuffer **fora** dos retângulos dos desenhos ancorados, lidos da IR
+  (`BS_HUD_ANCORAS_LOG`): onde o HUD está no 4:3 e onde a parte dele que cai no recorte aparece (107 colunas à esquerda);
+  o limite continua 0,1 % dos pixels;
+- o retângulo excluído não pode passar de 10 % do quadro (senão o critério ficaria vazio: foi o que o erro de 14.7
+  produziu, um retângulo de tela cheia);
+- sem nenhuma âncora, o caso falha (a marca regrediu; revisão Codex 20261109-171852);
+- novo: os pixels do HUD (verdes) do 4:3 aparecem iguais no quadro largo na mesma posição x (≥ 95 %).
+No 4:3, na Original e sem quadro largo, o critério continua inteiro.
+
+### 14.10 Parte B: revisões Codex
+
+**`reviews/codex-20261109-094056.md`** (versão por entrada de rotina; dois médios):
+- **Aceito em parte — o recorte central tira o HUD ancorado do framebuffer 4:3:** 14.9 (decisão do mantenedor; limitação
+  documentada).
+- **Aceito — um bloco reutilizado podia ancorar um desenho de cena:** a marca guarda o render (expira depois de dois), a troca
+  16:9 ↔ 4:3 descarta as pendentes, a pilha corrente não é marcada (`hud_block_marks_expire_and_skip_the_stack`).
+
+**`reviews/codex-20261109-171852.md`** (versão por ponto de chamada; dois médios). O revisor conferiu os cinco retornos no
+binário (`8C0605CA: bsr 8C060278`, `8C061342: jsr @r3`, `8C060834`, `8C0608DA` e `8C0609E8: jsr @r2`), o escopo nos três
+caminhos de chamada, as threads e as interrupções, e a recusa de um retângulo de tela cheia no H3.
+- **Aceito em parte — uma marca de HUD sobrevive se o bloco for reescrito pela cena antes da cópia (no render corrente ou no
+  seguinte).** Os parâmetros do TA são blocos de 32 bytes alinhados, e a cópia de cada quadro consome as marcas dele; o caso
+  pede um bloco do HUD não copiado no seu quadro e reaproveitado pela cena logo depois. **Medido:** não ocorreu nos 15 442
+  desenhos das 17 cenas. A correção completa (invalidar em toda escrita na RAM, como a sombra da validação) tem custo por
+  escrita não medido; fica como risco residual para a fase 5 (desempenho), com a decisão do mantenedor.
+- **Aceito — o H3 passaria sem nenhuma âncora.** Corrigido (14.9).
+
+### 14.11 Pendências e limites depois da fase 3
+
+- **Sem identificação:** arma, munição, mira de combate e GAME OVER (nenhuma rota disponível os mostra); o elemento
+  `8C0626AA` (sempre fora da tela); as outras 6 chamadas de `8C060380` a `8C060278` (sem âncora).
+- **Framebuffer 4:3 com o quadro largo:** sem o HUD ancorado (14.9).
+- **Marca de um bloco reescrito pela cena antes da cópia:** sem tratamento no código; não observada (14.10).
+- **C8:** continua bloqueado (as gravações reais de 2026-10-21 não existem mais).
+- **Fases 4 e 5:** esperam autorização (bordas por sala e câmeras fixas; menu 4:3/16:9, 21:9, desempenho).

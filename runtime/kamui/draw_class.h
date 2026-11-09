@@ -29,6 +29,9 @@ uint32_t library_entry(const ParamOrigin& o);
 // a primeira rotina do jogo da cadeia, de dentro para fora (0 se a cadeia nao chega ao jogo)
 uint32_t game_routine(const ParamOrigin& o);
 
+// N9.5 fase 3B: o ponto de chamada (o retorno, o PR na entrada) da primeira rotina do jogo da cadeia (0 sem ela)
+uint32_t game_site(const ParamOrigin& o);
+
 // a marca de um desenho: a proveniencia dele e os vertices (para o 1/w do caminho do DMA)
 DrawClass classify(const DrawOrigin& o, const Draw& d, const CommandList& cl);
 

@@ -105,6 +105,7 @@ RecompResult recomp_run(const RecompOptions& opt, std::ostream& log) {
     gen.longjmp_funcs  = cfg.longjmp_funcs;
     gen.always_slot    = cfg.native_slots;
     gen.wait_points    = cfg.native_waits;
+    gen.hud_sites      = cfg.hud_sites;
     const auto r       = codegen::generate(img, a, gen);
     res.files          = r.files;
     res.lines          = r.lines;

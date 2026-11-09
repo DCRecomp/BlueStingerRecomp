@@ -294,9 +294,11 @@ foreach(l ${linhas})
 endforeach()
 # contagem exata (revisao Codex N8.3): um objeto novo de simulacao ou de validacao nao passa sem atualizar a catraca
 if(VALIDACAO)
-  set(n_esperado 49)  # N8.7: + pvr_render_ta, pvr_texel, ta_yuv, gfx_probe (fase 0)
+  set(n_esperado 50)  # N8.7: + pvr_render_ta, pvr_texel, ta_yuv, gfx_probe (fase 0); N9.5 fase 3B: + hud_scope
 else()
-  set(n_esperado 35)
+  # N9-L L1 (14ef885): + cpu/host_fiber_<plataforma> e input/input_host_<plataforma> (a catraca nao foi atualizada entao;
+  # achado na fase 3B do N9.5, que roda o ctest do msvc-release); N9.5 fase 3B: + cpu/hud_scope
+  set(n_esperado 38)
 endif()
 if(NOT n EQUAL n_esperado)
   list(APPEND bad "manifesto com ${n} objetos (esperado ${n_esperado}: atualize a catraca e docs/N8-3-BOOT.md)")

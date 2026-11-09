@@ -59,6 +59,8 @@ void take(Sh4Context* c, uint32_t intevt) {
                      c->r[15], c->pr);
     sh4_set_sr(*c, sr | kSrMD | kSrRB | kSrBL);
     const uint32_t saved = c->ret_expect, savedSp = c->ret_sp, savedFn = c->cur_fn;
+    const uint8_t  savedHud = c->hud_role;  // N9.5 fase 3B: o tratador nao herda a marca de HUD
+    c->hud_role             = 0;
     c->ret_expect        = c->spc;  // o rte do tratador volta para SPC (BS_RTE confere)
     c->ret_sp            = c->sgr;  // com a pilha da thread interrompida
     c->cur_fn            = 0;       // sonda: o despacho do tratador vem do runtime, nao da funcao interrompida
@@ -70,6 +72,7 @@ void take(Sh4Context* c, uint32_t intevt) {
     c->ret_expect = saved;
     c->ret_sp     = savedSp;
     c->cur_fn     = savedFn;
+    c->hud_role   = savedHud;
 #if BS_VALIDACAO
     c->fn_depth = savedDepth;
 #endif

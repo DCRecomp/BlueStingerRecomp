@@ -6,6 +6,7 @@
 #include "pvr/pvr_regs.h"
 #include "pvr/pvr_texture.h"
 #include "pvr/ta.h"
+#include "cpu/hud_scope.h"
 #include "render/render_ir.h"
 
 #include <cstdio>
@@ -158,6 +159,13 @@ public:
     void skipped(const TaParam&) override { ++r_.frame.skipped_params; }
 
     bool render(const PvrFrame&, uint32_t w, uint32_t h, std::vector<uint32_t>& image) override {
+        // N9.5 fase 3B: a ancora do HUD antes de desenhar (o produto a recebe do ListSink no render_list; aqui o ListSink
+        // monta a mesma IR, e check_list_sink confere depois, desenho a desenho, que e a mesma)
+        if (g_hud_marks) {
+            bs::kamui::ListFrame lf;
+            ta_list_sink().build(r_.frame.cl.frame, stride_, lf);
+            if (lf.roles.size() == r_.frame.cl.draws.size()) r_.frame.roles = std::move(lf.roles);
+        }
         return r_.draw(w, h, image);
     }
 
@@ -263,6 +271,7 @@ private:
         namespace km = bs::kamui;
         km::ListFrame lf;
         r_.frame.origins.clear();
+        r_.frame.roles.clear();
         ta_list_sink().build(r_.frame.cl.frame, stride_, lf);
         // negativos (BS_LISTA_NATIVA_MUTACAO=<campo>): o comparador tem de acusar cada um. vertice: o primeiro vertice
         // muda meio pixel; suporte, omitidos, dois_volumes, global_dois_volumes, instrucao, descarte: a contagem + 1
@@ -346,6 +355,7 @@ private:
             why = "triangulos (" + std::to_string(lf.triangles + 2u * lf.sprites) + " x " + std::to_string(drawn.size()) + ")";
         if (why.empty()) {
             r_.frame.origins = std::move(lf.origins);  // N9.5 fase 2: a IR confere desenho a desenho
+            r_.frame.roles   = std::move(lf.roles);    // N9.5 fase 3B: a ancora do HUD, a mesma do produto
             return;
         }
         ++r_.st.list_mismatch;

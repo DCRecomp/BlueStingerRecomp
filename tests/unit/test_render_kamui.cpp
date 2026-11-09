@@ -213,7 +213,11 @@ BS_TEST(kamui_draw_class_by_library_entry_and_dma_inv_w) {
     BS_CHECK(game_routine(sprite.vertex) == 0x8C07B4E0 && classify(sprite, persp, cl) == DrawClass::Screen);
     // o mesmo recorte chamado por outra rotina do jogo (pode ser um sprite projetado da cena): desconhecida
     BS_CHECK(classify(org({0x8C190B32, 0x8C1736A0, 0x8C064A52}, false), persp, cl) == DrawClass::Unknown);
-    BS_CHECK(classify(org({0x8C16C610, 0x8C16CD2C, 0x8C16CED8, 0x8C0899D6}, false), flat, cl) == DrawClass::Screen);
+    // N9.5 fase 3B: a barra de vida so com o ponto de chamada medido (8C0899D6 tambem desenha o titulo e o inventario)
+    BS_CHECK(classify(org({0x8C16C610, 0x8C16CD2C, 0x8C16CED8, 0x8C0899D6}, false), flat, cl) == DrawClass::Unknown);
+    DrawOrigin bar = org({0x8C16C610, 0x8C16CD2C, 0x8C16CED8, 0x8C0899D6, 0x8C060380}, false);
+    bar.vertex.site[3] = 0x8C060838;
+    BS_CHECK(classify(bar, flat, cl) == DrawClass::Screen);
     BS_CHECK(classify(org({0x8C16C610, 0x8C16CD2C, 0x8C16CED8, 0x8C060380}, false), flat, cl) == DrawClass::Unknown);
     // metades de cadeias diferentes: nada e afirmado
     DrawOrigin split = model;
@@ -237,22 +241,28 @@ BS_TEST(kamui_draw_class_by_library_entry_and_dma_inv_w) {
         o.vertex.dma_writer = true;
         return o;
     };
-    const DrawOrigin corner = writer({0x8C169C30, 0x8C1692CC, 0x8C060278, 0x8C060380, 0x8C07B4E0});
-    BS_CHECK(classify(corner, flat, cl) == DrawClass::Screen);
-    BS_CHECK(hud_lookup(library_entry(corner.vertex), game_routine(corner.vertex))->role == HudRole::CornerLeft);
-    BS_CHECK(hud_lookup(0x8C16CED8, 0x8C0899D6)->role == HudRole::CornerLeft);
-    BS_CHECK(hud_lookup(0x8C1692CC, 0x8C03C0C4)->role == HudRole::Center);
-    BS_CHECK(hud_lookup(0x8C16CED8, 0x8C01F0AE)->role == HudRole::Menu);
+    DrawOrigin corner = writer({0x8C169C30, 0x8C1692CC, 0x8C060278, 0x8C060380, 0x8C07B4E0});
+    corner.vertex.site[2] = 0x8C0605CE;  // o ponto de chamada do HUD (8C060380 -> 8C060278)
+    BS_CHECK(game_site(corner.vertex) == 0x8C0605CE && classify(corner, flat, cl) == DrawClass::Screen);
+    BS_CHECK(hud_lookup(library_entry(corner.vertex), game_routine(corner.vertex), game_site(corner.vertex))->role == HudRole::CornerLeft);
+    BS_CHECK(hud_lookup(0x8C16CED8, 0x8C0899D6, 0x8C060838)->role == HudRole::CornerLeft);
+    // N9.5 fase 3B: a mesma rotina por outro ponto de chamada (o titulo, o inventario) nao e o HUD do canto
+    DrawOrigin title = corner;
+    title.vertex.site[2] = 0x8C07981C;
+    BS_CHECK(classify(title, flat, cl) == DrawClass::Unknown);
+    BS_CHECK(hud_lookup(0x8C16CED8, 0x8C0899D6, 0x8C08A1C2) == nullptr && hud_lookup(0x8C1692CC, 0x8C060278, 0) == nullptr);
+    BS_CHECK(hud_lookup(0x8C1692CC, 0x8C03C0C4, 0)->role == HudRole::Center);
+    BS_CHECK(hud_lookup(0x8C16CED8, 0x8C01F0AE, 0)->role == HudRole::Menu);
     // a mesma entrada 8C1692CC desenha um sprite preso ao mundo quando o jogo o projetou (8C0584CC): cena
     BS_CHECK(classify(writer({0x8C169C30, 0x8C1692CC, 0x8C0584CC, 0x8C058286}), flat, cl) == DrawClass::Scene);
     // as particulas e as faiscas do cais nunca sao HUD
     BS_CHECK(classify(writer({0x8C169450, 0x8C16938C, 0x8C057D00, 0x8C052240}), flat, cl) == DrawClass::Scene);
     // o escritor conhecido com um par fora da tabela: desconhecida, mesmo com 1/w constante
     BS_CHECK(classify(writer({0x8C169C30, 0x8C1692CC, 0x8C064A52}), flat, cl) == DrawClass::Unknown);
-    BS_CHECK(hud_lookup(0x8C1692CC, 0x8C064A52) == nullptr && hud_lookup(0, 0x8C060278) == nullptr);
+    BS_CHECK(hud_lookup(0x8C1692CC, 0x8C064A52, 0) == nullptr && hud_lookup(0, 0x8C060278, 0) == nullptr);
     // revisao Codex 20261109-024548: sem curinga; o desenho de modelos com um chamador nao medido e desconhecido
     BS_CHECK(classify(org({0x8C17EA5C, 0x8C15F078, 0x8C15F856, 0x8C064A52}, false), persp, cl) == DrawClass::Unknown);
-    for (uint32_t e : {0x8C15F856u, 0x8C15F8B8u, 0x8C161738u, 0x8C160C12u, 0x8C1601FEu}) BS_CHECK(hud_lookup(e, 0) == nullptr);
+    for (uint32_t e : {0x8C15F856u, 0x8C15F8B8u, 0x8C161738u, 0x8C160C12u, 0x8C1601FEu}) BS_CHECK(hud_lookup(e, 0, 0) == nullptr);
 }
 #endif
 
@@ -296,3 +306,40 @@ BS_TEST(kamui_dma_origin_shadow_needs_the_whole_block_from_one_writer) {
     BS_CHECK(s.marked(blk));
 }
 #endif
+
+// N9.5 fase 3B: o papel de HUD de cada parametro chega a cada desenho (ListFrame::roles), so quando a lista recebeu papeis;
+// o parametro de 64 bytes fica com o papel da 1a metade
+BS_TEST(kamui_list_sink_roles_follow_each_draw) {
+    ListSink s;
+    s.list_init();
+    feed(s, {pcw(4, 0, 0x02), 0x80000000u, 0x20000000u, 0, 0, 0, 0, 0});
+    vertex(s, 0, 0, 0xFFFF0000, false);
+    vertex(s, 10, 0, 0xFF00FF00, false);
+    vertex(s, 0, 10, 0xFF0000FF, true);
+    ListFrame f0;
+    s.build(frame(), 0, f0);
+    BS_CHECK(f0.cl.draws.size() == 1 && f0.roles.empty());  // sem set_role: nada
+    s.list_init();
+    s.set_role(0);
+    feed(s, {pcw(4, 0, 0x02), 0x80000000u, 0x20000000u, 0, 0, 0, 0, 0});
+    vertex(s, 0, 0, 0xFFFF0000, false);
+    vertex(s, 10, 0, 0xFF00FF00, false);
+    vertex(s, 0, 10, 0xFF0000FF, true);  // desenho 0: cena (papel 0)
+    s.set_role(1);
+    feed(s, {pcw(5, 2, 0x00), 0, 0, 0, 0xFFFFFFFF, 0, 0, 0});
+    feed(s, {pcw(7, 2, 0, true), fbits(0), fbits(0), fbits(1), fbits(8), fbits(0), fbits(1), fbits(8)});
+    s.set_role(0);  // a 2a metade do sprite chega fora do escopo: vale a 1a
+    feed(s, {fbits(8), fbits(1), fbits(0), fbits(8), 0, 0, 0, 0});
+    ListFrame f;
+    s.build(frame(), 0, f);
+    BS_CHECK(f.cl.draws.size() == 3 && f.roles.size() == 3);
+    BS_CHECK(f.roles[0] == 0 && f.roles[1] == 1 && f.roles[2] == 1);
+    s.list_init();  // o TA_LIST_INIT desliga os papeis ate o proximo set_role
+    feed(s, {pcw(4, 0, 0x02), 0x80000000u, 0x20000000u, 0, 0, 0, 0, 0});
+    vertex(s, 0, 0, 0xFFFF0000, false);
+    vertex(s, 10, 0, 0xFF00FF00, false);
+    vertex(s, 0, 10, 0xFF0000FF, true);
+    ListFrame g;
+    s.build(frame(), 0, g);
+    BS_CHECK(g.roles.empty());
+}

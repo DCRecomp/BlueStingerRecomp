@@ -26,8 +26,10 @@ struct Thread {
     uint32_t entry = 0;  // thread nova: primeira instrucao
     uint32_t redirect = 0;  // retomada por longjmp: ponto de retorno do setjmp
     uint32_t curFn = 0;     // c->cur_fn ao suspender (sonda N0: atribuicao por thread)
+    uint8_t  hudRole = 0;   // N9.5 fase 3B: c->hud_role ao suspender
 #if BS_VALIDACAO
     uint32_t fnRing[kFnRing] = {};  // N9.5 fase 2: a cadeia de chamadas desta thread ao suspender
+    uint32_t prRing[kFnRing] = {};  // N9.5 fase 3B: e o PR de cada entrada
     uint32_t fnDepth         = 0;
 #endif
 };
@@ -71,8 +73,10 @@ void switchTo(Sh4Context* c, size_t next) {
     cur.retExpect = c->ret_expect;
     cur.retSp     = c->ret_sp;
     cur.curFn     = c->cur_fn;
+    cur.hudRole   = c->hud_role;
 #if BS_VALIDACAO
     std::copy(std::begin(c->fn_ring), std::end(c->fn_ring), cur.fnRing);
+    std::copy(std::begin(c->pr_ring), std::end(c->pr_ring), cur.prRing);
     cur.fnDepth = c->fn_depth;
 #endif
     const size_t self = g_current;
@@ -82,8 +86,10 @@ void switchTo(Sh4Context* c, size_t next) {
     c->ret_expect     = n.retExpect;
     c->ret_sp         = n.retSp;
     c->cur_fn         = n.curFn;
+    c->hud_role       = n.hudRole;
 #if BS_VALIDACAO
     std::copy(std::begin(n.fnRing), std::end(n.fnRing), c->fn_ring);
+    std::copy(std::begin(n.prRing), std::end(n.prRing), c->pr_ring);
     c->fn_depth = n.fnDepth;
 #endif
     host::fiber_switch(n.fiber);
@@ -96,8 +102,10 @@ void switchTo(Sh4Context* c, size_t next) {
     c->ret_expect = g_threads[self].retExpect;
     c->ret_sp     = g_threads[self].retSp;
     c->cur_fn     = g_threads[self].curFn;
+    c->hud_role   = g_threads[self].hudRole;
 #if BS_VALIDACAO
     std::copy(std::begin(g_threads[self].fnRing), std::end(g_threads[self].fnRing), c->fn_ring);
+    std::copy(std::begin(g_threads[self].prRing), std::end(g_threads[self].prRing), c->pr_ring);
     c->fn_depth = g_threads[self].fnDepth;
 #endif
     // retomada por longjmp: os quadros sobem ate o que chamou o setjmp (BS_CALL_REENTRANT)

@@ -3,6 +3,7 @@
 #include "analysis/analysis.h"
 
 #include <filesystem>
+#include <map>
 #include <set>
 #include <string>
 
@@ -18,6 +19,7 @@ struct GameConfig {
     std::set<uint32_t> setjmp_funcs, longjmp_funcs;  // [threads]
     std::set<uint32_t> native_slots;                 // [native] slots (fronteiras migraveis)
     std::set<uint32_t> native_waits;                 // [native] esperas (back-edges de lacos de espera, N2b)
+    std::map<uint32_t, uint8_t> hud_sites;           // [remaster] pontos de chamada do HUD (retorno) -> papel (N9.5 3B)
 };
 
 GameConfig loadConfig(const std::filesystem::path& path);

@@ -20,6 +20,7 @@
 // que roda em sombra em cada render: tamanho, fundo, parametros do quadro, Region Array e a gravacao no framebuffer
 // (as mesmas faixas, com os mesmos bytes) sao comparados com os deste arquivo ([render-pass]). No produto, o render e
 // system/render_bus.cpp.
+#include "cpu/hud_scope.h"
 #include "pvr/pvr_render.h"
 
 #include "cpu/sh4_runtime.h"
@@ -286,6 +287,7 @@ std::string pvr_render_pass_summary() {
 }
 
 RenderStats pvr_render(Sh4Context* c) {
+    hud_render_tick();  // N9.5 fase 3B: a idade das marcas de HUD (o mesmo do produto, render_bus)
     vram_heap_check();  // N8.7 3b (validacao): a memoria das texturas em sombra, as paginas tocadas desde o ultimo render
     const native::render::soft::FpEnv fpEnv;  // ambiente fixo nesta thread (os workers instalam o seu)
     RenderStats    st;

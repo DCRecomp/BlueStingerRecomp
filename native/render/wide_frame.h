@@ -8,11 +8,13 @@
 // largo. O jogo continua projetando em 4:3 (RAM, njSetScreen, o pan do som, os testes "na tela" e os efeitos ficam os
 // do Original: o estado e o som nao mudam por construcao).
 //
-// O que fica 2D (HUD, textos, telas do jogo) tambem anda o deslocamento: fica centrado num 4:3 virtual ate as fases 2 e
-// 3 do N9.5 (a marca cena/HUD e as ancoras). Este modulo nao decide nada pelo conteudo de um desenho.
+// O que fica 2D (HUD, textos, telas do jogo) tambem anda o deslocamento: fica centrado num 4:3 virtual. A fase 3 do N9.5
+// passa uma ancora por desenho (a marca de HUD do produto): os ancorados a esquerda ficam na borda
+// esquerda do quadro largo (nao andam). Este modulo nao decide nada pelo conteudo de um desenho.
 #include "render/render.h"
 
 #include <cstdint>
+#include <vector>
 
 namespace bs::native::render {
 
@@ -34,7 +36,11 @@ inline constexpr uint32_t wide_offset(uint32_t width, uint32_t wide_width) {
 // escurecimento de tela cheia medido na rota de combate, os fades, barras de cinema) cobre a largura larga inteira: os
 // vertices da esquerda ficam em x (sem o deslocamento) e os da direita andam o dobro. Uma cor uniforme estendida nao
 // distorce nada; imagens (com textura) e gradientes nunca sao esticados. Devolve quantos desenhos foram estendidos.
-uint32_t widen(CommandList& cl, uint32_t wide_width);
+//
+// N9.5 fase 3B: `anchors` (alinhado a cl.draws; vazio = todos no centro) da a ancora de cada desenho: kAnchorCenter anda o
+// deslocamento (o 4:3 centrado), kAnchorLeft fica onde esta (na borda esquerda do quadro largo), vertices e recorte.
+inline constexpr uint8_t kAnchorCenter = 0, kAnchorLeft = 1;
+uint32_t widen(CommandList& cl, uint32_t wide_width, const std::vector<uint8_t>& anchors = {});
 
 // As colunas centrais (o 4:3 do jogo) de uma imagem larga: dst = src[y][offset .. offset + width).
 void crop_center(const uint32_t* src, uint32_t src_width, uint32_t height, uint32_t* dst, uint32_t width);

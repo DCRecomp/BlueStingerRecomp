@@ -16,6 +16,7 @@
 // produto, a entrada e system/area4_bus.cpp.
 #include "pvr/ta.h"
 
+#include "cpu/hud_scope.h"
 #include "cpu/sh4_mem.h"
 #include "cpu/sh4_runtime.h"
 #include "pvr/holly_intc.h"
@@ -56,7 +57,8 @@ kamui::ParamOrigin chain_of(const Sh4Context* c) {
     for (uint32_t i = 0; c && int(i) < kamui::kOriginDepth && i < c->fn_depth && i < kFnRing; ++i) {
         const uint32_t f = c->fn_ring[(c->fn_depth - 1 - i) % kFnRing];
         if (!f) break;
-        o.fn[i] = f;
+        o.fn[i]   = f;
+        o.site[i] = c->pr_ring[(c->fn_depth - 1 - i) % kFnRing];
     }
     return o;
 }
@@ -238,9 +240,13 @@ void ta_list_continue() {
 }
 
 kamui::ListSink& ta_list_sink() { return g_list; }
-void             ta_origin_dma(bool on) { g_originDma = on; }
+void             ta_origin_dma(bool on) {
+    g_originDma = on;
+    if (!on) g_hud_dma_role = -1;
+}
 void ta_origin_dma_src(uint32_t src) {
     g_originDmaSrc = src;
+    if (g_hud_marks) g_hud_dma_role = hud_block_take(src);  // N9.5 fase 3B: o mesmo do produto (dma_bus)
     if (dma_origin_on() && sh4_is_ram(src)) g_dmaShadow.mark(src & kRamMask);
 }
 void ta_origin_dma_counts(uint64_t& with_writer, uint64_t& without) { with_writer = g_dmaWithWriter, without = g_dmaWithoutWriter; }
@@ -258,6 +264,7 @@ bool ta_fifo_write(Sh4Context* c, uint32_t target, const uint32_t* data) {
         area4_route(target, Area4Entry::Path::Polygon);
         ++g_a4Poly;
         g_list.set_origin(origin_of(c));
+        if (g_hud_marks) g_list.set_role(hud_param_role(c));  // N9.5 fase 3B: o mesmo do produto (area4_bus)
         const kamui::BlockResult r = g_list.feed(data);
         // a FIFO do legado e a referencia (interrupcoes e erro); o fim de lista do ListSink tem de ser o mesmo
         g_bytes += 32;

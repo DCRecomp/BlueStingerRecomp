@@ -59,13 +59,14 @@ ListType list_type(uint32_t l) {
 // captura (desenhos por strip, triangulo a triangulo quando o estado muda no meio, volumes pela instrucao do global)
 class Decoder {
 public:
-    Decoder(const FrameParams& frame, uint32_t stride, ListFrame& out) : out_(out), stride_(stride) {
+    Decoder(const FrameParams& frame, uint32_t stride, ListFrame& out, bool roles) : out_(out), stride_(stride), roles_(roles) {
         out_ = {};
         out_.cl.frame        = frame;
         out_.texture_stride  = stride;
     }
 
     void feed(const ListParam& p) {
+        role_ = p.role;
         const uint32_t pcw = p.w[0], type = pcw >> 29;
         if (type == kEndOfList) {
             strip_break();
@@ -113,6 +114,12 @@ private:
 
     ListFrame& out_;
     uint32_t   stride_;
+    bool       roles_ = false;  // N9.5 fase 3B: preencher out_.roles
+    uint8_t    role_  = 0;      // o papel do parametro atual
+    // um desenho novo em cl.draws: o papel dele (o do parametro que o abriu)
+    void role_note() {
+        if (roles_) out_.roles.push_back(role_);
+    }
     Global     g_;
     uint32_t   list_ = 0;
     int        cx0_ = 0, cy0_ = 0, cx1_ = 0, cy1_ = 0;
@@ -260,6 +267,7 @@ private:
             } else if (!tri_mode_ && n == 3) {  // o primeiro triangulo do strip abre o desenho
                 open_ = int32_t(cl.draws.size());
                 cl.draws.push_back({s, uint32_t(cl.vertices.size()), 3});
+            role_note();
 #if BS_VALIDACAO
                 note(DrawKind::Strip);
 #endif
@@ -271,6 +279,7 @@ private:
                 Vtx t[3] = {strip_[n - 3], strip_[n - 2], strip_[n - 1]};
                 if (n % 2 == 0) std::swap(t[0], t[1]);
                 cl.draws.push_back({s, uint32_t(cl.vertices.size()), 3});
+            role_note();
 #if BS_VALIDACAO
                 note(DrawKind::StripTriangle);
 #endif
@@ -313,6 +322,7 @@ private:
         CommandList&    cl     = out_.cl;
         for (const Vtx* const* t : {t1, t2}) {
             cl.draws.push_back({s, uint32_t(cl.vertices.size()), 3});
+            role_note();
 #if BS_VALIDACAO
             note(DrawKind::Sprite);
 #endif
@@ -356,6 +366,7 @@ private:
 
 void ListSink::list_init() {
     params_.clear();
+    role_ = 0, roles_on_ = false;
 #if BS_VALIDACAO
     origins_.clear();
 #endif
@@ -369,6 +380,7 @@ void ListSink::push(const uint32_t* w, uint32_t words) {
     ListParam p;
     p.list  = uint32_t(list_ < 0 ? 0 : list_);
     p.words = words;
+    p.role  = role_;
     std::memcpy(p.w, w, words * 4);
     params_.push_back(p);
 #if BS_VALIDACAO
@@ -383,6 +395,8 @@ BlockResult ListSink::feed(const uint32_t* d) {
         uint32_t w[16];
         std::memcpy(w, half_.w, 32);
         std::memcpy(w + 8, d, 32);
+        const uint8_t role_second = role_;
+        role_                     = half_role_;
 #if BS_VALIDACAO
         // revisao Codex 20261108-201953: o parametro e da 1a metade (o PCW esta nela); metades de cadeias diferentes
         // ficam marcadas (a marca nao afirma nada delas)
@@ -395,6 +409,7 @@ BlockResult ListSink::feed(const uint32_t* d) {
 #else
         push(w, 16);
 #endif
+        role_ = role_second;
         pending_half_ = false;
         return r;
     }
@@ -430,6 +445,7 @@ BlockResult ListSink::feed(const uint32_t* d) {
         return r;
     }
     std::memcpy(half_.w, d, 32);
+    half_role_ = role_;  // N9.5 fase 3B: o papel do parametro de 64 bytes e o da 1a metade
 #if BS_VALIDACAO
     half_origin_ = origin_;
 #endif
@@ -438,7 +454,7 @@ BlockResult ListSink::feed(const uint32_t* d) {
 }
 
 void ListSink::build(const FrameParams& frame, uint32_t texture_stride, ListFrame& out) const {
-    Decoder dec(frame, texture_stride, out);
+    Decoder dec(frame, texture_stride, out, roles_on_);
 #if BS_VALIDACAO
     dec.origins(&origins_);
     for (size_t i = 0; i < params_.size(); ++i) {

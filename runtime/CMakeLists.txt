@@ -20,6 +20,7 @@ target_link_libraries(bs_kamui PUBLIC bs_native_render)
 # substrato AOT (L1-L3, L7, L21: ate o N10): contexto, despacho, servico e cadencia, fibras, RAM e roteamento, mods
 add_library(bs_rt_aot OBJECT
   cpu/sh4_context.cpp
+  cpu/hud_scope.cpp      # N9.5 fase 3B: a marca leve de HUD
   cpu/sh4_runtime.cpp
   cpu/sh4_threads.cpp
   cpu/host_fiber_${BS_PLAT}.cpp

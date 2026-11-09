@@ -3,6 +3,7 @@
 
 #include "boot/native_boot.h"
 #include "disc/disc_image.h"
+#include "cpu/hud_scope.h"
 #include "cpu/sh4_runtime.h"
 #include "cpu/sh4_threads.h"
 #include "system/syscall_service.h"
@@ -474,7 +475,9 @@ void GameHost::applyRequests() {
     }
     if (const int64_t wv = widePending_.exchange(-1); wv >= 0 && uint32_t(wv) != transitional::render_capture::wide()) {
         transitional::render_capture::set_wide(uint32_t(wv));
-        std::fprintf(stderr, "[render] quadro: %s\n", wv ? ("largo " + std::to_string(wv) + "x480 (hor+)").c_str() : "4:3");
+        // N9.5 fase 3B: a marca leve de HUD so com o quadro largo (a Remastered 16:9); no 4:3 e na Original fica desligada
+        hud_marks_enable(wv != 0);
+        std::fprintf(stderr, "[render] quadro: %s\n", wv ? ("largo " + std::to_string(wv) + "x480 (hor+), HUD ancorado").c_str() : "4:3");
     }
     if (const float s = scalePending_.exchange(0.f); s > 0 && s != transitional::render_capture::scale()) {
         transitional::render_capture::set_scale(s);
@@ -516,6 +519,13 @@ void GameHost::vblank() {
         }
         return t;
     }();
+    // N9.5 fase 3B, so validacao: BS_HUD_MARCA=1 liga a marca leve de HUD sem o quadro largo (a captura confere o papel do
+    // produto contra a tabela da fase 3A em qualquer cena, tools/dev/n95_proveniencia.py --marca)
+    static const bool kHudMarca = [] {
+        const char* v = std::getenv("BS_HUD_MARCA");
+        return v && std::string(v) == "1";
+    }();
+    if (kHudMarca && !g_hud_marks) hud_marks_enable(true);
     if (kTela.largura > 0 && ram_) {
         std::memcpy(ram_ + 0x24CCB8, &kTela.largura, 4);
         std::memcpy(ram_ + 0x24CCC0, &kTela.cx, 4);

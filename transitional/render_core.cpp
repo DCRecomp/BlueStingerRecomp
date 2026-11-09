@@ -78,6 +78,7 @@ bool Renderer::render_list(const bs::kamui::ListFrame& lf, uint32_t w, uint32_t 
     frame.modifier_params   = lf.modifier_params, frame.modifier_volumes = lf.modifier_volumes;
     frame.modifier_unclosed = lf.modifier_unclosed, frame.skipped_params = lf.skipped_params;
     frame.sprites           = lf.sprites;
+    frame.roles             = lf.roles;  // N9.5 fase 3B
     // o que os retornos global/modifier contavam durante a decodificacao
     st.two_volume += lf.global_two_volume, st.volume_bad_instruction += lf.volume_bad_instruction;
     st.volume_mixed_cull += lf.volume_mixed_cull, st.volume_inclusion += lf.volume_inclusion;
@@ -377,7 +378,30 @@ bool Renderer::vk_attempt(uint32_t w, uint32_t h, std::vector<uint32_t>& out, st
     const nr::CommandList* cl = &frame.cl;
     if (wideW) {
         wideCl_ = frame.cl;
-        nr::widen(wideCl_, wideW);
+        nr::widen(wideCl_, wideW, frame.roles);  // N9.5 fase 3B: o HUD do canto na borda esquerda
+        // Diagnostico (N9.5 fase 3B, criterio H3 de tools/dev/n95_headless.py): BS_HUD_ANCORAS_LOG=<arquivo> grava, a cada
+        // render com desenhos ancorados, o retangulo deles nas coordenadas do 4:3 (da IR, antes do deslocamento)
+        static std::FILE* ancoras = [] {
+            const char* v = std::getenv("BS_HUD_ANCORAS_LOG");
+            return v ? std::fopen(v, "w") : nullptr;
+        }();
+        if (ancoras && frame.roles.size() == frame.cl.draws.size()) {
+            float    x0 = 1e9f, y0 = 1e9f, x1 = -1e9f, y1 = -1e9f;
+            uint32_t n  = 0;
+            for (size_t i = 0; i < frame.cl.draws.size(); ++i) {
+                if (frame.roles[i] != nr::kAnchorLeft) continue;
+                const nr::Draw& d = frame.cl.draws[i];
+                for (uint32_t k = 0; k < d.vertex_count && d.first_vertex + k < frame.cl.vertices.size(); ++k) {
+                    const nr::Vertex& v = frame.cl.vertices[d.first_vertex + k];
+                    x0 = v.x < x0 ? v.x : x0, x1 = v.x > x1 ? v.x : x1, y0 = v.y < y0 ? v.y : y0, y1 = v.y > y1 ? v.y : y1;
+                }
+                ++n;
+            }
+            if (n) {
+                std::fprintf(ancoras, "%llu\t%u\t%.1f\t%.1f\t%.1f\t%.1f\n", static_cast<unsigned long long>(st.renders), n, x0, y0, x1, y1);
+                std::fflush(ancoras);
+            }
+        }
         cl = &wideCl_;
     }
     // testes: Device falha esta tentativa e a da recuperacao; DeviceOnce so esta
@@ -716,22 +740,37 @@ bool save_frame_origins(const std::string& path, const Frame& f) {
     // a semantica do desenho ao lado (para as regras da secao 13): vertices, 1/w minimo e maximo, teste e escrita de
     // profundidade, textura, blend de origem e de destino
     o << "desenho\tlista\ttipo\tparam\tglobal\tdma\tcadeia\tcadeia_global\tvertices\tinvw_min\tinvw_max\tprofundidade"
-         "\tescreve_z\ttextura\tsrc\tdst\tmarca\tescritor_dma\n";
+         "\tescreve_z\ttextura\tsrc\tdst\tmarca\tescritor_dma\tpapel_tabela\tpapel_produto"
+         "\tsitio\tx0\tx1\ty0\ty1\n";
     for (size_t i = 0; i < f.origins.size(); ++i) {
         const bs::kamui::DrawOrigin& d = f.origins[i];
         const nr::Draw&              w = f.cl.draws[i];
-        float                        lo = 0, hi = 0;
+        // N9.5 fase 3B: o papel pela tabela medida (a cadeia da validacao) e o da marca leve do produto (Frame::roles; vazio
+        // com a marca desligada): os dois tem de bater
+        const bs::kamui::HudEntry* he =
+            d.vertex.split ? nullptr : bs::kamui::hud_lookup(bs::kamui::library_entry(d.vertex), bs::kamui::game_routine(d.vertex),
+                                                  bs::kamui::game_site(d.vertex));
+        const int role_table = he ? int(he->role) : -1, role_product = i < f.roles.size() ? int(f.roles[i]) : -1;
+        float                        lo = 0, hi = 0, x0 = 0, x1 = 0, y0 = 0, y1 = 0;
         for (uint32_t k = 0; k < w.vertex_count && w.first_vertex + k < f.cl.vertices.size(); ++k) {
-            const float iw = f.cl.vertices[w.first_vertex + k].inv_w;
+            const nr::Vertex& vx = f.cl.vertices[w.first_vertex + k];
+            const float       iw = vx.inv_w;
             if (!k || iw < lo) lo = iw;
             if (!k || iw > hi) hi = iw;
+            if (!k || vx.x < x0) x0 = vx.x;
+            if (!k || vx.x > x1) x1 = vx.x;
+            if (!k || vx.y < y0) y0 = vx.y;
+            if (!k || vx.y > y1) y1 = vx.y;
         }
+        char pos[96];
+        std::snprintf(pos, sizeof pos, "%08X\t%.1f\t%.1f\t%.1f\t%.1f", bs::kamui::game_site(d.vertex), x0, x1, y0, y1);
         char sem[160];
         std::snprintf(sem, sizeof sem, "%u\t%.9g\t%.9g\t%d\t%d\t%u\t%d\t%d", w.vertex_count, lo, hi, int(w.state.depth),
                       int(w.state.depth_write), w.state.texture.value, int(w.state.src), int(w.state.dst));
         o << i << '\t' << int(w.state.list) << '\t' << kKind[int(d.kind)] << '\t' << d.param << '\t' << d.global_param << '\t'
           << (d.vertex.dma ? 1 : 0) << '\t' << chain(d.vertex) << '\t' << chain(d.global) << '\t' << sem << '\t'
-          << bs::kamui::draw_class_name(bs::kamui::classify(d, w, f.cl)) << '\t' << (d.vertex.dma_writer ? 1 : 0) << '\n';
+          << bs::kamui::draw_class_name(bs::kamui::classify(d, w, f.cl)) << '\t' << (d.vertex.dma_writer ? 1 : 0) << '\t'
+          << role_table << '\t' << role_product << '\t' << pos << '\n';
     }
     return bool(o);
 }

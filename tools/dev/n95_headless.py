@@ -72,6 +72,18 @@ class Corrida:
         return np.asarray(Image.open(p).convert("RGB"), dtype=np.float64) if os.path.exists(p) else None
 
 
+def ancoras(r):
+    """N9.5 fase 3B: o retangulo (x0, y0, x1, y1) dos desenhos ancorados de todos os renders (BS_HUD_ANCORAS_LOG), ou None."""
+    p = os.path.join(r.dir, "ancoras.tsv")
+    if not os.path.exists(p):
+        return None
+    caixas = [list(map(float, l.split("\t")[2:6])) for l in open(p, encoding="utf-8").read().splitlines() if l.strip()]
+    if not caixas:
+        return None
+    return (int(min(c[0] for c in caixas)), int(min(c[1] for c in caixas)),
+            int(max(c[2] for c in caixas) + 0.999), int(max(c[3] for c in caixas) + 0.999))
+
+
 def psnr(a, b):
     mse = ((a - b) ** 2).mean()
     return 99.0 if mse == 0 else 10 * np.log10(255.0 ** 2 / mse)
@@ -117,6 +129,8 @@ def main():
         if casos & {"H3", "H4"}:
             rodadas["r43"] = Corrida(base, "r43", a, "remastered", ["--render", "nativo"])
             rodadas["r169"] = Corrida(base, "r169", a, "remastered", ["--render", "nativo", "--proporcao", "16:9"])
+            # N9.5 fase 3B: o retangulo dos desenhos ancorados (o HUD do canto), da IR, para o criterio do framebuffer
+            rodadas["r169"].env["BS_HUD_ANCORAS_LOG"] = os.path.join(rodadas["r169"].dir, "ancoras.tsv")
         if "H4" in casos:
             for alt in (1080, 1440, 2160):
                 rodadas["e%d" % alt] = Corrida(base, "e%d" % alt, a, "remastered",
@@ -154,8 +168,35 @@ def main():
                 check("H3 %s centro da larga = quadro do jogo (555)" % v, difc == 0,
                       "%d px" % difc)
                 difg = np.abs(g - g43).max(axis=2)
-                check("H3 %s quadro do jogo 16:9 x 4:3 (bordas de triangulo)" % v, (difg > 0).sum() <= 0.001 * difg.size,
-                      "%d px, max %d" % ((difg > 0).sum(), difg.max()))
+                anc = ancoras(r169)
+                if anc is None:
+                    # revisao Codex 20261109-171852: a Remastered 16:9 desta rota mostra o HUD do canto; sem ancora nenhuma, a
+                    # marca regrediu (o recorte central ficaria igual ao 4:3 e o criterio antigo passaria sem medir o HUD)
+                    check("H3 %s HUD do canto ancorado (BS_HUD_ANCORAS_LOG)" % v, False, "nenhum desenho ancorado")
+                    check("H3 %s quadro do jogo 16:9 x 4:3 (bordas de triangulo)" % v, (difg > 0).sum() <= 0.001 * difg.size,
+                          "%d px, max %d" % ((difg > 0).sum(), difg.max()))
+                else:
+                    # N9.5 fase 3B (decisao do mantenedor, 2026-11-09): com o HUD do canto ancorado, o framebuffer (o recorte
+                    # central do quadro largo) perde o HUD. O criterio continua inteiro fora dos retangulos do HUD, que vem da
+                    # IR (BS_HUD_ANCORAS_LOG): onde o HUD esta no 4:3 e onde a parte dele que cai no recorte aparece (-107)
+                    x0, y0, x1, y1 = anc
+                    fora = np.ones(difg.shape, dtype=bool)
+                    for dx in (0, -107):
+                        fora[max(0, y0):y1 + 1, max(0, x0 + dx):max(0, x1 + 1 + dx)] = False
+                    # o retangulo nao pode tomar o quadro (o criterio ficaria vazio): o HUD do canto ocupa uma faixa pequena
+                    check("H3 %s retangulo do HUD ancorado pequeno" % v, (~fora).sum() <= 0.10 * fora.size,
+                          "%.1f%% do quadro" % (100.0 * (~fora).sum() / fora.size))
+                    d = difg[fora]
+                    check("H3 %s quadro do jogo 16:9 x 4:3 fora do HUD ancorado (bordas de triangulo)" % v,
+                          (d > 0).sum() <= 0.001 * d.size, "%d px, max %d; HUD x %d..%d y %d..%d" % (
+                              (d > 0).sum(), d.max() if d.size else 0, x0, x1, y0, y1))
+                    # o HUD ancorado no quadro largo, na posicao x do 4:3: os pixels do HUD (verdes) do 4:3 iguais no largo
+                    hud = np.zeros(difg.shape, dtype=bool)
+                    hud[max(0, y0):y1 + 1, max(0, x0):x1 + 1] = True
+                    hud &= (g43[..., 1] > 150) & (g43[..., 0] < 120)
+                    iguais = (np.abs(hd[:, :g43.shape[1]][hud] - g43[hud]).max(axis=1) <= 24).mean() if hud.any() else 0
+                    check("H3 %s HUD ancorado na borda esquerda do quadro largo" % v, hud.sum() > 100 and iguais >= 0.95,
+                          "%d px do HUD, %.1f%% iguais" % (hud.sum(), 100 * iguais))
                 esq, dir_ = cena(hd[:, :100]), cena(hd[:, -100:])
                 if v == "003800":  # o corredor de frente: as duas laterais tem a sala
                     check("H3 %s laterais com cena" % v, esq > 0.5 and dir_ > 0.5, "%.0f%% / %.0f%%" % (100 * esq, 100 * dir_))

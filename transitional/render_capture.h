@@ -56,6 +56,9 @@ struct Frame {
     uint32_t                texture_stride = 0;  // TEXT_CONTROL do render (stride das texturas lineares)
     uint32_t                modifier_params = 0, modifier_volumes = 0, modifier_unclosed = 0, skipped_params = 0,
                             sprites = 0;
+    // N9.5 fase 3B: a ancora de cada desenho (alinhada a cl.draws; o papel de HUD do produto, ListFrame::roles), so na
+    // Remastered com o quadro largo; vazia no resto
+    std::vector<uint8_t> roles;
 #if BS_VALIDACAO
     // N9.5 fase 2: a proveniencia de cada desenho (alinhada a cl.draws), copiada do ListSink quando a IR dele confere com
     // esta desenho a desenho (check_list_sink); vazia se nao conferiu

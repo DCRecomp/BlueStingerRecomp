@@ -91,3 +91,21 @@ BS_TEST(codegen_rte_uses_spc) {
     BS_CHECK(spc != std::string::npos && sr != std::string::npos && ret != std::string::npos);
     BS_CHECK(spc < sr && sr < ret);
 }
+
+// N9.5 fase 3B: so os pontos de chamada do HUD ([remaster] no TOML, pelo retorno) ficam dentro do escopo da marca leve;
+// as outras chamadas da mesma funcao e as outras funcoes nao mudam
+BS_TEST(codegen_emits_hud_scope_only_at_listed_call_sites) {
+    const auto img = fixtureImage();
+    const auto a   = run();
+    codegen::Options opt;
+    opt.hud_sites[0x8C010012] = 1;  // o retorno do bsr para 8C01005C
+    opt.hud_sites[0x8C010040] = 1;  // o retorno do jsr de alvo resolvido (BS_EXPECT_TARGET em 8C01003C)
+    const std::string s = codegen::emitFunction(img, a, a.functions.at(fx::kMain), opt);
+    BS_CHECK(s.find("{ BS_HUD_SCOPE(1); BS_CALL(BSG_FN(8C01005C)(c), 0x8C010012u); }") != std::string::npos);
+    BS_CHECK(s.find("BS_HUD_SCOPE(1); BS_CALL(BSG_FN(8C010060)(c), 0x8C010040u); }") != std::string::npos);
+    size_t n = 0;
+    for (size_t p = s.find("BS_HUD_SCOPE("); p != std::string::npos; p = s.find("BS_HUD_SCOPE(", p + 1)) ++n;
+    BS_CHECK(n == 2);
+    const std::string t = codegen::emitFunction(img, a, a.functions.at(fx::kMain), codegen::Options{});
+    BS_CHECK(t.find("BS_HUD_SCOPE") == std::string::npos);
+}

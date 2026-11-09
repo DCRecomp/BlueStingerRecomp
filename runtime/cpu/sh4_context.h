@@ -51,11 +51,13 @@ struct Sh4Context {
     uint32_t ret_sp;      // R15 do chamador nesse ponto: identifica a thread do guest (sh4_threads)
     uint32_t redirect;    // longjmp pendente: ponto de reentrada (retorno de setjmp) a alcancar
     uint32_t cur_fn;      // funcao do guest em execucao (BS_FN_ENTER/BS_CALL); so diagnostico (sonda N0)
+    uint8_t  hud_role;    // N9.5 fase 3B: o papel de HUD da rotina em execucao (BS_HUD_SCOPE, cpu/hud_scope.h); 0 = nenhum
 #if BS_VALIDACAO
     // N9.5 fase 2 (so validacao): a cadeia de chamadas do guest para a proveniencia dos desenhos. Cada BS_FN_ENTER grava
     // a entrada em fn_ring[fn_depth % kFnRing] e sobe fn_depth; BS_CALL devolve a profundidade do chamador no retorno. O
     // valor 0 separa o tratador de uma interrupcao da cadeia interrompida. O produto nao tem nada disto.
     uint32_t fn_ring[kFnRing];
+    uint32_t pr_ring[kFnRing];  // N9.5 fase 3B: o PR em cada entrada (o retorno do ponto de chamada)
     uint32_t fn_depth;
 #endif
 

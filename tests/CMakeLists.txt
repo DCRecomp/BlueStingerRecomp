@@ -2,6 +2,7 @@ add_executable(bs_unit_tests
   unit/main.cpp
   unit/test_skeleton.cpp
   unit/test_call_chain.cpp
+  unit/test_hud_scope.cpp
   unit/test_disc.cpp
   unit/test_decoder.cpp
   unit/test_ops.cpp

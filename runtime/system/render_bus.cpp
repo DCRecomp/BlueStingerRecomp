@@ -3,6 +3,7 @@
 // texturas (texture_memory/vram_touch, a TextureHeap do 3b): tamanho, fundo, parametros do quadro, Region Array, as
 // listas do Kamui pelo ListSink para a IR, o desenho pela IR (o PvrListRenderer, transitional/render_core) e a gravacao
 // no framebuffer. O rasterizador de referencia (pvr/pvr_render.cpp, com o caminho do TA) fica na validacao.
+#include "cpu/hud_scope.h"
 #include "pvr/pvr_render.h"
 
 #include "cpu/sh4_runtime.h"
@@ -54,6 +55,7 @@ native::render::FrameParams pvr_frame_params(uint32_t width, uint32_t height) {
 std::string pvr_render_pass_summary() { return {}; }  // a comparacao com o rasterizador de referencia so na validacao
 
 RenderStats render_pass_run(Sh4Context* c) {
+    hud_render_tick();  // N9.5 fase 3B: a idade das marcas de HUD
     const native::render::soft::FpEnv fpEnv;  // ambiente fixo nesta thread (os workers instalam o seu)
     RenderStats                       st;
     const RenderPass::Size            sz = RenderPass::size(reg, nullptr);

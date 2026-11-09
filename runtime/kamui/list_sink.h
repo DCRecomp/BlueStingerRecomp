@@ -23,6 +23,7 @@ using namespace native::render;  // a IR e o rasterizador nativos (native/render
 struct ListParam {
     uint32_t list = 0, words = 0;
     uint32_t w[16] = {};
+    uint8_t  role  = 0;  // N9.5 fase 3B: o papel de HUD de quem enviou (ListSink::set_role); 0 = nenhum
 };
 
 // O que identifica os texels de uma textura (a IR so guarda o handle): TCW, tamanho do TSP e o stride linear.
@@ -38,6 +39,7 @@ struct TextureKey {
 constexpr int kOriginDepth = 16;
 struct ParamOrigin {
     uint32_t fn[kOriginDepth] = {};
+    uint32_t site[kOriginDepth] = {};  // N9.5 fase 3B: o retorno do ponto de chamada de cada entrada (o PR nela)
     bool     dma = false;
     bool     split = false;  // um parametro de 64 bytes cujas duas metades vieram de cadeias diferentes
     // N9.5 fase 3A: com dma, fn e a cadeia de quem ESCREVEU o bloco no buffer da RAM (BS_PROVENIENCIA_DMA=1); sem isso, a
@@ -64,6 +66,9 @@ struct ListFrame {
     // volumes: fechados por inclusao/exclusao, com OU, descarte misturado no mesmo volume, instrucao invalida
     uint32_t volume_inclusion = 0, volume_exclusion = 0, volume_or = 0, volume_mixed_cull = 0, volume_bad_instruction = 0;
     uint32_t global_two_volume = 0;  // globais de poligono com "dois volumes" (o jogo nao usa; sem suporte na IR)
+    // N9.5 fase 3B: o papel de HUD de cada desenho (alinhado a cl.draws), so quando a lista recebeu papeis
+    // (ListSink::set_role; a Remastered com o quadro largo); vazio no resto
+    std::vector<uint8_t> roles;
 #if BS_VALIDACAO
     std::vector<DrawOrigin> origins;  // N9.5 fase 2: um por desenho de cl.draws, na mesma ordem
 #endif
@@ -88,6 +93,11 @@ public:
     // Decodifica as listas recebidas na IR do render: `frame` (o tamanho e os parametros do quadro) e `texture_stride`
     // (TEXT_CONTROL) vem do chamador.
     void build(const FrameParams& frame, uint32_t texture_stride, ListFrame& out) const;
+    // N9.5 fase 3B: o papel de HUD dos proximos parametros (vale ate a proxima chamada); liga ListFrame::roles nesta lista
+    void set_role(uint8_t role) {
+        role_     = role;
+        roles_on_ = true;
+    }
 
 #if BS_VALIDACAO
     // N9.5 fase 2: a proveniencia dos proximos parametros (vale ate a proxima chamada) e a de cada parametro recebido
@@ -101,6 +111,8 @@ private:
     std::vector<ParamOrigin> origins_;  // alinhado a params_
 #endif
     std::vector<ListParam> params_;
+    uint8_t                role_ = 0, half_role_ = 0;
+    bool                   roles_on_ = false;
     uint32_t               bytes_ = 0;
     int                    list_ = -1;  // lista aberta (-1: nenhuma)
     bool                   vertex64_ = false, pending_half_ = false;

@@ -4326,6 +4326,32 @@ não por uma única bateria contínua** (decisão do mantenedor, 2026-11-02).
 - **Pendências:** H9; D-N8-4 no gate pós-N9; ressalva do 7.1 e D-K1(a); limite de 3 h de `n6_h` no executor, defeito a
   corrigir antes de uma futura integral, sem enfraquecer os testes. N9 e N10 não iniciados.
 
+### N9.5 fase 3, Parte B: o HUD do canto na borda esquerda da Remastered 16:9 (2026-11-09, commit local)
+
+Detalhes em `docs/N9-5-AUDITORIA.md`, seções 14.6–14.11. Arquitetura A1 (marca de escopo) escolhida pelo mantenedor; sem
+push, tag nem release.
+- **Produto:** o gerador põe `BS_HUD_SCOPE(1)` só em cinco pontos de chamada medidos (`[remaster] hud_chamadas_canto_esquerdo`:
+  o nome, a moldura do alvo e a barra de vida); com a marca ligada (só a Remastered com o quadro largo), as escritas na RAM
+  anotam o papel no bloco de 32 bytes, a cópia do canal 2 o consome, e a IR leva o papel de cada desenho; o `widen` deixa os
+  ancorados na borda esquerda do quadro largo. Mensagens, menus e cena continuam como na fase 1.
+- **Achado durante a parte:** `8C060278` e `8C0899D6` são rotinas genéricas (o título, o LOAD e o inventário também as
+  chamam); a primeira versão, por entrada de rotina, ancorava desenhos de tela cheia do título. Corrigido com a medição do
+  ponto de chamada (o PR na entrada) em 17 cenas; a tabela da Parte A ganhou o campo do ponto de chamada.
+- **Resultados:** marca do produto × tabela 204/204 no canto, 0 errados em 15 442 desenhos (título e menus sem âncora);
+  Original × `referencias_n87` 10/0; H1–H5 0 falhas (estado e efeitos idênticos, 1080/1440/2160); R1–R4 4/0; J1–J5 0 falhas;
+  ctest 30/30 e 23/23; `bs_unit_tests` 368/0, `bs_render_tests` 88/0.
+- **Critério H3 ajustado (decisão do mantenedor):** o framebuffer 4:3 (o recorte central) perde o HUD ancorado; o H3 compara
+  fora dos retângulos do HUD lidos da IR (`BS_HUD_ANCORAS_LOG`), recusa um retângulo maior que 10 % do quadro e a ausência de
+  âncoras, e confere o HUD na posição x do 4:3 no quadro largo.
+- **Catraca `n8_produto_papeis`:** produto 38 e validação 50 (+ `cpu/hud_scope`); o produto já tinha 37 desde a N9-L L1
+  (`14ef885`), sem a catraca atualizada (achado ao rodar o ctest do `msvc-release`).
+- **Revisões Codex:** `codex-20261109-094056` (2 médios: framebuffer, aceito em parte com a decisão do H3; bloco reutilizado,
+  aceito: a marca expira em dois renders, a troca 16:9 ↔ 4:3 limpa, a pilha não é marcada) e `codex-20261109-171852` (2
+  médios: bloco reescrito pela cena antes da cópia, aceito em parte, não observado e deixado para a fase 5 com o custo por
+  escrita; H3 sem âncoras, aceito e corrigido).
+- **Pendências:** arma, munição, mira de combate e GAME OVER sem identificação (nenhuma rota os mostra); o framebuffer 4:3
+  sem o HUD ancorado; o bloco reescrito pela cena antes da cópia; C8 bloqueado; fases 4 e 5 esperam autorização.
+
 ### N9.5 fase 3, Parte A: identificação do HUD, inclusive o caminho do DMA (2026-11-09, commit local)
 
 Detalhes em `docs/N9-5-AUDITORIA.md`, seção 14. Autorizada pelo mantenedor junto com a Parte B (reposicionamento), com

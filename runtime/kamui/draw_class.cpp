@@ -21,6 +21,14 @@ uint32_t game_routine(const ParamOrigin& o) {
     return 0;
 }
 
+uint32_t game_site(const ParamOrigin& o) {
+    for (int i = 0; i < kOriginDepth; ++i) {
+        if (!o.fn[i]) return 0;
+        if (o.fn[i] < kGameCodeEnd) return o.site[i];
+    }
+    return 0;
+}
+
 DrawClass classify(const DrawOrigin& o, const Draw& d, const CommandList& cl) {
     if (o.vertex.split) return DrawClass::Unknown;  // as duas metades do parametro vieram de cadeias diferentes
     // N9.5 fase 3A: a copia do canal 2 sem o escritor do buffer conhecido (a primeira copia de um bloco, ou sem
@@ -34,7 +42,7 @@ DrawClass classify(const DrawOrigin& o, const Draw& d, const CommandList& cl) {
         return DrawClass::Ambiguous;
     }
     // a tabela medida (hud_table.h): o par (entrada na biblioteca, rotina do jogo); o resto e desconhecido
-    const HudEntry* e = hud_lookup(library_entry(o.vertex), game_routine(o.vertex));
+    const HudEntry* e = hud_lookup(library_entry(o.vertex), game_routine(o.vertex), game_site(o.vertex));
     return e ? e->cls : DrawClass::Unknown;
 }
 

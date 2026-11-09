@@ -84,6 +84,10 @@ GameConfig loadConfig(const std::filesystem::path& path) {
     // [native] esperas: back-edges dos lacos que esperam um evento (N2b, docs/N2b-PLANO.md)
     if (auto arr = t["native"]["esperas"].as_array())
         for (auto& el : *arr) c.native_waits.insert(u32(&el, "native.esperas"));
+    // [remaster] (N9.5 fase 3B, docs/N9-5-AUDITORIA.md secao 14): os pontos de chamada do HUD medidos, pelo endereco de
+    // retorno; o gerador poe a chamada dentro de BS_HUD_SCOPE(papel) (cpu/hud_scope.h). Papel 1 = canto inferior esquerdo.
+    if (auto arr = t["remaster"]["hud_chamadas_canto_esquerdo"].as_array())
+        for (auto& el : *arr) c.hud_sites[u32(&el, "remaster.hud_chamadas_canto_esquerdo")] = 1;
     return c;
 }
 

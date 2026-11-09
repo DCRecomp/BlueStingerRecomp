@@ -25,7 +25,7 @@ bool full_width_fill(const CommandList& cl, const Draw& d) {
 }
 } // namespace
 
-uint32_t widen(CommandList& cl, uint32_t wide_width) {
+uint32_t widen(CommandList& cl, uint32_t wide_width, const std::vector<uint8_t>& anchors) {
     const uint32_t off = wide_offset(cl.frame.width, wide_width);
     if (!off) return 0;
     const float W = float(cl.frame.width), dx = float(off);
@@ -37,12 +37,23 @@ uint32_t widen(CommandList& cl, uint32_t wide_width) {
             ++filled;
             for (uint32_t k = 0; k < d.vertex_count; ++k) fill[d.first_vertex + k] = 1;
         }
+    // N9.5 fase 3B: os desenhos ancorados a esquerda nao andam (2 = nao desloca; uma faixa de largura inteira continua
+    // faixa)
+    const bool anchored = anchors.size() == cl.draws.size();
+    if (anchored)
+        for (size_t i = 0; i < cl.draws.size(); ++i)
+            if (anchors[i] == kAnchorLeft)
+                for (uint32_t k = 0; k < cl.draws[i].vertex_count; ++k)
+                    if (!fill[cl.draws[i].first_vertex + k]) fill[cl.draws[i].first_vertex + k] = 2;
     for (size_t i = 0; i < cl.vertices.size(); ++i) {  // os volumes modificadores usam o mesmo vetor
         Vertex& v = cl.vertices[i];
-        v.x += fill[i] ? (v.x >= W ? 2 * dx : 0.f) : dx;
+        v.x += fill[i] == 1 ? (v.x >= W ? 2 * dx : 0.f) : (fill[i] == 2 ? 0.f : dx);
     }
-    for (Draw& d : cl.draws)
-        if (d.state.clip != Clip::None) d.state.clip_x0 += int32_t(off), d.state.clip_x1 += int32_t(off);
+    for (size_t i = 0; i < cl.draws.size(); ++i) {
+        Draw& d = cl.draws[i];
+        if (d.state.clip != Clip::None && !(anchored && anchors[i] == kAnchorLeft))
+            d.state.clip_x0 += int32_t(off), d.state.clip_x1 += int32_t(off);
+    }
     cl.frame.width = wide_width;
     return filled;
 }

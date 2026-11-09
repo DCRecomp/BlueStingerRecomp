@@ -198,10 +198,23 @@ private:
 
     std::string callMacro() const { return reentry_.empty() ? "BS_CALL(" : "BS_CALL_REENTRANT("; }
 
+    // N9.5 fase 3B: o escopo da marca leve de HUD num ponto de chamada medido ([remaster] no TOML, pelo retorno)
+    std::string hudScope(uint32_t ret) const {
+        const auto h = opt_.hud_sites.find(ret);
+        return h == opt_.hud_sites.end() ? std::string() : "BS_HUD_SCOPE(" + std::to_string(h->second) + "); ";
+    }
+
     std::string callTo(uint32_t pc, uint32_t t, uint32_t ret) const {
         const uint32_t nt = img_.normalize(t);
-        if (nt && a_.functions.count(nt)) return callMacro() + callee(nt, opt_.always_slot) + "(c), " + hx(ret) + ");";
-        return callMacro() + "::bs::sh4_dispatch(c, " + hx(pc) + ", " + hx(t) + "), " + hx(ret) + ");";
+        if (nt && a_.functions.count(nt)) {
+            const std::string call = callMacro() + callee(nt, opt_.always_slot) + "(c), " + hx(ret) + ");";
+            const std::string scope = hudScope(ret);
+            return scope.empty() ? call : "{ " + scope + call + " }";
+        }
+        // o ponto de chamada e a chave (o retorno): vale tambem para o despacho em execucao (o alvo medido na validacao)
+        const std::string call  = callMacro() + "::bs::sh4_dispatch(c, " + hx(pc) + ", " + hx(t) + "), " + hx(ret) + ");";
+        const std::string scope = hudScope(ret);
+        return scope.empty() ? call : "{ " + scope + call + " }";
     }
 
     void emitInsn(std::string& s, uint32_t pc, uint32_t next) {
@@ -248,9 +261,9 @@ private:
             s += "    { const uint32_t tgt = " + tgt + "; c->pr = " + hx(ret) + "; " + slot(pc) + "\n";
             if (auto it = f_.direct.find(pc); it != f_.direct.end()) {
                 s += "      BS_EXPECT_TARGET(" + hx(pc) + ", tgt, " + hx(it->second) + ");\n";
-                s += "      " + callMacro() + callee(it->second, opt_.always_slot) + "(c), " + hx(ret) + "); }\n";
+                s += "      " + hudScope(ret) + callMacro() + callee(it->second, opt_.always_slot) + "(c), " + hx(ret) + "); }\n";
             } else {
-                s += "      " + callMacro() + "::bs::sh4_dispatch(c, " + hx(pc) + ", tgt), " + hx(ret) + "); }\n";
+                s += "      " + hudScope(ret) + callMacro() + "::bs::sh4_dispatch(c, " + hx(pc) + ", tgt), " + hx(ret) + "); }\n";
             }
             fallthrough(s, pc, ret, next);
             return;

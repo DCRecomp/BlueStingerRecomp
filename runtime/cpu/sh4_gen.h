@@ -4,6 +4,7 @@
 #include "cpu/sh4_ops.h"
 #include "cpu/sh4_intc.h"
 #include "cpu/sh4_runtime.h"
+#include "cpu/hud_scope.h"
 
 // Entrada de funcao: rastreabilidade endereco SH-4 <-> funcao C++ (custo: um teste).
 // c->cur_fn (funcao corrente, salva/restaurada por BS_CALL) so e lido por diagnostico: a sonda
@@ -12,7 +13,12 @@
 // No produto as tres macros nao deixam nenhum token (nem o ';': ele vem dentro delas na validacao), e o codigo gerado e
 // o de antes (prova pelo pre-processador na secao 13 da auditoria).
 #if BS_VALIDACAO
-#define BS_FN_CHAIN_ENTER(addr) c->fn_ring[c->fn_depth++ % ::bs::kFnRing] = (addr);
+#define BS_FN_CHAIN_ENTER(addr)                                                                                   \
+    {                                                                                                             \
+        const uint32_t chain_i_ = c->fn_depth++ % ::bs::kFnRing;                                                  \
+        c->fn_ring[chain_i_]    = (addr);                                                                         \
+        c->pr_ring[chain_i_]    = c->pr; /* N9.5 fase 3B: o PR na entrada = o retorno do ponto de chamada */     \
+    }
 #define BS_FN_CHAIN_SAVE const uint32_t saved_depth_ = c->fn_depth;
 #define BS_FN_CHAIN_RESTORE c->fn_depth = saved_depth_;
 #else
@@ -20,6 +26,8 @@
 #define BS_FN_CHAIN_SAVE
 #define BS_FN_CHAIN_RESTORE
 #endif
+// N9.5 fase 3B: o escopo de uma rotina de HUD ([remaster] no config): o papel vale ate a saida da funcao (cpu/hud_scope.h)
+#define BS_HUD_SCOPE(role) ::bs::HudScope bs_hud_scope_(c, (role))
 #define BS_FN_ENTER(addr)                                    \
     do {                                                     \
         c->cur_fn = (addr);                                  \

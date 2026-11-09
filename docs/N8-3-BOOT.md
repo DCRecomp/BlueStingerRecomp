@@ -122,6 +122,10 @@ flash, no produto.
 - o produto recusa `--arquivos legado`, `--flash`, `--sistema hle` e `BS_GDROM_TIMING` (saída 2 com a mensagem), e a
   validação aceita;
 - o manifesto completo continua conferido: 35 objetos no produto e 41 na validação.
+  - Atualização (N9.5 fase 3B, 2026-11-09): `cpu/hud_scope` (a marca leve de HUD, `docs/N9-5-AUDITORIA.md` seção 14) entra
+    nos dois builds; a catraca passa a 38 objetos no produto e 50 na validação (que já tinha 49 com os objetos do N8.7). O
+    produto já tinha 37, não 35: a N9-L L1 (`14ef885`) separou `cpu/host_fiber_<plataforma>` e `input/input_host_<plataforma>`
+    sem atualizar a catraca, e a falha passou despercebida porque o ctest do `msvc-release` não vinha sendo rodado.
 
 **Unitários `test_n83_sistema`:**
 - o ciclo do boot e a equivalência com o modelo passo a passo (r0, RAM e hash);

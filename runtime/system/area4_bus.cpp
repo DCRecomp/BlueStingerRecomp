@@ -5,6 +5,7 @@
 // do legado (pvr/ta.cpp, com a FIFO de poligonos de referencia) fica na validacao.
 #include "pvr/ta.h"
 
+#include "cpu/hud_scope.h"
 #include "cpu/sh4_runtime.h"
 #include "pvr/holly_intc.h"
 #include "pvr/vram.h"
@@ -37,6 +38,7 @@ bool area4_write(Sh4Context* c, uint32_t target, const uint32_t* data) {
     switch (Area4Entry::route(target)) {
     case Area4Entry::Path::Outside: return false;
     case Area4Entry::Path::Polygon: {
+        if (g_hud_marks) g_list.set_role(hud_param_role(c));  // N9.5 fase 3B: so a Remastered com o quadro largo
         const kamui::BlockResult r = g_list.feed(data);
         if (r.invalid) sh4_fatal(c, "parametro do TA com tipo invalido", c->pc, data[0]);
         if (r.list_end >= 0) event_status_raise(Area4Entry::list_end_bit(r.list_end));

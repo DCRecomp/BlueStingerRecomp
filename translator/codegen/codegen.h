@@ -3,6 +3,7 @@
 #include "analysis/analysis.h"
 
 #include <filesystem>
+#include <map>
 #include <set>
 
 namespace bs::codegen {
@@ -22,6 +23,9 @@ struct Options {
     // desvio de volta emite BS_WAIT e a saida do laco BS_WAIT_END. So desvios condicionais sem
     // delay slot (bt/bf) para tras.
     std::set<uint32_t>    wait_points;
+    // Pontos de chamada do HUD ([remaster] no TOML, N9.5 fase 3B), pelo endereco de retorno: a chamada direta (ou a
+    // indireta de alvo resolvido) fica dentro de BS_HUD_SCOPE(papel), a marca leve do produto.
+    std::map<uint32_t, uint8_t> hud_sites;
 };
 
 struct Result {

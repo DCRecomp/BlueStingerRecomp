@@ -282,6 +282,11 @@ só como histórico:
   16 cenas, 0 desenhos errados, 0 desconhecidos e 0 ambíguos (seção 14 da auditoria). Arma, munição, mira de combate e GAME
   OVER sem identificação (nenhuma rota os mostra). A Parte B (reposicionamento) espera a decisão do mantenedor sobre a
   marca leve no produto.
+- **Fase 3, Parte B (2026-11-09, commit local):** marca leve A1 (escolha do mantenedor): o gerador marca só cinco pontos de
+  chamada medidos; na Remastered 16:9, a moldura do alvo, o nome e a barra de vida ficam na borda esquerda; mensagens, menus
+  e cena como na fase 1. Original × N8.7 10/0, H1–H5, R1–R4, J1–J5 sem falhas; o H3 ajustado por decisão do mantenedor
+  (seção 14.9 da auditoria). Arma, munição, mira de combate e GAME OVER sem identificação. As fases 4 e 5 esperam
+  autorização.
 
 ### N9.6 — Iluminação, sombras e materiais (R, GG)
 

@@ -5,6 +5,7 @@
 // (debug/gfx_probe, que so existe na validacao; revisao Codex 20261029-134812).
 #include "memory/sh4_dmac.h"
 
+#include "cpu/hud_scope.h"
 #include "cpu/sh4_mem.h"
 #include "cpu/sh4_runtime.h"
 #include "pvr/ta.h"
@@ -18,10 +19,20 @@ using kamui::ChannelDma;
 
 ChannelDma g_dma;
 
-uint32_t read(void* ctx, uint32_t a) { return sh4_read32(static_cast<Sh4Context*>(ctx), a); }
+uint32_t g_lastRead = 0;  // N9.5 fase 3B: a ultima palavra lida pela copia (o canal le as 8 do bloco e entao o entrega)
+
+uint32_t read(void* ctx, uint32_t a) {
+    g_lastRead = a;
+    return sh4_read32(static_cast<Sh4Context*>(ctx), a);
+}
 
 bool sink(void* ctx, uint32_t dest, const uint32_t* blk) {
-    return area4_write(static_cast<Sh4Context*>(ctx), dest, blk);
+    if (!g_hud_marks) return area4_write(static_cast<Sh4Context*>(ctx), dest, blk);
+    // N9.5 fase 3B: o papel do bloco copiado (anotado pelas escritas da CPU com a marca de HUD), consumido aqui
+    g_hud_dma_role = sh4_is_ram(g_lastRead) ? hud_block_take(g_lastRead - 28) : 0;
+    const bool ok  = area4_write(static_cast<Sh4Context*>(ctx), dest, blk);
+    g_hud_dma_role = -1;
+    return ok;
 }
 
 } // namespace

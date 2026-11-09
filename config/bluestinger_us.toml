@@ -221,3 +221,15 @@ esperas = [
   # N2b-2: thread 3 (servidor do CRI, laco 8C158840): bloqueia so depois de passada ociosa
   0x8C158860,  # back-edge bra da passada 8C1586B8
 ]
+
+# --- N9.5 fase 3B: os pontos de chamada do HUD do canto (docs/N9-5-AUDITORIA.md secao 14) ---
+# 8C060278 (sprite 2D) e 8C0899D6 (retangulo 2D) sao rotinas genericas, usadas tambem pelo titulo, pelos menus de LOAD e
+# pelo inventario. Medidos em 17 cenas (a cadeia de chamadas da validacao e o retorno de cada chamada): so estes pontos de
+# chamada desenham o HUD do canto inferior esquerdo (o endereco e o retorno da chamada, o PR na entrada da rotina):
+#   8C0605CE  8C060380 -> 8C060278  o nome do personagem
+#   8C061346  8C061312 -> 8C060278  a moldura do alvo
+#   8C060838, 8C0608DE, 8C0609EC  8C060380 -> 8C0899D6  a barra de vida
+# O gerador poe essas chamadas dentro de BS_HUD_SCOPE; so a Remastered com o quadro largo liga a marca, e o
+# reposicionamento as ancora na borda esquerda. Nada muda no jogo nem na Original.
+[remaster]
+hud_chamadas_canto_esquerdo = [0x8C0605CE, 0x8C061346, 0x8C060838, 0x8C0608DE, 0x8C0609EC]
