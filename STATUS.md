@@ -4351,6 +4351,12 @@ push, tag nem release.
   escrita; H3 sem âncoras, aceito e corrigido).
 - **Pendências:** arma, munição, mira de combate e GAME OVER sem identificação (nenhuma rota os mostra); o framebuffer 4:3
   sem o HUD ancorado; o bloco reescrito pela cena antes da cópia; C8 bloqueado; fases 4 e 5 esperam autorização.
+- **Publicação (autorizada pelo mantenedor em 2026-11-09 com a fase 3):** `v0.9.5-3`, só com o pacote do Windows (o Linux
+  pelo mesmo motivo da `v0.9.5-1`). Pacote: `make_builder.ps1 -Versao v0.9.5-3` no worktree em `15858ad` (o kit leva o
+  `[remaster]` com os pontos de chamada do HUD; o jogo gerado no computador do usuário sai com o HUD ancorado);
+  `test_builder` **24/0**, nada novo em `%LOCALAPPDATA%`; ZIP `BlueStinger-Builder-v0.9.5-3-win-x64.zip`, 14 593 192 B,
+  `6ac7fe86…2763a`; extraído, os 2 865 arquivos iguais aos do pacote testado; varredura sem caminho local, nome de usuário
+  nem mídia do jogo.
 
 ### N9.5 fase 3, Parte A: identificação do HUD, inclusive o caminho do DMA (2026-11-09, commit local)
 
