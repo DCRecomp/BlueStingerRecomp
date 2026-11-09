@@ -31,6 +31,26 @@ struct TextureKey {
     bool     operator==(const TextureKey&) const = default;
 };
 
+#if BS_VALIDACAO
+// N9.5 fase 2 (so validacao; docs/N9-5-AUDITORIA.md secao 13): a proveniencia de um parametro, as entradas mais internas
+// da cadeia de chamadas do guest no momento da escrita (fn[0] = a funcao que escreveu; 0 = acabou a cadeia ou o
+// separador de interrupcao) e se ele veio pela copia do canal 2 (DMA).
+constexpr int kOriginDepth = 16;
+struct ParamOrigin {
+    uint32_t fn[kOriginDepth] = {};
+    bool     dma = false;
+    bool     split = false;  // um parametro de 64 bytes cujas duas metades vieram de cadeias diferentes
+};
+// A proveniencia de um desenho da IR (ListFrame::origins, alinhado a cl.draws): o parametro de vertice que abriu o
+// desenho e o global que deu o estado dele (indices em ListSink::params()).
+enum class DrawKind : uint8_t { Strip, StripTriangle, Sprite };
+struct DrawOrigin {
+    ParamOrigin vertex, global;
+    uint32_t    param = 0, global_param = 0;
+    DrawKind    kind  = DrawKind::Strip;
+};
+#endif
+
 // O resultado de um render: a IR, a tabela das texturas (TextureHandle.value - 1) e as contagens do decodificador.
 struct ListFrame {
     CommandList             cl;
@@ -41,6 +61,9 @@ struct ListFrame {
     // volumes: fechados por inclusao/exclusao, com OU, descarte misturado no mesmo volume, instrucao invalida
     uint32_t volume_inclusion = 0, volume_exclusion = 0, volume_or = 0, volume_mixed_cull = 0, volume_bad_instruction = 0;
     uint32_t global_two_volume = 0;  // globais de poligono com "dois volumes" (o jogo nao usa; sem suporte na IR)
+#if BS_VALIDACAO
+    std::vector<DrawOrigin> origins;  // N9.5 fase 2: um por desenho de cl.draws, na mesma ordem
+#endif
 };
 
 // Evento de um bloco: fim de uma lista (o numero dela) ou um parametro com tipo invalido.
@@ -63,7 +86,17 @@ public:
     // (TEXT_CONTROL) vem do chamador.
     void build(const FrameParams& frame, uint32_t texture_stride, ListFrame& out) const;
 
+#if BS_VALIDACAO
+    // N9.5 fase 2: a proveniencia dos proximos parametros (vale ate a proxima chamada) e a de cada parametro recebido
+    void set_origin(const ParamOrigin& o) { origin_ = o; }
+    const std::vector<ParamOrigin>& origins() const { return origins_; }
+#endif
+
 private:
+#if BS_VALIDACAO
+    ParamOrigin              origin_, half_origin_;  // half_origin_: a da 1a metade de um parametro de 64 bytes
+    std::vector<ParamOrigin> origins_;  // alinhado a params_
+#endif
     std::vector<ListParam> params_;
     uint32_t               bytes_ = 0;
     int                    list_ = -1;  // lista aberta (-1: nenhuma)

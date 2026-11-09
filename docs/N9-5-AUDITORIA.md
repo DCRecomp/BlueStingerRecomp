@@ -616,3 +616,122 @@ memória em `tmp/` (encerra só o jogo se o commit livre cair abaixo de 2,5 GB; 
   por dados sintéticos. A fase 1 foi aprovada sem ele, com essa ressalva.
 - **Publicação:** o mantenedor pediu cada etapa publicada; a fase 1 sai como `v0.9.5-1`, só com o pacote do Windows (os
   insumos do pacote Linux no WSL foram apagados em 2026-11-07; o Linux volta numa release seguinte).
+
+## 13. Fase 2: a marca cena 3D × HUD 2D por proveniência (2026-11-08)
+
+Autorizada pelo mantenedor com a fase 1 aprovada: classificar cada desenho como cena 3D ou HUD 2D pela proveniência e pela
+semântica, **só com metadados e diagnóstico**. Nada é reposicionado, nenhum desenho muda, e a Original não muda.
+
+### 13.1 O que foi feito (só no build de validação)
+
+| Peça | Onde | O que faz |
+|---|---|---|
+| Cadeia de chamadas do guest | `runtime/cpu/sh4_context.h` (`fn_ring[64]`, `fn_depth`), `sh4_gen.h` | cada `BS_FN_ENTER` grava a entrada num anel; `BS_CALL` e `BS_CALL_REENTRANT` devolvem a profundidade do chamador no retorno. A chamada de cauda (chamada direta + `return`, sem `BS_CALL`) fica acima de quem saltou e é desfeita pelo `BS_CALL` de fora |
+| Interrupções e threads | `irq_bridge.cpp`, `sh4_intc.cpp`, `sh4_threads.cpp` | o despacho de um tratador empilha o separador 0 e restaura a profundidade; cada thread do guest guarda o anel e a profundidade ao ser suspensa |
+| Origem por parâmetro | `pvr/ta.cpp` (`origin_of`), `memory/sh4_dmac.cpp` | na entrada do TA, as 16 entradas mais internas da cadeia (até o separador) e se o bloco veio da cópia do canal 2 (DMA) |
+| Origem por desenho | `kamui/list_sink.{h,cpp}` (`ParamOrigin`, `DrawOrigin`, `ListFrame::origins`) | alinhada a `cl.draws`: a do vértice que abriu o desenho e a do global dele. Um parâmetro de 64 bytes fica com a origem da 1ª metade (o PCW); metades de cadeias diferentes ficam marcadas (`split`) |
+| Origem na IR da validação | `render_capture` (`Frame::origins`) | copiada do `ListSink` só quando a IR dele confere com a da captura **desenho a desenho** (`check_list_sink`) |
+| A marca | `kamui/draw_class.{h,cpp}` | `classify(origem, desenho, IR)` → cena, tela, ambíguo ou desconhecida (13.3); o produto não tem o arquivo |
+| Diagnóstico | `<ir>.origem.tsv` (comando `ir` do assistido e `BS_RENDER_IR_GUARDAR`) | um desenho por linha: a cadeia do vértice e a do global, DMA, tipo, vértices, 1/w mínimo e máximo, profundidade, textura, blend e a marca |
+| Oráculo | `tools/dev/n95_proveniencia.py` (`capturar`, `cruzar`) | as cenas da fase 0 em 4:3 e com a projeção larga (`BS_TELA_TESTE=854,427`), o `bs-ir-tela comparar` em cada par e a marca contra a classe medida; um par cuja proveniência difere nos dois lados é erro da captura |
+
+### 13.2 O produto não muda (prova)
+
+- **Pré-processador:** o comando exato do `msvc-release` (tirado do `ninja -t commands`) com `/EP`, no HEAD (`e9dc91d`,
+  worktree em `tmp/`) e na árvore, com os espaços colapsados (comparação por tokens). **Iguais** em `irq_bridge.cpp`,
+  `sh4_intc.cpp`, `sh4_threads.cpp`, `sh4_context.cpp`, `list_sink.cpp`, `render_core.cpp`, `assist.cpp`, `area4_bus.cpp`,
+  `render_bus.cpp`, `dma_bus.cpp`, `game_host.cpp`, `generated/dispatch.cpp` e os 11 `generated/funcs_*.cpp`. O controle
+  negativo (`/DBS_VALIDACAO=1`) dá diferente em todos. A primeira versão das macros deixava um `((void)0);` no código gerado
+  do produto; a prova pegou, e as macros passaram a não deixar nenhum token.
+- `draw_class.cpp` só entra no `bs_kamui` com `BS_VALIDACAO`; `pvr/ta.cpp` e `memory/sh4_dmac.cpp` são da validação.
+- **A instrumentação não muda o jogo:** a Original com o exe de validação desta fase contra `analysis/n8/referencias_n87`,
+  as 5 rotas × `--tempo nativo` e `experimental`: **10 casos, 0 diferentes** (pico 371 MB).
+
+### 13.3 A regra da marca
+
+A **entrada na biblioteca** de um desenho é a última entrada da cadeia (de dentro para fora) antes da primeira rotina do
+jogo. O limite entre o jogo e as bibliotecas do SDK fica em `0x8C158000` (`kGameCodeEnd`): as cadeias medidas chegam ao jogo
+bem abaixo dele, e as bibliotecas (Ninja, Kamui, Shinobi) estão acima. Ele só serve para achar a entrada; a cadeia inteira
+fica no TSV.
+
+| Entrada | Classe | Por quê |
+|---|---|---|
+| `8C15F856`, `8C161738`, `8C160C12`, `8C1601FE` | **cena** | o desenho dos modelos e os polígonos projetados do Ninja |
+| `8C1736A0` chamada por `8C07B4E0` | **tela** | o recorte dos sprites 2D do Ninja, com o chamador medido |
+| `8C16CED8` chamada por `8C0899D6` | **tela** | as strips 2D, com o chamador medido |
+| `8C1736A0` ou `8C16CED8` com outro chamador | desconhecida | o recorte dos sprites também recebe sprites já projetados da cena (as faíscas do cais passam por ele até o DMA; seção 12.3) |
+| `8C173044` (a cópia do canal 2), 1/w variável no desenho | **cena** | só a perspectiva dá 1/w diferente entre os vértices |
+| `8C173044`, 1/w constante | **ambíguo** | 13.5 |
+| parâmetro com metades de cadeias diferentes, qualquer outra entrada, cadeia que não chegou ao jogo | desconhecida | nunca chutada |
+
+### 13.4 Resultados contra o oráculo (seis cenas da seção 11.3)
+
+Capturas do gameplay assistido sem janela (`n95_proveniencia.py capturar`, exe de validação desta fase), 4:3 × projeção
+larga, nos passos 1855 e 2300 da rota de LOAD (cartão importado do mesmo save do R3) e 2000, 6000, 10000 e 11660 da rota de
+combate. Quatro capturas completas ao longo da fase (a última com as correções da revisão), todas com as mesmas contagens.
+
+| Cena (passo) | Oráculo (cena / tela / só 4:3) | Marca |
+|---|---|---|
+| corredor RCG02 (1855) | 487 / 24 / 0 | todos certos, exceto os ambíguos do DMA |
+| corredor RCG02 (2300) | 1129 / 24 / 0 | idem |
+| cais (2000) | 1766 / 20 / 10 | idem (as 10 faíscas ficam ambíguas) |
+| tela 2D (6000) | 0 / 818 / 0 | idem |
+| porta trancada (10000) | 1247 / 43 / 0 | idem |
+| tela 2D (11660) | 0 / 134 / 0 | idem |
+
+- **As contagens do oráculo são as da fase 0** (seção 11.3), cena a cena: a captura reproduz o experimento.
+- **Proveniência igual nos dois lados de todo par** (cadeia, cadeia do global, DMA, tipo e marca): 0 divergências.
+- **Marca × oráculo, nas seis cenas (5702 desenhos):**
+  - cena marcada cena: **4543**; tela marcada tela: **48**;
+  - **marca errada (cena ↔ tela): 0**; desconhecida: **0**;
+  - ambígua: **1111** (1015 tela, 86 cena e as 10 faíscas que só o 4:3 envia), todas do caminho do DMA com 1/w constante.
+- **Fora do DMA, a cadeia separa sem erro:** toda cadeia sem DMA é só cena ou só tela. Medido em três níveis (o escritor, a
+  rotina do jogo e a cadeia inteira), a única chave mista é a do DMA.
+- Evidências (fora do git): `tmp/sessao-20261109/fase2/captura4` (IRs, `.origem.tsv` e `cruzado/`: um TSV por cena,
+  `rotinas.tsv` e `resumo.txt`).
+
+### 13.5 A ambiguidade: o caminho do DMA
+
+- Pela cópia do canal 2, a cadeia registrada é a de quem **dispara a cópia** (`8C064A52` → `8C173044` → `8C18BC3C` →
+  `8C18BB84` → `8C1C1E16`), não a de quem montou os vértices no buffer da RAM. Todos os desenhos desse caminho são da lista
+  translúcida.
+- Os de 1/w variável são cena (projetados). Os de 1/w constante misturam o HUD translúcido (textos e molduras das telas 2D
+  e dos menus) com os billboards da cena (as partículas do cais e as 10 faíscas que só o 4:3 envia). O estado de desenho é o
+  mesmo (profundidade, escrita de z, blend), e os valores de 1/w se intercalam (tela em 1,7·10⁻⁵ e 6,25·10⁻⁴; cena em 2·10⁻⁴
+  e 2,8·10⁻³).
+- Só a textura separava esses grupos na cena do cais. Uma regra por textura dependeria do conteúdo de cada sala e não foi
+  adotada.
+- **Para resolver** (proposta, não feita): registrar a cadeia de quem escreve no buffer de vértices do DMA. O código gerado
+  escreve na RAM pelo ponteiro direto, então seria preciso o build de vigia de escritas (`BS_WRITE_WATCH`) ou uma marca nas
+  rotinas do Kamui que montam o buffer. Fica para a fase 3, com decisão do mantenedor.
+
+### 13.6 Testes
+
+- `bs_render_tests`: `kamui_list_sink_origin_follows_each_draw` (strip, sprite, global, DMA, metades de 64 bytes de cadeias
+  diferentes, `list_init`) e `kamui_draw_class_by_library_entry_and_dma_inv_w` (as cadeias reais medidas, o chamador fora
+  do medido, o 1/w do DMA, cadeia que não chega ao jogo, desenho fora da IR).
+- `bs_unit_tests`: `call_chain_follows_calls_and_returns`, `call_chain_ring_keeps_the_innermost_entries` (recursão de 101
+  entradas), `call_chain_tail_call_is_restored_by_the_outer_call` e `call_chain_stops_at_the_interrupt_separator`.
+- **Sem teste integrado:** a interrupção real e a troca real de fibras (conferidas pela leitura do código e pela revisão
+  Codex; a Original igual às referências passa pelas duas).
+
+### 13.7 Revisão Codex
+
+**`reviews/codex-20261108-201953.md`:**
+- **Média, aceita:** um parâmetro de 64 bytes ficava com a origem da 2ª metade. **Corrigido:** a da 1ª (o PCW), com
+  `split` quando as metades diferem; teste com origens diferentes.
+- **Média, aceita em parte:** a tabela não tinha prova à vista (as capturas ficam em `tmp/`, fora do que o revisor lê, e
+  esta seção não existia). O ponto central procede: `8C1736A0` é o recorte geral dos sprites e também recebe sprites
+  projetados. **Corrigido:** as entradas de tela só valem com o chamador do jogo medido; com outro, desconhecida.
+- **Média, aceita:** o `cruzar` contava pares cuja proveniência diferia nos dois lados. **Corrigido:** compara a cadeia,
+  a do global, o DMA, o tipo e a marca; um par divergente sai das contagens e a ferramenta falha.
+- **Baixa, aceita em parte:** faltavam testes integrados. **Acrescentado** o da chamada de cauda; a interrupção e a troca de
+  fibras ficam sem teste integrado (13.6).
+
+### 13.8 Bloqueadores e pendências depois da fase 2
+
+| | Situação |
+|---|---|
+| B3 cena/HUD | **resolvido em parte, com prova:** a marca acerta todos os desenhos que afirma, nas seis cenas; o caminho do DMA com 1/w constante fica ambíguo (13.5) |
+| Fase 3 (HUD e menus) | espera autorização; depende de decidir como resolver o DMA (13.5) e de levar a proveniência ao produto (hoje só existe na validação; o custo no código gerado não foi medido) |
+| Cobertura | seis cenas em duas rotas; outras salas, menus e telas ainda não medidos |

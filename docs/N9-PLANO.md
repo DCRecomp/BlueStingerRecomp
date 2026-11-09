@@ -273,6 +273,10 @@ só como histórico:
   e 3, e a opção no menu fica para a fase 5. A validação visual na janela real fica com o mantenedor. **Aprovada em
   2026-11-08** (N8.7 10/10, `test_edicao` 11/0, J1–J5; C8 bloqueado por dados) e publicada como `v0.9.5-1`. A fase 2
   (cena 3D × HUD 2D, só metadados e diagnóstico) foi autorizada; as fases 3 a 5 esperam autorização.
+- **Fase 2 (2026-11-08, publicada como `v0.9.5-2`):** a marca cena 3D × HUD 2D pela proveniência dos desenhos, só no build de
+  validação (seção 13 da auditoria). Contra o oráculo da fase 0, nas seis cenas: 0 desenhos marcados errado, 1111 ambíguos
+  (o caminho do DMA com 1/w constante). O produto e a Original não mudam (pré-processador igual; N8.7 10/10). A fase 3 espera
+  autorização e a decisão sobre o DMA.
 
 ### N9.6 — Iluminação, sombras e materiais (R, GG)
 

@@ -25,6 +25,10 @@ constexpr uint32_t kFpscrSZ   = 1u << 20;
 constexpr uint32_t kFpscrFR   = 1u << 21;
 constexpr uint32_t kFpscrMask = 0x003FFFFFu;
 
+#if BS_VALIDACAO
+constexpr uint32_t kFnRing = 64;  // N9.5 fase 2: entradas guardadas da cadeia de chamadas (as mais internas)
+#endif
+
 struct Sh4Context {
     uint32_t r[16];      // R0-R15 do banco ativo
     uint32_t rbank[8];   // R0-R7 do banco inativo
@@ -47,6 +51,13 @@ struct Sh4Context {
     uint32_t ret_sp;      // R15 do chamador nesse ponto: identifica a thread do guest (sh4_threads)
     uint32_t redirect;    // longjmp pendente: ponto de reentrada (retorno de setjmp) a alcancar
     uint32_t cur_fn;      // funcao do guest em execucao (BS_FN_ENTER/BS_CALL); so diagnostico (sonda N0)
+#if BS_VALIDACAO
+    // N9.5 fase 2 (so validacao): a cadeia de chamadas do guest para a proveniencia dos desenhos. Cada BS_FN_ENTER grava
+    // a entrada em fn_ring[fn_depth % kFnRing] e sobe fn_depth; BS_CALL devolve a profundidade do chamador no retorno. O
+    // valor 0 separa o tratador de uma interrupcao da cadeia interrompida. O produto nao tem nada disto.
+    uint32_t fn_ring[kFnRing];
+    uint32_t fn_depth;
+#endif
 
     uint8_t* ram;         // 16 MB de RAM principal
     void*    owner;       // runtime dono deste contexto

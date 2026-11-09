@@ -12,6 +12,9 @@ add_library(bs_kamui STATIC kamui/list_sink.cpp kamui/frame_state.cpp kamui/text
             kamui/event_status.cpp kamui/channel_dma.cpp kamui/area4_entry.cpp kamui/render_pass.cpp
             kamui/system_block.cpp)
 target_include_directories(bs_kamui PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+if(BS_VALIDACAO)  # N9.5 fase 2: a marca cena/HUD pela proveniencia (so diagnostico; o produto nao tem o arquivo)
+  target_sources(bs_kamui PRIVATE kamui/draw_class.cpp)
+endif()
 target_link_libraries(bs_kamui PUBLIC bs_native_render)
 
 # substrato AOT (L1-L3, L7, L21: ate o N10): contexto, despacho, servico e cadencia, fibras, RAM e roteamento, mods

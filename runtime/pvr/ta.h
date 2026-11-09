@@ -30,6 +30,8 @@ std::string ta_area4_summary();
 // de textura (0x11000000, escreve na VRAM pelo caminho de 64 bits). 32 bytes por vez.
 // N8.7 5c: so a validacao; o codigo dos dois builds chama area4_write (system/graphics_ports.h).
 bool ta_fifo_write(Sh4Context* c, uint32_t target, const uint32_t* data);
+// N9.5 fase 2: os blocos seguintes vem da copia do canal 2 (a proveniencia dos parametros registra isso)
+void ta_origin_dma(bool on);
 #endif
 
 // Conversor YUV (0x10800000): escrever TA_YUV_TEX_BASE ou TA_YUV_TEX_CTRL recomeca a

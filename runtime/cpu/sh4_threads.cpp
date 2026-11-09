@@ -26,6 +26,10 @@ struct Thread {
     uint32_t entry = 0;  // thread nova: primeira instrucao
     uint32_t redirect = 0;  // retomada por longjmp: ponto de retorno do setjmp
     uint32_t curFn = 0;     // c->cur_fn ao suspender (sonda N0: atribuicao por thread)
+#if BS_VALIDACAO
+    uint32_t fnRing[kFnRing] = {};  // N9.5 fase 2: a cadeia de chamadas desta thread ao suspender
+    uint32_t fnDepth         = 0;
+#endif
 };
 
 // Estado por thread do host: as threads do guest pertencem a thread do host que executa
@@ -67,6 +71,10 @@ void switchTo(Sh4Context* c, size_t next) {
     cur.retExpect = c->ret_expect;
     cur.retSp     = c->ret_sp;
     cur.curFn     = c->cur_fn;
+#if BS_VALIDACAO
+    std::copy(std::begin(c->fn_ring), std::end(c->fn_ring), cur.fnRing);
+    cur.fnDepth = c->fn_depth;
+#endif
     const size_t self = g_current;
     g_current         = next;
     Thread& n         = g_threads[next];
@@ -74,6 +82,10 @@ void switchTo(Sh4Context* c, size_t next) {
     c->ret_expect     = n.retExpect;
     c->ret_sp         = n.retSp;
     c->cur_fn         = n.curFn;
+#if BS_VALIDACAO
+    std::copy(std::begin(n.fnRing), std::end(n.fnRing), c->fn_ring);
+    c->fn_depth = n.fnDepth;
+#endif
     host::fiber_switch(n.fiber);
     // retomada: alguem fez rte para resumePc/resumeSp desta thread (ou uma fibra que
     // terminou com erro devolveu o controle a thread 0)
@@ -84,6 +96,10 @@ void switchTo(Sh4Context* c, size_t next) {
     c->ret_expect = g_threads[self].retExpect;
     c->ret_sp     = g_threads[self].retSp;
     c->cur_fn     = g_threads[self].curFn;
+#if BS_VALIDACAO
+    std::copy(std::begin(g_threads[self].fnRing), std::end(g_threads[self].fnRing), c->fn_ring);
+    c->fn_depth = g_threads[self].fnDepth;
+#endif
     // retomada por longjmp: os quadros sobem ate o que chamou o setjmp (BS_CALL_REENTRANT)
     c->redirect = std::exchange(g_threads[self].redirect, 0u);
     if (g_pending) std::rethrow_exception(std::exchange(g_pending, nullptr));

@@ -30,6 +30,9 @@
 #include "pvr/pvr_render.h"
 #include "render/render.h"
 #include "render/texture_replacement.h"
+#if BS_VALIDACAO
+#include "kamui/list_sink.h"  // N9.5 fase 2: a proveniencia dos desenhos (Frame::origins)
+#endif
 
 #include <array>
 #include <cstdint>
@@ -53,6 +56,11 @@ struct Frame {
     uint32_t                texture_stride = 0;  // TEXT_CONTROL do render (stride das texturas lineares)
     uint32_t                modifier_params = 0, modifier_volumes = 0, modifier_unclosed = 0, skipped_params = 0,
                             sprites = 0;
+#if BS_VALIDACAO
+    // N9.5 fase 2: a proveniencia de cada desenho (alinhada a cl.draws), copiada do ListSink quando a IR dele confere com
+    // esta desenho a desenho (check_list_sink); vazia se nao conferiu
+    std::vector<bs::kamui::DrawOrigin> origins;
+#endif
 };
 
 // IR estruturalmente valida (validate) e handles de textura dentro da tabela do quadro.
@@ -183,6 +191,11 @@ struct DumpTexture {
 };
 bool save_frame_dump(const std::string& path, const Frame& f);
 bool load_frame_dump(const std::string& path, nr::CommandList& cl, std::vector<DumpTexture>& textures);
+#if BS_VALIDACAO
+// N9.5 fase 2: a proveniencia dos desenhos de um render num TSV (um desenho por linha, a cadeia de chamadas do vertice
+// que abriu o desenho e a do global dele, da mais interna para fora, separadas por ">"); falso sem origens
+bool save_frame_origins(const std::string& path, const Frame& f);
+#endif
 
 // Texels de uma textura com o fallback: as conversoes nativas ou, sem elas, o decodificador do legado.
 bool texture_argb(const TextureKey& k, std::vector<uint32_t>& argb, bool& legacy);

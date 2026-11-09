@@ -45,6 +45,19 @@ uint32_t             g_bytes = 0;  // bytes recebidos pela FIFO de poligonos des
 int                  g_lastEnd = -1;  // a lista fechada pelo ultimo bloco (-1: nenhuma)
 uint64_t             g_endMismatch = 0;
 kamui::ListSink g_list;  // N8.7: as listas do Kamui, decodificadas direto para a IR
+bool            g_originDma = false;  // N9.5 fase 2: a escrita atual vem do DMA do canal 2
+
+// N9.5 fase 2: as entradas mais internas da cadeia de chamadas do guest (Sh4Context::fn_ring) ate o separador 0
+kamui::ParamOrigin origin_of(const Sh4Context* c) {
+    kamui::ParamOrigin o;
+    o.dma = g_originDma;
+    for (uint32_t i = 0; c && int(i) < kamui::kOriginDepth && i < c->fn_depth && i < kFnRing; ++i) {
+        const uint32_t f = c->fn_ring[(c->fn_depth - 1 - i) % kFnRing];
+        if (!f) break;
+        o.fn[i] = f;
+    }
+    return o;
+}
 
 constexpr uint32_t kListEndBit[5] = {1u << 7, 1u << 8, 1u << 9, 1u << 10, 1u << 21};
 
@@ -187,6 +200,7 @@ void ta_list_continue() {
 }
 
 kamui::ListSink& ta_list_sink() { return g_list; }
+void             ta_origin_dma(bool on) { g_originDma = on; }
 
 bool ta_fifo_write(Sh4Context* c, uint32_t target, const uint32_t* data) {
     const uint32_t p = target & 0x1FFFFFFF;
@@ -198,6 +212,7 @@ bool ta_fifo_write(Sh4Context* c, uint32_t target, const uint32_t* data) {
     if (region == 0) {
         area4_route(target, Area4Entry::Path::Polygon);
         ++g_a4Poly;
+        g_list.set_origin(origin_of(c));
         const kamui::BlockResult r = g_list.feed(data);
         // a FIFO do legado e a referencia (interrupcoes e erro); o fim de lista do ListSink tem de ser o mesmo
         g_bytes += 32;

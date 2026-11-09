@@ -262,6 +262,7 @@ private:
     void check_list_sink(std::span<const PvrTri> drawn) {
         namespace km = bs::kamui;
         km::ListFrame lf;
+        r_.frame.origins.clear();
         ta_list_sink().build(r_.frame.cl.frame, stride_, lf);
         // negativos (BS_LISTA_NATIVA_MUTACAO=<campo>): o comparador tem de acusar cada um. vertice: o primeiro vertice
         // muda meio pixel; suporte, omitidos, dois_volumes, global_dois_volumes, instrucao, descarte: a contagem + 1
@@ -343,7 +344,10 @@ private:
         // os triangulos do rasterizador do legado: os dos strips e dois por sprite
         if (why.empty() && size_t(lf.triangles) + 2u * lf.sprites != drawn.size())
             why = "triangulos (" + std::to_string(lf.triangles + 2u * lf.sprites) + " x " + std::to_string(drawn.size()) + ")";
-        if (why.empty()) return;
+        if (why.empty()) {
+            r_.frame.origins = std::move(lf.origins);  // N9.5 fase 2: a IR confere desenho a desenho
+            return;
+        }
         ++r_.st.list_mismatch;
         if (r_.st.list_error.empty()) r_.st.list_error = "render " + std::to_string(r_.st.renders) + ": " + why;
     }

@@ -267,7 +267,10 @@ struct Assist::Impl {
             const fs::path p = dir / (name + ".ir");
             if (!transitional::render_capture::save_frame_dump(p.string(), transitional::render_capture::last_frame()))
                 throw std::runtime_error("nao gravou " + p.string());
-            reply("ok ir " + p.string());
+            // N9.5 fase 2: a proveniencia dos desenhos ao lado (<nome>.ir.origem.tsv), quando o ListSink conferiu
+            const fs::path o  = dir / (name + ".ir.origem.tsv");
+            const bool     ok = transitional::render_capture::save_frame_origins(o.string(), transitional::render_capture::last_frame());
+            reply("ok ir " + p.string() + (ok ? " origem " + o.string() : " sem origem"));
             return false;
         }
 #endif

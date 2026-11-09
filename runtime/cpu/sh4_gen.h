@@ -8,9 +8,22 @@
 // Entrada de funcao: rastreabilidade endereco SH-4 <-> funcao C++ (custo: um teste).
 // c->cur_fn (funcao corrente, salva/restaurada por BS_CALL) so e lido por diagnostico: a sonda
 // de hardware do N0 (debug/hw_probe) atribui cada acesso a funcao do guest que o fez.
+// N9.5 fase 2 (so validacao): a cadeia de chamadas do guest (Sh4Context::fn_ring), para a proveniencia dos desenhos.
+// No produto as tres macros nao deixam nenhum token (nem o ';': ele vem dentro delas na validacao), e o codigo gerado e
+// o de antes (prova pelo pre-processador na secao 13 da auditoria).
+#if BS_VALIDACAO
+#define BS_FN_CHAIN_ENTER(addr) c->fn_ring[c->fn_depth++ % ::bs::kFnRing] = (addr);
+#define BS_FN_CHAIN_SAVE const uint32_t saved_depth_ = c->fn_depth;
+#define BS_FN_CHAIN_RESTORE c->fn_depth = saved_depth_;
+#else
+#define BS_FN_CHAIN_ENTER(addr)
+#define BS_FN_CHAIN_SAVE
+#define BS_FN_CHAIN_RESTORE
+#endif
 #define BS_FN_ENTER(addr)                                    \
     do {                                                     \
         c->cur_fn = (addr);                                  \
+        BS_FN_CHAIN_ENTER(addr)                              \
         if (::bs::g_sh4_trace) ::bs::g_sh4_trace(c, (addr)); \
     } while (0)
 // Ciclos estimados de um trecho linear.
@@ -63,12 +76,14 @@
         const uint32_t saved_ret_ = c->ret_expect;  \
         const uint32_t saved_sp_  = c->ret_sp;      \
         const uint32_t saved_fn_  = c->cur_fn;      \
+        BS_FN_CHAIN_SAVE                            \
         c->ret_expect             = (ret);          \
         c->ret_sp                 = c->r[15];       \
         call_expr;                                  \
         c->ret_expect = saved_ret_;                 \
         c->ret_sp     = saved_sp_;                  \
         c->cur_fn     = saved_fn_;                  \
+        BS_FN_CHAIN_RESTORE                         \
         if (c->redirect) return;                    \
         BS_POLL_RET(ret);                           \
     } while (0)
@@ -81,6 +96,7 @@
         const uint32_t saved_ret_ = c->ret_expect;      \
         const uint32_t saved_sp_  = c->ret_sp;          \
         const uint32_t saved_fn_  = c->cur_fn;          \
+        BS_FN_CHAIN_SAVE                                \
         const uint32_t call_sp_   = c->r[15];           \
         c->ret_expect             = (ret);              \
         c->ret_sp                 = call_sp_;           \
@@ -88,6 +104,7 @@
         c->ret_expect = saved_ret_;                     \
         c->ret_sp     = saved_sp_;                      \
         c->cur_fn     = saved_fn_;                      \
+        BS_FN_CHAIN_RESTORE                             \
         if (c->redirect) {                              \
             if (c->r[15] == call_sp_) goto bs_reenter_; \
             return;                                     \

@@ -41,10 +41,17 @@ void enter(Sh4Context* c, uint32_t intevt) {
     c->ret_expect        = c->spc;  // o rte do tratador volta para SPC (BS_RTE confere)
     c->ret_sp            = c->sgr;  // com a pilha da thread interrompida
     c->cur_fn            = 0;       // sonda: o despacho do tratador vem do runtime
+#if BS_VALIDACAO
+    const uint32_t savedDepth = c->fn_depth;  // N9.5 fase 2: o 0 separa o tratador da cadeia interrompida
+    c->fn_ring[c->fn_depth++ % kFnRing] = 0;
+#endif
     sh4_dispatch(c, c->spc, c->vbr + 0x600);
     c->ret_expect = saved;
     c->ret_sp     = savedSp;
     c->cur_fn     = savedFn;
+#if BS_VALIDACAO
+    c->fn_depth = savedDepth;
+#endif
 }
 
 bool deliverOne(Sh4Context* c) {

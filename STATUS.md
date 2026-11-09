@@ -4326,6 +4326,37 @@ não por uma única bateria contínua** (decisão do mantenedor, 2026-11-02).
 - **Pendências:** H9; D-N8-4 no gate pós-N9; ressalva do 7.1 e D-K1(a); limite de 3 h de `n6_h` no executor, defeito a
   corrigir antes de uma futura integral, sem enfraquecer os testes. N9 e N10 não iniciados.
 
+### N9.5 fase 2: a marca cena 3D × HUD 2D por proveniência (2026-11-08, publicada como v0.9.5-2)
+
+Detalhes, regra e método em `docs/N9-5-AUDITORIA.md`, seção 13. Autorizada pelo mantenedor com a fase 1 aprovada: só
+metadados e diagnóstico, sem reposicionar o HUD, sem mudar desenho, lógica, física, áudio ou saves, e sem nenhuma mudança na
+Original.
+- **Só no build de validação:** a cadeia de chamadas do guest (`Sh4Context::fn_ring`, gravada no `BS_FN_ENTER` e restaurada
+  no `BS_CALL`; separador nas interrupções; cópia por thread), a origem de cada parâmetro na entrada do TA (com a marca do
+  DMA do canal 2), a origem de cada desenho alinhada à IR (`ListFrame::origins`, `Frame::origins` só quando a IR confere
+  desenho a desenho), a marca `kamui/draw_class` e o TSV `<ir>.origem.tsv` (comando `ir` do assistido e
+  `BS_RENDER_IR_GUARDAR`). Ferramenta: `tools/dev/n95_proveniencia.py capturar|cruzar`.
+- **Produto inalterado (prova):** o pré-processador do `msvc-release` (o comando exato do ninja, com `/EP`) dá a mesma saída
+  no HEAD e na árvore em todos os arquivos de produto tocados e nos 12 arquivos do código gerado; o controle com
+  `/DBS_VALIDACAO=1` difere em todos. A Original com o exe de validação desta fase contra `referencias_n87`: **10 casos, 0
+  diferentes**.
+- **Marca × oráculo diferencial da fase 0** (as seis cenas da seção 11.3, 5702 desenhos; contagens do oráculo iguais às da
+  fase 0): cena 4543 e tela 48 marcadas certo, **0 erradas**, 0 desconhecidas, **1111 ambíguas** (1015 tela, 86 cena e as 10
+  faíscas), todas do caminho do DMA com 1/w constante. Fora do DMA, cada cadeia de chamadas é só cena ou só tela.
+- **Ambiguidade registrada:** pelo DMA, a cadeia é a de quem dispara a cópia (`8C064A52` → `8C173044`), não a de quem montou
+  os vértices; o HUD translúcido e os billboards da cena têm a mesma forma. A proposta para resolvê-la (a cadeia de quem
+  escreve no buffer do DMA) fica para a fase 3, com decisão do mantenedor.
+- **Testes:** `bs_unit_tests` 365/0 (4 da cadeia de chamadas, com a chamada de cauda e a recursão além do anel),
+  `bs_render_tests` 85/0 (a proveniência no `ListSink` e a marca com as cadeias medidas), ctest 30/30 (5 pulados por falta
+  do disco). Sem teste integrado da interrupção real e da troca de fibras.
+- **Revisão Codex `codex-20261108-201953`:** 3 médios e 1 baixo. Aceitos: a origem do parâmetro de 64 bytes (a da 1ª metade,
+  `split` quando diferem) e o `cruzar` que contava pares divergentes (agora erro). Aceitos em parte: a tabela (as entradas de
+  tela só valem com o chamador do jogo medido, porque `8C1736A0` também recebe sprites projetados da cena) e os testes
+  integrados (acrescentada a chamada de cauda). Detalhe na seção 13.7 da auditoria.
+- **Publicação:** `v0.9.5-2`, só com o pacote do Windows, como a `v0.9.5-1`.
+- **Pendências:** a ambiguidade do DMA; levar a proveniência ao produto (o custo no código gerado não foi medido); cobrir
+  mais salas e menus; fases 3–5 esperam autorização.
+
 ### N9.5 fase 1: o widescreen hor+ da Remastered (2026-11-05, aprovada e publicada em 2026-11-08 como v0.9.5-1)
 
 Detalhes, tabelas e o método em `docs/N9-5-AUDITORIA.md`, seção 12. Autorizada pelo mantenedor em 2026-11-05 (só a fase 1),

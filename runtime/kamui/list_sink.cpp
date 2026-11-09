@@ -97,6 +97,11 @@ public:
     }
 
     void finish() { out_.modifier_unclosed = out_.modifier_volumes - mod_closed_; }
+#if BS_VALIDACAO
+    // N9.5 fase 2: a proveniencia de cada parametro (ListSink::origins) e o indice do proximo parametro a decodificar
+    void origins(const std::vector<ParamOrigin>* po) { po_ = po; }
+    void at(uint32_t i) { cur_ = i; }
+#endif
 
 private:
     struct Global {
@@ -119,6 +124,18 @@ private:
     bool     mod_open_ = false, mod_closing_ = false, mod_cur_closed_ = false, mod_last_ = false;
     uint32_t mod_instr_ = 0, mod_closed_ = 0;
     uint8_t  mod_cull_ = 0;
+#if BS_VALIDACAO
+    const std::vector<ParamOrigin>* po_ = nullptr;
+    uint32_t                        cur_ = 0, gparam_ = 0;  // o parametro atual e o ultimo global
+    // um desenho novo em cl.draws: a proveniencia dele em out_.origins (a mesma ordem)
+    void note(DrawKind kind) {
+        DrawOrigin o;
+        o.param = cur_, o.global_param = gparam_, o.kind = kind;
+        if (po_ && cur_ < po_->size()) o.vertex = (*po_)[cur_];
+        if (po_ && gparam_ < po_->size()) o.global = (*po_)[gparam_];
+        out_.origins.push_back(o);
+    }
+#endif
 
     void strip_break() {
         strip_.clear();
@@ -147,6 +164,9 @@ private:
         g_.tsp    = p.w[2];
         g_.tcw    = p.w[3];
         g_.sprite = sprite;
+#if BS_VALIDACAO
+        gparam_ = cur_;
+#endif
         strip_break();
         const uint32_t obj = g_.pcw & 0xFF, col = (obj >> 4) & 3;
         g_.supported       = true;
@@ -240,6 +260,9 @@ private:
             } else if (!tri_mode_ && n == 3) {  // o primeiro triangulo do strip abre o desenho
                 open_ = int32_t(cl.draws.size());
                 cl.draws.push_back({s, uint32_t(cl.vertices.size()), 3});
+#if BS_VALIDACAO
+                note(DrawKind::Strip);
+#endif
                 for (size_t i = 0; i < 3; ++i) cl.vertices.push_back(ir_vertex(strip_[i]));
             } else {
                 // estado mudou no meio do strip (recorte do usuario entre vertices): daqui ate o fim do strip, um
@@ -248,6 +271,9 @@ private:
                 Vtx t[3] = {strip_[n - 3], strip_[n - 2], strip_[n - 1]};
                 if (n % 2 == 0) std::swap(t[0], t[1]);
                 cl.draws.push_back({s, uint32_t(cl.vertices.size()), 3});
+#if BS_VALIDACAO
+                note(DrawKind::StripTriangle);
+#endif
                 for (const Vtx& x : t) cl.vertices.push_back(ir_vertex(x));
             }
         }
@@ -287,6 +313,9 @@ private:
         CommandList&    cl     = out_.cl;
         for (const Vtx* const* t : {t1, t2}) {
             cl.draws.push_back({s, uint32_t(cl.vertices.size()), 3});
+#if BS_VALIDACAO
+            note(DrawKind::Sprite);
+#endif
             for (int i = 0; i < 3; ++i) cl.vertices.push_back(ir_vertex(*t[i]));
         }
         ++out_.sprites;
@@ -327,6 +356,9 @@ private:
 
 void ListSink::list_init() {
     params_.clear();
+#if BS_VALIDACAO
+    origins_.clear();
+#endif
     bytes_ = 0;
     list_ = -1, vertex64_ = false, pending_half_ = false;
 }
@@ -339,6 +371,9 @@ void ListSink::push(const uint32_t* w, uint32_t words) {
     p.words = words;
     std::memcpy(p.w, w, words * 4);
     params_.push_back(p);
+#if BS_VALIDACAO
+    origins_.push_back(origin_);
+#endif
 }
 
 BlockResult ListSink::feed(const uint32_t* d) {
@@ -348,7 +383,18 @@ BlockResult ListSink::feed(const uint32_t* d) {
         uint32_t w[16];
         std::memcpy(w, half_.w, 32);
         std::memcpy(w + 8, d, 32);
+#if BS_VALIDACAO
+        // revisao Codex 20261108-201953: o parametro e da 1a metade (o PCW esta nela); metades de cadeias diferentes
+        // ficam marcadas (a marca nao afirma nada delas)
+        const ParamOrigin second = origin_;
+        origin_                  = half_origin_;
+        for (int i = 0; i < kOriginDepth; ++i) origin_.split |= half_origin_.fn[i] != second.fn[i];
+        origin_.split |= half_origin_.dma != second.dma;
         push(w, 16);
+        origin_ = second;
+#else
+        push(w, 16);
+#endif
         pending_half_ = false;
         return r;
     }
@@ -384,13 +430,24 @@ BlockResult ListSink::feed(const uint32_t* d) {
         return r;
     }
     std::memcpy(half_.w, d, 32);
+#if BS_VALIDACAO
+    half_origin_ = origin_;
+#endif
     pending_half_ = true;
     return r;
 }
 
 void ListSink::build(const FrameParams& frame, uint32_t texture_stride, ListFrame& out) const {
     Decoder dec(frame, texture_stride, out);
+#if BS_VALIDACAO
+    dec.origins(&origins_);
+    for (size_t i = 0; i < params_.size(); ++i) {
+        dec.at(uint32_t(i));
+        dec.feed(params_[i]);
+    }
+#else
     for (const ListParam& p : params_) dec.feed(p);
+#endif
     dec.finish();
 }
 

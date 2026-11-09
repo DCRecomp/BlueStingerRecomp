@@ -15,6 +15,9 @@
 #include "pvr/vram.h"
 #include "render/render_ir.h"
 #include "render/texture_convert.h"
+#if BS_VALIDACAO
+#include "kamui/draw_class.h"  // N9.5 fase 2: a marca cena/HUD no TSV da proveniencia
+#endif
 
 #include <chrono>
 #include <cmath>
@@ -48,6 +51,11 @@ bool Renderer::draw(uint32_t w, uint32_t h, std::vector<uint32_t>& image) {
     if (dumpAt.first && st.renders + 1 == dumpAt.first)
         std::fprintf(stderr, "[render] IR do render %llu em %s: %s\n", static_cast<unsigned long long>(dumpAt.first),
                      dumpAt.second.c_str(), save_frame_dump(dumpAt.second, frame) ? "ok" : "FALHOU");
+#if BS_VALIDACAO
+    if (dumpAt.first && st.renders + 1 == dumpAt.first)  // N9.5 fase 2: a proveniencia ao lado (<arquivo>.origem.tsv)
+        std::fprintf(stderr, "[render] proveniencia do render %llu: %s\n", static_cast<unsigned long long>(dumpAt.first),
+                     save_frame_origins(dumpAt.second + ".origem.tsv", frame) ? "ok" : "sem origens");
+#endif
     // N8.7: o renderizador em software desenha a IR (soft_device), tambem como recuo do Vulkan (o motivo da queda ja
     // foi registrado por vk_render)
     if (g_gfx_probe)  // N8.7 fase 0: render para textura
@@ -689,6 +697,45 @@ bool load_frame_dump(const std::string& path, nr::CommandList& cl, std::vector<D
     }
     return true;
 }
+#if BS_VALIDACAO
+bool save_frame_origins(const std::string& path, const Frame& f) {
+    if (f.origins.empty() || f.origins.size() != f.cl.draws.size()) return false;
+    std::ofstream o(std::filesystem::path(path), std::ios::trunc);
+    if (!o) return false;
+    auto chain = [](const bs::kamui::ParamOrigin& p) {
+        std::string s;
+        char        b[12];
+        for (uint32_t fn : p.fn) {
+            if (!fn) break;
+            std::snprintf(b, sizeof b, "%s%08X", s.empty() ? "" : ">", fn);
+            s += b;
+        }
+        return s.empty() ? std::string("-") : s;
+    };
+    static const char* kKind[] = {"strip", "strip_tri", "sprite"};
+    // a semantica do desenho ao lado (para as regras da secao 13): vertices, 1/w minimo e maximo, teste e escrita de
+    // profundidade, textura, blend de origem e de destino
+    o << "desenho\tlista\ttipo\tparam\tglobal\tdma\tcadeia\tcadeia_global\tvertices\tinvw_min\tinvw_max\tprofundidade"
+         "\tescreve_z\ttextura\tsrc\tdst\tmarca\n";
+    for (size_t i = 0; i < f.origins.size(); ++i) {
+        const bs::kamui::DrawOrigin& d = f.origins[i];
+        const nr::Draw&              w = f.cl.draws[i];
+        float                        lo = 0, hi = 0;
+        for (uint32_t k = 0; k < w.vertex_count && w.first_vertex + k < f.cl.vertices.size(); ++k) {
+            const float iw = f.cl.vertices[w.first_vertex + k].inv_w;
+            if (!k || iw < lo) lo = iw;
+            if (!k || iw > hi) hi = iw;
+        }
+        char sem[160];
+        std::snprintf(sem, sizeof sem, "%u\t%.9g\t%.9g\t%d\t%d\t%u\t%d\t%d", w.vertex_count, lo, hi, int(w.state.depth),
+                      int(w.state.depth_write), w.state.texture.value, int(w.state.src), int(w.state.dst));
+        o << i << '\t' << int(w.state.list) << '\t' << kKind[int(d.kind)] << '\t' << d.param << '\t' << d.global_param << '\t'
+          << (d.vertex.dma ? 1 : 0) << '\t' << chain(d.vertex) << '\t' << chain(d.global) << '\t' << sem << '\t'
+          << bs::kamui::draw_class_name(bs::kamui::classify(d, w, f.cl)) << '\n';
+    }
+    return bool(o);
+}
+#endif
 void inject_fault(Fault f) { g_fault = f; }
 
 void set_compare_dump(const std::string& dir, uint32_t every) {

@@ -3,6 +3,9 @@
 #include "test.h"
 
 #include "kamui/list_sink.h"
+#if BS_VALIDACAO
+#include "kamui/draw_class.h"
+#endif
 
 #include <cstring>
 
@@ -124,3 +127,108 @@ BS_TEST(kamui_list_sink_unsupported_texture_is_counted_not_drawn) {
     s.build(frame(), 0, f);
     BS_CHECK(f.cl.draws.empty() && f.unsupported == 3 && f.skipped_params == 3);
 }
+
+#if BS_VALIDACAO
+// N9.5 fase 2 (so validacao): a proveniencia de cada parametro chega a cada desenho da IR, alinhada a cl.draws: a do
+// vertice que abriu o desenho (os vertices seguintes de um strip nao mudam a do desenho aberto) e a do global dele
+BS_TEST(kamui_list_sink_origin_follows_each_draw) {
+    using bs::kamui::DrawKind;
+    using bs::kamui::ParamOrigin;
+    auto org = [](uint32_t a, uint32_t b, bool dma = false) {
+        ParamOrigin o;
+        o.fn[0] = a, o.fn[1] = b, o.dma = dma;
+        return o;
+    };
+    ListSink s;
+    s.list_init();
+    s.set_origin(org(0x8C170000, 0x8C050000));
+    feed(s, {pcw(4, 0, 0x02), 0x80000000u, 0x20000000u, 0, 0, 0, 0, 0});  // global 0
+    s.set_origin(org(0x8C170010, 0x8C050000));
+    vertex(s, 0, 0, 0xFFFF0000, false);  // 1: abre o strip
+    s.set_origin(org(0x8C170020, 0x8C050000));
+    vertex(s, 10, 0, 0xFF00FF00, false);
+    vertex(s, 0, 10, 0xFF0000FF, false);
+    vertex(s, 10, 10, 0xFFFFFFFF, true);  // o strip continua no mesmo desenho
+    // um sprite pelo DMA: global 5 e um parametro de 64 bytes (6), dois desenhos
+    s.set_origin(org(0x8C180000, 0x8C060000, true));
+    feed(s, {pcw(5, 2, 0x00), 0, 0, 0, 0xFFFFFFFF, 0, 0, 0});
+    feed(s, {pcw(7, 2, 0, true), fbits(0), fbits(0), fbits(1), fbits(8), fbits(0), fbits(1), fbits(8)});
+    feed(s, {fbits(8), fbits(1), fbits(0), fbits(8), 0, 0, 0, 0});
+    BS_CHECK(s.origins().size() == s.params().size() && s.params().size() == 7);
+    ListFrame f;
+    s.build(frame(), 0, f);
+    BS_CHECK(f.cl.draws.size() == 3 && f.origins.size() == 3);
+    const auto& a = f.origins[0];
+    // o desenho do strip abre no 3o vertice (o primeiro triangulo): a origem e a desse parametro (3)
+    BS_CHECK(a.kind == DrawKind::Strip && a.param == 3 && a.global_param == 0);
+    BS_CHECK(a.vertex.fn[0] == 0x8C170020 && a.global.fn[0] == 0x8C170000 && a.vertex.fn[1] == 0x8C050000 && !a.vertex.dma);
+    for (int k = 1; k < 3; ++k) {
+        const auto& b = f.origins[size_t(k)];
+        BS_CHECK(b.kind == DrawKind::Sprite && b.param == 6 && b.global_param == 5);
+        BS_CHECK(b.vertex.fn[0] == 0x8C180000 && b.vertex.fn[1] == 0x8C060000 && b.vertex.dma && b.global.dma);
+    }
+    // revisao Codex 20261108-201953: um parametro de 64 bytes e da 1a metade (o PCW); metades de cadeias diferentes
+    // ficam marcadas
+    s.set_origin(org(0x8C180100, 0x8C060100, true));
+    feed(s, {pcw(7, 2, 0, true), fbits(0), fbits(0), fbits(1), fbits(8), fbits(0), fbits(1), fbits(8)});
+    s.set_origin(org(0x8C180200, 0x8C060100, true));
+    feed(s, {fbits(8), fbits(1), fbits(0), fbits(8), 0, 0, 0, 0});
+    BS_CHECK(s.origins().size() == 8 && s.origins()[7].fn[0] == 0x8C180100 && s.origins()[7].split);
+    BS_CHECK(!s.origins()[6].split && !s.origins()[3].split);
+    // TA_LIST_INIT descarta as origens junto com os parametros
+    s.list_init();
+    BS_CHECK(s.origins().empty() && s.params().empty());
+}
+#endif
+
+#if BS_VALIDACAO
+// N9.5 fase 2: a marca cena/HUD com as cadeias medidas nas seis cenas (docs/N9-5-AUDITORIA.md secao 13)
+BS_TEST(kamui_draw_class_by_library_entry_and_dma_inv_w) {
+    using namespace bs::kamui;
+    auto org = [](std::initializer_list<uint32_t> fns, bool dma) {
+        DrawOrigin o;
+        int        i = 0;
+        for (uint32_t f : fns) o.vertex.fn[i++] = f;
+        o.vertex.dma = dma;
+        return o;
+    };
+    CommandList cl;
+    for (float w : {0.5f, 0.25f, 0.125f, 0.2f}) {  // um quad com perspectiva (0..3) e um com 1/w constante (4..7)
+        Vertex v;
+        v.inv_w = w;
+        cl.vertices.push_back(v);
+    }
+    for (int k = 0; k < 4; ++k) {
+        Vertex v;
+        v.inv_w = 0.149254f;
+        cl.vertices.push_back(v);
+    }
+    const Draw persp{{}, 0, 4}, flat{{}, 4, 4};
+    // modelos 3D: o desenho do Ninja entra pela 8C15F856, chamada pelo jogo
+    const DrawOrigin model = org({0x8C17EA5C, 0x8C15F078, 0x8C15F856, 0x8C089520, 0x8C084340}, false);
+    BS_CHECK(library_entry(model.vertex) == 0x8C15F856 && classify(model, flat, cl) == DrawClass::Scene);
+    // sprites 2D do Ninja (o recorte de 8C1736A0)
+    const DrawOrigin sprite = org({0x8C190B32, 0x8C1736A0, 0x8C07B4E0, 0x8C07862E}, false);
+    BS_CHECK(game_routine(sprite.vertex) == 0x8C07B4E0 && classify(sprite, persp, cl) == DrawClass::Screen);
+    // o mesmo recorte chamado por outra rotina do jogo (pode ser um sprite projetado da cena): desconhecida
+    BS_CHECK(classify(org({0x8C190B32, 0x8C1736A0, 0x8C064A52}, false), persp, cl) == DrawClass::Unknown);
+    BS_CHECK(classify(org({0x8C16C610, 0x8C16CD2C, 0x8C16CED8, 0x8C0899D6}, false), flat, cl) == DrawClass::Screen);
+    BS_CHECK(classify(org({0x8C16C610, 0x8C16CD2C, 0x8C16CED8, 0x8C060380}, false), flat, cl) == DrawClass::Unknown);
+    // metades de cadeias diferentes: nada e afirmado
+    DrawOrigin split = model;
+    split.vertex.split = true;
+    BS_CHECK(classify(split, persp, cl) == DrawClass::Unknown);
+    // a copia do canal 2: 1/w variavel = cena; constante = ambiguo; sem o DMA = desconhecida
+    const DrawOrigin dma = org({0x8C1C1E16, 0x8C18BB84, 0x8C18BC3C, 0x8C173044, 0x8C064A52, 0x8C064A20}, true);
+    BS_CHECK(library_entry(dma.vertex) == 0x8C173044);
+    BS_CHECK(classify(dma, persp, cl) == DrawClass::Scene && classify(dma, flat, cl) == DrawClass::Ambiguous);
+    BS_CHECK(classify(org({0x8C1C1E16, 0x8C18BB84, 0x8C18BC3C, 0x8C173044, 0x8C064A52}, false), persp, cl) ==
+             DrawClass::Unknown);
+    // cadeia que nao chega ao jogo, entrada fora da tabela e o escritor ja no jogo: desconhecida (nunca chutada)
+    BS_CHECK(classify(org({0x8C19BF78, 0x8C160CD4, 0x8C16145E}, false), flat, cl) == DrawClass::Unknown);
+    BS_CHECK(classify(org({0x8C19BF78, 0x8C160CD4, 0x8C07B4E0}, false), flat, cl) == DrawClass::Unknown);
+    BS_CHECK(library_entry(org({0x8C07B4E0}, false).vertex) == 0 && classify(org({0x8C07B4E0}, false), flat, cl) == DrawClass::Unknown);
+    // o desenho fora dos vertices da IR nao e lido
+    BS_CHECK(classify(dma, Draw{{}, 6, 4}, cl) == DrawClass::Unknown);
+}
+#endif
