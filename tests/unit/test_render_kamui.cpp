@@ -4,6 +4,7 @@
 
 #include "kamui/list_sink.h"
 #if BS_VALIDACAO
+#include "kamui/dma_origin.h"
 #include "kamui/draw_class.h"
 #endif
 
@@ -230,5 +231,68 @@ BS_TEST(kamui_draw_class_by_library_entry_and_dma_inv_w) {
     BS_CHECK(library_entry(org({0x8C07B4E0}, false).vertex) == 0 && classify(org({0x8C07B4E0}, false), flat, cl) == DrawClass::Unknown);
     // o desenho fora dos vertices da IR nao e lido
     BS_CHECK(classify(dma, Draw{{}, 6, 4}, cl) == DrawClass::Unknown);
+    // N9.5 fase 3A: pelo DMA com o escritor do buffer conhecido, vale a tabela do par (entrada, rotina do jogo)
+    auto writer = [&](std::initializer_list<uint32_t> fns) {
+        DrawOrigin o = org(fns, true);
+        o.vertex.dma_writer = true;
+        return o;
+    };
+    const DrawOrigin corner = writer({0x8C169C30, 0x8C1692CC, 0x8C060278, 0x8C060380, 0x8C07B4E0});
+    BS_CHECK(classify(corner, flat, cl) == DrawClass::Screen);
+    BS_CHECK(hud_lookup(library_entry(corner.vertex), game_routine(corner.vertex))->role == HudRole::CornerLeft);
+    BS_CHECK(hud_lookup(0x8C16CED8, 0x8C0899D6)->role == HudRole::CornerLeft);
+    BS_CHECK(hud_lookup(0x8C1692CC, 0x8C03C0C4)->role == HudRole::Center);
+    BS_CHECK(hud_lookup(0x8C16CED8, 0x8C01F0AE)->role == HudRole::Menu);
+    // a mesma entrada 8C1692CC desenha um sprite preso ao mundo quando o jogo o projetou (8C0584CC): cena
+    BS_CHECK(classify(writer({0x8C169C30, 0x8C1692CC, 0x8C0584CC, 0x8C058286}), flat, cl) == DrawClass::Scene);
+    // as particulas e as faiscas do cais nunca sao HUD
+    BS_CHECK(classify(writer({0x8C169450, 0x8C16938C, 0x8C057D00, 0x8C052240}), flat, cl) == DrawClass::Scene);
+    // o escritor conhecido com um par fora da tabela: desconhecida, mesmo com 1/w constante
+    BS_CHECK(classify(writer({0x8C169C30, 0x8C1692CC, 0x8C064A52}), flat, cl) == DrawClass::Unknown);
+    BS_CHECK(hud_lookup(0x8C1692CC, 0x8C064A52) == nullptr && hud_lookup(0, 0x8C060278) == nullptr);
+    // revisao Codex 20261109-024548: sem curinga; o desenho de modelos com um chamador nao medido e desconhecido
+    BS_CHECK(classify(org({0x8C17EA5C, 0x8C15F078, 0x8C15F856, 0x8C064A52}, false), persp, cl) == DrawClass::Unknown);
+    for (uint32_t e : {0x8C15F856u, 0x8C15F8B8u, 0x8C161738u, 0x8C160C12u, 0x8C1601FEu}) BS_CHECK(hud_lookup(e, 0) == nullptr);
+}
+#endif
+
+#if BS_VALIDACAO
+// N9.5 fase 3A (revisao Codex 20261109-024548): a sombra dos buffers do DMA so afirma o escritor de um bloco escrito
+// inteiro pela mesma cadeia desde a copia anterior
+BS_TEST(kamui_dma_origin_shadow_needs_the_whole_block_from_one_writer) {
+    using bs::kamui::DmaOriginShadow;
+    using bs::kamui::ParamOrigin;
+    ParamOrigin hud, scene, out;
+    hud.fn[0] = 0x8C169C30, hud.fn[1] = 0x8C1692CC, hud.fn[2] = 0x8C060278;
+    scene.fn[0] = 0x8C169450, scene.fn[1] = 0x8C16938C, scene.fn[2] = 0x8C057D00;
+    DmaOriginShadow s;
+    s.enable();
+    const uint32_t blk = 0x00200040;  // um bloco de 32 bytes do buffer
+    BS_CHECK(!s.marked(blk));
+    s.mark(blk);
+    BS_CHECK(s.marked(blk) && !s.marked(blk + 32) && (s.bitmap()[blk >> 8] >> ((blk >> 5) & 7) & 1));
+    // 8 escritas de 32 bits da mesma cadeia: o escritor vale, e a copia consome a anotacao
+    for (uint32_t k = 0; k < 32; k += 4) s.note(blk + k, 4, hud);
+    BS_CHECK(s.take(blk, out) && out.fn[2] == 0x8C060278);
+    BS_CHECK(!s.take(blk, out));  // a proxima copia precisa de escrita nova
+    // escrita parcial (o resto do bloco ficou do conteudo anterior): sem escritor
+    for (uint32_t k = 0; k < 28; k += 4) s.note(blk + k, 4, hud);
+    s.note(blk + 28, 2, hud);
+    BS_CHECK(!s.take(blk, out));
+    // os 32 bytes por bytes e meias palavras da mesma cadeia: vale
+    for (uint32_t k = 0; k < 16; ++k) s.note(blk + k, 1, scene);
+    for (uint32_t k = 16; k < 32; k += 2) s.note(blk + k, 2, scene);
+    BS_CHECK(s.take(blk, out) && out.fn[2] == 0x8C057D00);
+    // dois escritores no mesmo bloco: sem escritor
+    for (uint32_t k = 0; k < 16; k += 4) s.note(blk + k, 4, hud);
+    for (uint32_t k = 16; k < 32; k += 4) s.note(blk + k, 4, scene);
+    BS_CHECK(!s.take(blk, out));
+    // reset (sessao nova): nada marcado, nada anotado
+    for (uint32_t k = 0; k < 32; k += 4) s.note(blk + k, 4, hud);
+    s.reset();
+    BS_CHECK(!s.marked(blk) && !s.take(blk, out));
+    // espelhos P1/P2 da RAM caem no mesmo bloco (o offset e mascarado)
+    s.mark(blk | 0x0C000000);
+    BS_CHECK(s.marked(blk));
 }
 #endif

@@ -40,6 +40,9 @@ struct ParamOrigin {
     uint32_t fn[kOriginDepth] = {};
     bool     dma = false;
     bool     split = false;  // um parametro de 64 bytes cujas duas metades vieram de cadeias diferentes
+    // N9.5 fase 3A: com dma, fn e a cadeia de quem ESCREVEU o bloco no buffer da RAM (BS_PROVENIENCIA_DMA=1); sem isso, a
+    // de quem disparou a copia
+    bool     dma_writer = false;
 };
 // A proveniencia de um desenho da IR (ListFrame::origins, alinhado a cl.draws): o parametro de vertice que abriu o
 // desenho e o global que deu o estado dele (indices em ListSink::params()).

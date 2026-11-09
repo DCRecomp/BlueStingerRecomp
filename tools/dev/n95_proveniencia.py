@@ -31,6 +31,11 @@ DX = 107
 CENAS = {
     "load": dict(roteiro="passo_load_slot1.txt", cartao=True, passos=[1855, 2300]),
     "combate": dict(roteiro="passo_combate.txt", cartao=False, passos=[2000, 6000, 10000, 11660]),
+    # N9.5 fase 3: o HUD em mais situacoes (marcos anotados nos roteiros): exterior RCG03, menu do inventario, item
+    # encontrado (monstro se levantando), menu de usar item, combate, dano e GAME OVER; e as cenas de historia do C-GATE
+    "heliporto": dict(roteiro="passo_heliporto.txt", cartao=False,
+                      passos=[7900, 8840, 11240, 11345, 11500, 11800, 12100, 12190]),
+    "cgate": dict(roteiro="passo_cgate.txt", cartao=False, passos=[4000, 7900]),
 }
 
 
@@ -57,6 +62,10 @@ def capturar(a):
                 env.pop(k, None)
             if tela:
                 env["BS_TELA_TESTE"] = tela
+            if a.escritor_dma:  # N9.5 fase 3A: a cadeia de quem escreveu o buffer do DMA (sombra da RAM)
+                env["BS_PROVENIENCIA_DMA"] = "1"
+            else:
+                env.pop("BS_PROVENIENCIA_DMA", None)
             extra = ""
             if c["cartao"]:
                 saves = os.path.join(d, "saves")
@@ -182,6 +191,7 @@ def main():
     c.add_argument("--cartao", required=True)
     c.add_argument("--saida", required=True)
     c.add_argument("--cenas", default="")
+    c.add_argument("--escritor-dma", action="store_true", help="BS_PROVENIENCIA_DMA=1: a cadeia de quem escreveu o buffer do DMA")
     x = sub.add_parser("cruzar")
     x.add_argument("pasta")
     x.add_argument("--ir-tela", required=True)

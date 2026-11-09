@@ -735,3 +735,125 @@ combate. Quatro capturas completas ao longo da fase (a última com as correçõe
 | B3 cena/HUD | **resolvido em parte, com prova:** a marca acerta todos os desenhos que afirma, nas seis cenas; o caminho do DMA com 1/w constante fica ambíguo (13.5) |
 | Fase 3 (HUD e menus) | espera autorização; depende de decidir como resolver o DMA (13.5) e de levar a proveniência ao produto (hoje só existe na validação; o custo no código gerado não foi medido) |
 | Cobertura | seis cenas em duas rotas; outras salas, menus e telas ainda não medidos |
+
+## 14. Fase 3: HUD e menus no widescreen (2026-11-09)
+
+Autorizada pelo mantenedor em duas partes, com validação entre elas: **A**, identificar os elementos do HUD com
+segurança, inclusive os desenhos ambíguos do DMA; **B**, reposicionar o HUD na Remastered. As fases 4 e 5 não começam.
+
+### 14.1 Parte A: o caminho do DMA (investigação)
+
+- **Mecanismo.** O jogo monta parte das listas num buffer de vértices na RAM e as envia ao TA pela cópia do canal 2. A
+  cópia é disparada por `8C064A52` → `8C173044` → `8C18BC3C` → `8C18BB84` → `8C1C1E16` (o registrador do DMA); `8C173044`
+  é um laço de espera e sincronização do quadro, não uma rotina de desenho. Por isso, na fase 2, a cadeia registrada era
+  a de quem dispara a cópia.
+- **Quem escreve o buffer.** Toda escrita da CPU na RAM passa por `sh4_write8/16/32` (as store queues para a RAM também,
+  `memory/sh4_sq.cpp`). A **sombra dos buffers** (`kamui/dma_origin.h`, só validação, ligada por `BS_PROVENIENCIA_DMA=1`):
+  1. a cópia marca, num mapa de 1 bit por bloco de 32 bytes da RAM, os blocos que lê;
+  2. cada escrita num bloco marcado anota a cadeia de chamadas de quem escreveu e os bytes cobertos;
+  3. quando a cópia lê o bloco de novo, o parâmetro recebe a cadeia do **escritor**, mas só se os 32 bytes foram escritos
+     pela mesma cadeia desde a cópia anterior. Escrita parcial, vários escritores ou conteúdo que não passou pela CPU
+     deixam o bloco sem escritor, e vale a regra da fase 2 (nunca um palpite). A cópia consome a anotação.
+- **Reutilização e sincronização.** Os blocos são reutilizados a cada quadro: a sombra só vale para o conteúdo escrito
+  depois da cópia anterior, e a cópia do canal 2 é síncrona no runtime (lê a RAM no momento em que é disparada), então
+  não há escrita concorrente durante a leitura. Uma sessão nova no mesmo processo limpa a sombra (`ta_reset`). As threads
+  do guest são cooperativas no mesmo contexto; a cadeia de cada thread é guardada na troca (fase 2), e a do escritor é a
+  da thread que escreveu.
+- **Identificador estável.** O par **(entrada na biblioteca, rotina do jogo)**: a entrada é a última rotina do SDK antes da
+  primeira do jogo na cadeia do escritor; a rotina é essa primeira do jogo. São endereços de código do binário original:
+  não mudam entre quadros, salas ou execuções.
+
+### 14.2 Parte A: a tabela e os resultados
+
+A tabela medida fica em `runtime/kamui/hud_table.h` (classe e papel de cada par; só pares medidos, sem curinga). A marca
+da validação (`kamui/draw_class`) a usa; o produto vai usá-la na Parte B.
+
+Capturas do gameplay assistido sem janela (`tools/dev/n95_proveniencia.py capturar --escritor-dma`, exe de validação
+desta parte), 4:3 × projeção larga, **16 cenas em quatro rotas**:
+- LOAD (`passo_load_slot1`, cartão importado do save do R3): 1855, 2300;
+- combate (`passo_combate`): 2000 (cais), 6000 (terminal ESER), 10000 (porta trancada, HUD e mensagem), 11660 (menu);
+- heliporto (`passo_heliporto`): 7900 (exterior RCG03), 8840 (inventário), 11240 (item encontrado, o monstro na cena),
+  11345, 11500, 11800, 12100, 12190 (menus);
+- C-GATE (`passo_cgate`): 4000, 7900 (cenas de história).
+
+| Medida | Resultado |
+|---|---|
+| Desenhos (16 cenas) | **12 562**: oráculo 10 819 cena, 1 729 tela, 12 só no 4:3 e 2 só no largo (as faíscas e outras partículas) |
+| Contagens do oráculo nas seis cenas da fase 0 | iguais às da seção 11.3 |
+| Pares com proveniência diferente nos dois lados | 0 |
+| Desenhos do DMA com o escritor confirmado (os 32 bytes de cada bloco pela mesma cadeia) | **4 220 de 4 220** (1 601 tela, 2 619 cena) |
+| Marca × oráculo | cena 10 819 e tela 1 729 certas; os 14 de um lado só marcados cena; **errados 0, desconhecidos 0, ambíguos 0** |
+| Cadeias mistas (cena e tela na mesma cadeia completa) | 0 de 108 |
+| A rotina do jogo sozinha | mistura cena e tela (1 chave, 128 desenhos na minoria): a chave precisa ser o par |
+
+- **Os 1 111 ambíguos da fase 2 foram resolvidos** (as seis cenas da fase 0 estão entre as 16): o escritor do buffer
+  separa o HUD translúcido (`8C1692CC`/`8C16CED8` com as rotinas do HUD e dos menus) das partículas e faíscas
+  (`8C16938C`/`8C057D00`). Nenhuma partícula, faísca ou efeito foi marcado como tela.
+- Quatro capturas completas ao longo da Parte A (a última com as correções da revisão), com as mesmas contagens.
+- **A instrumentação não muda o jogo:** a Original com o exe de validação desta parte contra `referencias_n87`: **10 casos, 0 diferentes** (as 5 rotas × `--tempo nativo` e `experimental`; pico 403 MB).
+- **O produto não muda:** o pré-processador do `msvc-release` dá a mesma saída que `153632b` em todos os arquivos de
+  produto tocados ou que incluem os cabeçalhos tocados (`irq_bridge`, `sh4_intc`, `sh4_threads`, `sh4_context`,
+  `list_sink`, `render_core`, `assist`, `area4_bus`, `render_bus`, `dma_bus`, `sh4_sq`, `memory`, `game_host`) e nos 12
+  arquivos do código gerado; o controle com `/DBS_VALIDACAO=1` difere em todos.
+- **Testes:** `bs_render_tests` 86/0 (com `kamui_dma_origin_shadow_needs_the_whole_block_from_one_writer` e a tabela),
+  `bs_unit_tests` 365/0, ctest 30/30.
+- Evidências (fora do git): `tmp/sessao-20261109/fase3/c4`.
+
+### 14.3 Parte A: elementos do HUD
+
+| Elemento | Par (entrada, rotina do jogo) | Caminho | Papel |
+|---|---|---|---|
+| Moldura do alvo e nome do personagem ("ELIOT") | `8C1692CC`, `8C060278` | DMA | canto inferior esquerdo |
+| Barra de vida | `8C16CED8`, `8C0899D6` | direto e DMA | canto inferior esquerdo |
+| Mensagens ("The door is locked.") | `8C1692CC`, `8C03C0C4` | DMA | centro |
+| Menu de pausa (MAP, ITEMS, WEAPON, CHANGE, EXIT; textos) | `8C1692CC`/`8C021560`, `8C16CED8`/`8C01F0AE`, `8C01FAEE`, `8C01FD40`, `8C01FC60` | DMA | menu (4:3 centralizado) |
+| Terminal ESER | `8C16CED8`/`8C020140`, `8C03C276` | DMA | menu (4:3 centralizado) |
+| Elemento sempre fora da tela (x ≈ 800) | `8C1692CC`, `8C0626AA` | DMA | sem papel identificado |
+| Sprites degenerados na origem (invisíveis) | `8C1736A0`, `8C07B4E0` | direto | sem papel |
+| Partículas e faíscas do cais | `8C16938C`, `8C057D00` | DMA | **cena** (nunca HUD) |
+| Sprite preso ao mundo (o jogo o projeta: `8C0584CC` chama o `njProjectScreen`) | `8C1692CC`, `8C0584CC` | DMA | **cena** |
+
+- As rotinas do canto esquerdo são chamadas por `8C060380`, a rotina que desenha o HUD do gameplay.
+- A mesma entrada `8C1692CC` serve ao HUD (canto, mensagens, menus) e a um sprite preso ao mundo: só o par separa.
+- **Sem identificação confiável:**
+  - **arma, munição e a mira de combate:** nenhuma das rotas disponíveis mostra o HUD com uma arma equipada ou um combate
+    em curso. No roteiro do heliporto, os passos anotados como combate (11453 em diante) ainda estão no menu de itens
+    nesta execução (o roteiro e as anotações não batem; não investigado);
+  - **GAME OVER**: pela mesma razão;
+  - o elemento `8C0626AA` (talvez o indicador de arma, que entraria com uma arma equipada): papel não provado.
+
+### 14.4 Parte A: classificação leve no produto (arquitetura e custo)
+
+A instrumentação da validação (a cadeia de 64 entradas por chamada e a sombra da RAM) não vai para o produto. O produto
+só precisa saber, por desenho, se ele veio de uma rotina de HUD com papel conhecido.
+
+**Proposta (A1, marca de escopo):**
+- o gerador emite, só nas rotinas de HUD da tabela (hoje `8C060278`, `8C0899D6`, `8C03C0C4` e os menus), uma marca de
+  escopo no `Sh4Context` (RAII: liga na entrada, restaura na saída por qualquer caminho); nenhuma outra função muda;
+- caminho direto (store queue para o TA): a entrada da área 4 grava a marca corrente em cada parâmetro (um byte);
+- caminho do DMA: toda escrita da CPU na RAM testa a marca; com ela ligada, anota o papel nos blocos do buffer (o mesmo
+  mapa de blocos da cópia); a cópia lê o papel do bloco;
+- a Remastered 16:9 lê o papel de cada desenho; a Original e o 4:3 não leem nada.
+
+**Custo medido do termo que pesa** (o teste da marca em toda escrita na RAM, com a marca sempre desligada; protótipo em
+`tmp/wt-n95-proto`, fora dos commits; rota de combate, 20 000 VBlanks sem janela, 3 rodadas alternadas, tempo de CPU do
+processo): base 163,11 / 162,45 / 163,55 s; com o teste 167,80 / 165,38 / 163,52 s. Média **+1,6 %** (+2,5 s em 163 s),
+dentro do ruído (na 3ª rodada as duas empatam). Tempo de parede +0,7 %. Memória: 64 KiB do mapa de blocos + 1 byte de
+papel por bloco usado. Não medido: o custo dentro das rotinas de HUD (poucas escritas por quadro) e em outras rotas.
+
+**Alternativas avaliadas:**
+- **A2, ponteiro do buffer do Kamui:** registrar, na entrada e na saída das rotinas de HUD, o ponteiro de escrita do buffer
+  de vértices e atribuir a faixa escrita. Custo por escrita zero, mas exige achar e provar o ponteiro dentro do Kamui
+  (análise estática não feita) e tratar vários buffers; mais frágil.
+- **A3, regra por posição/estado:** rejeitada (o mantenedor vetou classificar só pela posição, textura ou transparência).
+
+### 14.5 Parte A: revisão Codex
+
+**`reviews/codex-20261109-024548.md`** (três médios, todos aceitos):
+- **Escrita parcial assumia a autoria do bloco inteiro.** Corrigido: a sombra guarda os bytes cobertos e se houve mais de
+  um escritor desde a cópia anterior; só um bloco escrito inteiro pela mesma cadeia tem escritor (`kamui/dma_origin.h`,
+  teste dedicado). Na medição final, os 4 220 blocos de desenho do DMA passaram nesse critério.
+- **Uma sessão nova no mesmo processo herdava a sombra.** Corrigido: `ta_reset` limpa o mapa, as anotações e os contadores.
+- **Entradas curinga na tabela.** Corrigido: só os pares exatos observados; um chamador não medido fica desconhecido
+  (teste negativo para cada entrada que era curinga).
+- Não verificado pelo revisor: as evidências ficam em `tmp/` (fora do repositório); os números estão nesta seção.

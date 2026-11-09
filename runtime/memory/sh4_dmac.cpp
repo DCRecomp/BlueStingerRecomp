@@ -190,6 +190,7 @@ bool ch2_transfer(Sh4Context* c, uint32_t dest, uint32_t len) {
         for (int i = 0; i < 8; ++i) blk[i] = sh4_read32(c, src + 4 * i);
         if (g_legacyTrail) g_legacyTrail->add(fifo ? dest : dest + off, blk);
         if (g_gfx_probe) gfx_probe_ta(c, fifo ? dest : dest + off, GfxPath::Dma);
+        ta_origin_dma_src(src);  // N9.5 fase 3A: quem escreveu este bloco no buffer
         if (!ta_fifo_write(c, fifo ? dest : dest + off, blk))
             sh4_fatal(c, "DMA do canal 2 para destino fora da area 4", c->pc, dest);
     }

@@ -4326,6 +4326,32 @@ não por uma única bateria contínua** (decisão do mantenedor, 2026-11-02).
 - **Pendências:** H9; D-N8-4 no gate pós-N9; ressalva do 7.1 e D-K1(a); limite de 3 h de `n6_h` no executor, defeito a
   corrigir antes de uma futura integral, sem enfraquecer os testes. N9 e N10 não iniciados.
 
+### N9.5 fase 3, Parte A: identificação do HUD, inclusive o caminho do DMA (2026-11-09, commit local)
+
+Detalhes em `docs/N9-5-AUDITORIA.md`, seção 14. Autorizada pelo mantenedor junto com a Parte B (reposicionamento), com
+validação entre as duas; sem push, tag nem release sem nova autorização.
+- **O DMA:** a cópia do canal 2 é disparada por um laço de sincronização do quadro (`8C173044`); o conteúdo vem de um buffer
+  de vértices na RAM. A **sombra dos buffers** (só validação, `BS_PROVENIENCIA_DMA=1`, `kamui/dma_origin.h`) anota a cadeia
+  de chamadas de quem escreve cada bloco de 32 bytes que a cópia lê; o parâmetro recebe a cadeia do escritor só se os 32
+  bytes vieram da mesma cadeia desde a cópia anterior.
+- **Identificador estável:** o par (entrada na biblioteca, rotina do jogo), endereços do binário original. A tabela medida
+  (`runtime/kamui/hud_table.h`, só pares exatos) dá a classe e o papel: canto inferior esquerdo (moldura do alvo, nome, barra
+  de vida), centro (mensagens), menu (pausa, terminal ESER), cena (modelos, partículas e faíscas, sprite preso ao mundo).
+- **Resultado** (16 cenas em quatro rotas, 12 562 desenhos; oráculo da fase 0): **0 errados, 0 desconhecidos, 0 ambíguos**;
+  os 1 111 ambíguos da fase 2 resolvidos; 4 220 de 4 220 desenhos do DMA com o escritor confirmado; nenhuma partícula ou
+  faísca marcada como tela.
+- **Sem identificação confiável:** arma, munição e mira de combate e o GAME OVER (nenhuma rota disponível os mostra; no
+  roteiro do heliporto, os passos anotados como combate ainda estão no menu nesta execução); o elemento `8C0626AA`, sempre
+  fora da tela.
+- **Produto inalterado:** pré-processador do `msvc-release` igual a `153632b` nos arquivos tocados e no código gerado. A
+  Original com o exe de validação desta parte contra `referencias_n87`: **10 casos, 0 diferentes** (as 5 rotas × `--tempo nativo` e `experimental`; pico 403 MB).
+- **Testes:** `bs_render_tests` 86/0, `bs_unit_tests` 365/0, ctest 30/30.
+- **Revisão Codex `codex-20261109-024548`:** 3 médios, aceitos e corrigidos (escrita parcial, sessão nova, curingas).
+- **Classificação leve no produto (proposta, não implementada):** marca de escopo emitida pelo gerador só nas rotinas de HUD
+  da tabela, gravada por parâmetro no caminho direto e, no DMA, por bloco do buffer, com um teste da marca em cada escrita na
+  RAM. Custo medido do teste (protótipo fora dos commits, rota de combate, 20 000 VBlanks, 3 rodadas): CPU +1,6 % em média,
+  dentro do ruído; parede +0,7 %. A decisão da arquitetura é do mantenedor, antes da Parte B.
+
 ### N9.5 fase 2: a marca cena 3D × HUD 2D por proveniência (2026-11-08, publicada como v0.9.5-2)
 
 Detalhes, regra e método em `docs/N9-5-AUDITORIA.md`, seção 13. Autorizada pelo mantenedor com a fase 1 aprovada: só

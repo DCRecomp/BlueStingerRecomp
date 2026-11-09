@@ -277,6 +277,11 @@ só como histórico:
   validação (seção 13 da auditoria). Contra o oráculo da fase 0, nas seis cenas: 0 desenhos marcados errado, 1111 ambíguos
   (o caminho do DMA com 1/w constante). O produto e a Original não mudam (pré-processador igual; N8.7 10/10). A fase 3 espera
   autorização e a decisão sobre o DMA.
+- **Fase 3 (autorizada em 2026-11-08, em duas partes): Parte A (2026-11-09, commit local)** — o caminho do DMA identificado
+  pelo escritor do buffer (só validação); tabela medida (entrada na biblioteca, rotina do jogo) → classe e papel do HUD; em
+  16 cenas, 0 desenhos errados, 0 desconhecidos e 0 ambíguos (seção 14 da auditoria). Arma, munição, mira de combate e GAME
+  OVER sem identificação (nenhuma rota os mostra). A Parte B (reposicionamento) espera a decisão do mantenedor sobre a
+  marca leve no produto.
 
 ### N9.6 — Iluminação, sombras e materiais (R, GG)
 

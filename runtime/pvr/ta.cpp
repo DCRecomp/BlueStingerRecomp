@@ -16,15 +16,18 @@
 // produto, a entrada e system/area4_bus.cpp.
 #include "pvr/ta.h"
 
+#include "cpu/sh4_mem.h"
 #include "cpu/sh4_runtime.h"
 #include "pvr/holly_intc.h"
 #include "pvr/vram.h"
 #include "kamui/area4_entry.h"
+#include "kamui/dma_origin.h"
 
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <string>
+#include <vector>
 
 namespace bs {
 namespace {
@@ -48,14 +51,46 @@ kamui::ListSink g_list;  // N8.7: as listas do Kamui, decodificadas direto para 
 bool            g_originDma = false;  // N9.5 fase 2: a escrita atual vem do DMA do canal 2
 
 // N9.5 fase 2: as entradas mais internas da cadeia de chamadas do guest (Sh4Context::fn_ring) ate o separador 0
-kamui::ParamOrigin origin_of(const Sh4Context* c) {
+kamui::ParamOrigin chain_of(const Sh4Context* c) {
     kamui::ParamOrigin o;
-    o.dma = g_originDma;
     for (uint32_t i = 0; c && int(i) < kamui::kOriginDepth && i < c->fn_depth && i < kFnRing; ++i) {
         const uint32_t f = c->fn_ring[(c->fn_depth - 1 - i) % kFnRing];
         if (!f) break;
         o.fn[i] = f;
     }
+    return o;
+}
+
+// N9.5 fase 3A (BS_PROVENIENCIA_DMA=1): a sombra dos buffers do DMA do canal 2 (kamui/dma_origin.h). Um bloco copiado sem
+// escritor valido (a primeira copia, escrita parcial, varios escritores) fica com a cadeia de quem disparou a copia, como
+// na fase 2.
+kamui::DmaOriginShadow g_dmaShadow;
+uint32_t               g_originDmaSrc = 0;
+uint64_t               g_dmaWithWriter = 0, g_dmaWithoutWriter = 0;
+
+bool dma_origin_on() {
+    static const bool on = [] {
+        const char* v = std::getenv("BS_PROVENIENCIA_DMA");
+        if (!v || std::string(v) != "1") return false;
+        g_dmaShadow.enable();
+        g_ram_origin_watch = g_dmaShadow.bitmap();
+        return true;
+    }();
+    return on;
+}
+
+kamui::ParamOrigin origin_of(const Sh4Context* c) {
+    if (g_originDma && dma_origin_on() && sh4_is_ram(g_originDmaSrc)) {
+        kamui::ParamOrigin o;
+        if (g_dmaShadow.take(g_originDmaSrc & kRamMask, o)) {
+            ++g_dmaWithWriter;
+            o.dma = o.dma_writer = true;
+            return o;
+        }
+        ++g_dmaWithoutWriter;
+    }
+    kamui::ParamOrigin o = chain_of(c);
+    o.dma = g_originDma;
     return o;
 }
 
@@ -170,6 +205,9 @@ void polygonFifo(Sh4Context* c, const uint32_t* d) {
 } // namespace
 
 void ta_reset() {
+    // revisao Codex 20261109-024548: uma sessao nova no mesmo processo recarrega a RAM sem passar pela sombra
+    if (g_dmaShadow.on()) g_dmaShadow.reset();
+    g_originDma = false, g_originDmaSrc = 0, g_dmaWithWriter = g_dmaWithoutWriter = 0;
     g = {};
     g_params.clear();
     g_bytes = 0;
@@ -201,6 +239,13 @@ void ta_list_continue() {
 
 kamui::ListSink& ta_list_sink() { return g_list; }
 void             ta_origin_dma(bool on) { g_originDma = on; }
+void ta_origin_dma_src(uint32_t src) {
+    g_originDmaSrc = src;
+    if (dma_origin_on() && sh4_is_ram(src)) g_dmaShadow.mark(src & kRamMask);
+}
+void ta_origin_dma_counts(uint64_t& with_writer, uint64_t& without) { with_writer = g_dmaWithWriter, without = g_dmaWithoutWriter; }
+uint8_t* g_ram_origin_watch = nullptr;
+void     ram_origin_note(Sh4Context* c, uint32_t off, uint32_t size) { g_dmaShadow.note(off, size, chain_of(c)); }
 
 bool ta_fifo_write(Sh4Context* c, uint32_t target, const uint32_t* data) {
     const uint32_t p = target & 0x1FFFFFFF;

@@ -3,26 +3,21 @@
 // proveniencia (a cadeia de chamadas do guest que o enviou, kamui::DrawOrigin) e pela semantica do desenho. So
 // metadados e diagnostico: nada do desenho muda, e o produto nao tem este arquivo.
 //
-// A regra (medida contra o oraculo diferencial da fase 0, bs-ir-tela comparar, nas seis cenas da secao 11.3):
+// A regra (medida contra o oraculo diferencial da fase 0, bs-ir-tela comparar; secoes 13 e 14 da auditoria):
 //   - a "entrada na biblioteca" e a ultima entrada da cadeia (de dentro para fora) antes da primeira rotina do jogo
-//     (endereco abaixo de kGameCodeEnd);
-//   - entradas da cena 3D (os modelos e os poligonos projetados): 8C15F856, 8C161738, 8C160C12, 8C1601FE;
-//   - entradas da tela (2D em coordenadas de tela), so com o chamador do jogo medido: 8C1736A0 (o recorte dos sprites
-//     2D do Ninja) chamada por 8C07B4E0 e 8C16CED8 chamada por 8C0899D6 (com outro chamador: desconhecida, porque o
-//     recorte dos sprites tambem recebe sprites projetados da cena);
+//     (endereco abaixo de kGameCodeEnd), e a "rotina do jogo" e essa primeira rotina;
+//   - o par (entrada, rotina) e procurado na tabela medida (kamui/hud_table.h); fora dela, desconhecida (nunca chutada);
 //   - um parametro de 64 bytes com as metades de cadeias diferentes = desconhecida;
-//   - 8C173044 e a copia do canal 2 (DMA): a cadeia e a de quem dispara a copia, nao a de quem montou os vertices. Ali,
-//     1/w variavel no desenho = cena (projetado); 1/w constante = ambiguo (o HUD translucido e os billboards da cena,
-//     como as faiscas do cais, tem a mesma forma);
-//   - qualquer outra entrada (ou cadeia que nao chegou ao jogo) = desconhecida: nunca chutada.
+//   - pela copia do canal 2 (DMA), a cadeia e a de quem ESCREVEU o bloco no buffer da RAM (BS_PROVENIENCIA_DMA=1, fase
+//     3A). Sem o escritor conhecido (a primeira copia do bloco, ou sem a variavel), vale a regra da fase 2: a cadeia e a de
+//     quem disparou a copia (8C173044); 1/w variavel no desenho = cena, constante = ambiguo.
 #if BS_VALIDACAO
+#include "kamui/hud_table.h"
 #include "kamui/list_sink.h"
 
 #include <cstdint>
 
 namespace bs::kamui {
-
-enum class DrawClass : uint8_t { Unknown, Scene, Screen, Ambiguous };
 
 // o fim do codigo do jogo e o comeco das bibliotecas do SDK (Ninja, Kamui, Shinobi) no 1ST_READ.BIN: so serve para
 // achar a entrada na biblioteca; as cadeias medidas chegam ao jogo bem abaixo dele

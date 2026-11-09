@@ -32,6 +32,10 @@ std::string ta_area4_summary();
 bool ta_fifo_write(Sh4Context* c, uint32_t target, const uint32_t* data);
 // N9.5 fase 2: os blocos seguintes vem da copia do canal 2 (a proveniencia dos parametros registra isso)
 void ta_origin_dma(bool on);
+// N9.5 fase 3A: o endereco de origem do proximo bloco da copia (a sombra dos buffers, BS_PROVENIENCIA_DMA=1) e as
+// contagens de blocos copiados com e sem escritor conhecido
+void ta_origin_dma_src(uint32_t src);
+void ta_origin_dma_counts(uint64_t& with_writer, uint64_t& without);
 #endif
 
 // Conversor YUV (0x10800000): escrever TA_YUV_TEX_BASE ou TA_YUV_TEX_CTRL recomeca a

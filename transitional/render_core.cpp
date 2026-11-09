@@ -716,7 +716,7 @@ bool save_frame_origins(const std::string& path, const Frame& f) {
     // a semantica do desenho ao lado (para as regras da secao 13): vertices, 1/w minimo e maximo, teste e escrita de
     // profundidade, textura, blend de origem e de destino
     o << "desenho\tlista\ttipo\tparam\tglobal\tdma\tcadeia\tcadeia_global\tvertices\tinvw_min\tinvw_max\tprofundidade"
-         "\tescreve_z\ttextura\tsrc\tdst\tmarca\n";
+         "\tescreve_z\ttextura\tsrc\tdst\tmarca\tescritor_dma\n";
     for (size_t i = 0; i < f.origins.size(); ++i) {
         const bs::kamui::DrawOrigin& d = f.origins[i];
         const nr::Draw&              w = f.cl.draws[i];
@@ -731,7 +731,7 @@ bool save_frame_origins(const std::string& path, const Frame& f) {
                       int(w.state.depth_write), w.state.texture.value, int(w.state.src), int(w.state.dst));
         o << i << '\t' << int(w.state.list) << '\t' << kKind[int(d.kind)] << '\t' << d.param << '\t' << d.global_param << '\t'
           << (d.vertex.dma ? 1 : 0) << '\t' << chain(d.vertex) << '\t' << chain(d.global) << '\t' << sem << '\t'
-          << bs::kamui::draw_class_name(bs::kamui::classify(d, w, f.cl)) << '\n';
+          << bs::kamui::draw_class_name(bs::kamui::classify(d, w, f.cl)) << '\t' << (d.vertex.dma_writer ? 1 : 0) << '\n';
     }
     return bool(o);
 }

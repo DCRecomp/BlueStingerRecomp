@@ -1,4 +1,4 @@
-// N9.5 fase 2 (so validacao): a marca cena 3D x HUD 2D (draw_class.h).
+// N9.5 fases 2 e 3A (so validacao): a marca cena 3D x HUD 2D (draw_class.h), pela tabela de hud_table.h.
 #include "kamui/draw_class.h"
 
 namespace bs::kamui {
@@ -23,26 +23,19 @@ uint32_t game_routine(const ParamOrigin& o) {
 
 DrawClass classify(const DrawOrigin& o, const Draw& d, const CommandList& cl) {
     if (o.vertex.split) return DrawClass::Unknown;  // as duas metades do parametro vieram de cadeias diferentes
-    switch (library_entry(o.vertex)) {
-    case 0x8C15F856:
-    case 0x8C161738:
-    case 0x8C160C12:
-    case 0x8C1601FE: return DrawClass::Scene;
-    // revisao Codex 20261108-201953: 8C1736A0 e o recorte geral dos sprites 2D do Ninja; ele recebe tambem sprites ja
-    // projetados pelo jogo (as faiscas do cais vao por ele ate o DMA). So o chamador medido (8C07B4E0) e tela; o resto
-    // fica desconhecido. O mesmo para 8C16CED8 (chamador medido 8C0899D6).
-    case 0x8C1736A0: return game_routine(o.vertex) == 0x8C07B4E0 ? DrawClass::Screen : DrawClass::Unknown;
-    case 0x8C16CED8: return game_routine(o.vertex) == 0x8C0899D6 ? DrawClass::Screen : DrawClass::Unknown;
-    case 0x8C173044: {
-        if (!o.vertex.dma) return DrawClass::Unknown;  // a entrada do DMA sem a copia do canal 2: fora do medido
+    // N9.5 fase 3A: a copia do canal 2 sem o escritor do buffer conhecido (a primeira copia de um bloco, ou sem
+    // BS_PROVENIENCIA_DMA): a cadeia e a de quem disparou a copia (8C173044); como na fase 2, 1/w variavel = cena
+    if (o.vertex.dma && !o.vertex.dma_writer) {
+        if (library_entry(o.vertex) != 0x8C173044) return DrawClass::Unknown;
         if (d.vertex_count == 0 || d.first_vertex + d.vertex_count > cl.vertices.size()) return DrawClass::Unknown;
         const float w0 = cl.vertices[d.first_vertex].inv_w;
         for (uint32_t k = 1; k < d.vertex_count; ++k)
             if (cl.vertices[d.first_vertex + k].inv_w != w0) return DrawClass::Scene;  // projetado (perspectiva)
         return DrawClass::Ambiguous;
     }
-    default: return DrawClass::Unknown;
-    }
+    // a tabela medida (hud_table.h): o par (entrada na biblioteca, rotina do jogo); o resto e desconhecido
+    const HudEntry* e = hud_lookup(library_entry(o.vertex), game_routine(o.vertex));
+    return e ? e->cls : DrawClass::Unknown;
 }
 
 const char* draw_class_name(DrawClass c) {
