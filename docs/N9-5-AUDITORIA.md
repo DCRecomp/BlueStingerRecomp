@@ -1341,3 +1341,30 @@ de 1120 colunas para a altura 480, faixas de 240 colunas de cada lado) e o levan
   (arma, munição, mira, GAME OVER) continuam no 4:3 em qualquer largura.
 - **Recomendação:** não habilitar o 21:9 no N9.5. Se o mantenedor quiser, ele entra depois do N9.6 com o tratamento das
   bordas largas, a constante do limite corrigida e a conferência visual.
+
+### 16.5 Bateria final do N9.5 (2026-11-10, HEAD `5fc25f2`)
+
+Script `tmp/sessao-20261110/bateria_final.ps1` (local), uma bateria pesada por vez com o vigia de memória; temporários,
+cache do Builder e a Preview nova em `tmp/`.
+
+| Etapa | Resultado |
+|---|---|
+| Builds `msvc-validacao`, `msvc-debug`, `msvc-release` | rc 0 |
+| `bs_unit_tests` / `bs_render_tests` | 373/0 e 91/0, nenhum pulado |
+| ctest debug / release | 30/30; 23/23 com 5 pulados sem o disco (`boot_trace`, `real_disc`, `runtime_data`, `analysis_real`, `movie_manifest`): não contam como aprovados aqui, são os testes com a imagem |
+| H1–H7 (headless, H6 dentro do H3) | 0 falhas |
+| R1–R4 (`test_remaster`) | 4 casos, 0 falhas |
+| Original (`msvc-release`) × `referencias_n87` | **10 casos, 0 diferentes** (as 5 rotas × `nativo`/`experimental`, o mesmo conjunto das fases 1–4) |
+| P1–P5 (persistência) | 0 falhas |
+| J1–J7 (janelas) | 0 falhas |
+| Preview nova pelo Builder (`v0.9.5-3-5-g5fc25f2`) | rc 0 |
+| `test_edicao` na Preview nova | 11 ok, 0 falhas |
+| Memória | pico do jogo 5,1 GB (somando os processos do momento); commit livre mínimo 19,5 GB |
+
+- **Referências:** a primeira passada (`--paralelo 2`, sem `--casos`) comparou 7 casos iguais e parou no `passo_load_slot1`,
+  que procura o save g1 em `%LOCALAPPDATA%` (fora da pasta de trabalho, por isso ausente). Os 3 casos que faltavam do
+  conjunto histórico (`passo_newgame_area1` × 2, `passo_heliporto_nativo`) rodaram em seguida com o mesmo exe (hash
+  `DC3890FC…`, igual ao `msvc-release`): iguais. O `passo_load_slot1` e as duas sessões gravadas não fazem parte do
+  conjunto das fases anteriores e não foram conferidos.
+- **Fica com o mantenedor:** a conferência visual na janela real (fases 4 e 5); C8 continua bloqueado; Linux sem pacote nem
+  bateria nesta fase.

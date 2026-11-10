@@ -289,7 +289,12 @@ só como histórico:
 - **Fase 4 (autorizada em 2026-11-09, commit local):** as bordas. O levantamento de cinco salas achou o vazio fora da sala
   só no fim do corredor RCG02; o mantenedor escolheu o pilar dinâmico: na Remastered 16:9, a faixa sem geometria (≥ 80 %
   da grade, por 10 renders) mostra o fundo, com o HUD por cima. Estado do jogo e Original intactos (H1–H6, N8.7 10/0,
-  R1–R4, J1–J5; seção 15 da auditoria). O resto do jogo não foi medido (C8 bloqueado). A fase 5 espera autorização.
+  R1–R4, J1–J5; seção 15 da auditoria). O resto do jogo não foi medido (C8 bloqueado).
+- **Fase 5 (autorizada em 2026-11-09, commits locais por subfase; seção 16 da auditoria):** 5A o menu e o `graficos.toml`;
+  5B as transições de proporção e o limite da resolução interna; 5C a telemetria opt-in do produto (`BS_TELEMETRIA`,
+  `docs/TELEMETRIA.md`) e a matriz de desempenho na NVIDIA e na AMD integrada (a AMD não sustenta 1080 na janela); 5D o
+  21:9 avaliado e não habilitado (as bandas ficam 20–80 % vazias nas salas medidas). Bateria final de 2026-11-10 sem
+  falhas (seção 16.5 da auditoria). A visualização na janela real fica com o mantenedor; C8 continua bloqueado.
 
 ### N9.6 — Iluminação, sombras e materiais (R, GG)
 
