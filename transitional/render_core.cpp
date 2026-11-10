@@ -3,6 +3,7 @@
 // (PvrListRenderer); na validacao o adaptador do decodificador do legado (render_capture.cpp) monta a IR e o chama.
 #include "render_core.h"
 #include "render/wide_frame.h"
+#include "platform/telemetry.h"  // N9.5 fase 5C
 
 #include "debug/gfx_probe.h"
 #include "pvr/pvr_regs.h"
@@ -377,6 +378,7 @@ bool Renderer::vk_attempt(uint32_t w, uint32_t h, std::vector<uint32_t>& out, st
     const uint32_t wideW = mode == Mode::Native && g_wide > w && w == 640 && h == 480 ? g_wide : 0;
     vk_->set_scale(sc);
     vk_->set_always_slot(wideW != 0);
+    bs::native::telemetry::set_image(uint32_t(480 * sc + 0.5f), wideW != 0);  // N9.5 fase 5C (so le um bool sem a telemetria)
     if (sc == 1.f && !wideW) hires_.clear();
     const nr::CommandList* cl = &frame.cl;
     if (wideW) {

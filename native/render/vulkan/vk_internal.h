@@ -6,6 +6,7 @@
 #include <vulkan/vulkan.h>
 
 #include "render/vulkan/vk_device.h"
+#include "platform/telemetry.h"  // N9.5 fase 5C: a memoria por categoria (so com BS_TELEMETRIA)
 
 #include <algorithm>
 #include <atomic>
@@ -28,7 +29,7 @@ inline constexpr uint32_t kNone = 0xFFFFFFFFu;
     X(vkDestroyInstance) X(vkEnumeratePhysicalDevices) X(vkGetPhysicalDeviceProperties)                        \
     X(vkGetPhysicalDeviceQueueFamilyProperties) X(vkGetPhysicalDeviceMemoryProperties)                          \
     X(vkGetPhysicalDeviceFeatures) X(vkGetPhysicalDeviceFormatProperties) X(vkCreateDevice) X(vkGetDeviceProcAddr) \
-    X(vkEnumerateDeviceExtensionProperties) X(vkGetPhysicalDeviceProperties2)
+    X(vkEnumerateDeviceExtensionProperties) X(vkGetPhysicalDeviceProperties2) X(vkGetPhysicalDeviceMemoryProperties2)
 // apresentacao (VK_KHR_surface / VK_KHR_swapchain; nulas sem as extensoes)
 #define VK_SFUNCS(X)                                                                                           \
     X(vkGetPhysicalDeviceSurfaceSupportKHR) X(vkGetPhysicalDeviceSurfaceCapabilitiesKHR)                       \
@@ -61,16 +62,35 @@ struct Fn {
 #undef DECL
 };
 
+// N9.5 fase 5C: a categoria da memoria (telemetria) de quem aloca nesta thread; MemScope a muda num bloco
+namespace telemetry = bs::native::telemetry;
+inline thread_local telemetry::Mem t_memCat = telemetry::Mem::Other;
+struct MemScope {  // inerte sem a telemetria (so a leitura do bool: revisao Codex 20261110-014042)
+    telemetry::Mem prev = telemetry::Mem::Other;
+    bool           on = false;
+    explicit MemScope(telemetry::Mem m) {
+        if (telemetry::enabled()) on = true, prev = t_memCat, t_memCat = m;
+    }
+    ~MemScope() {
+        if (on) t_memCat = prev;
+    }
+};
+
 struct Buffer {
     VkBuffer       buf = VK_NULL_HANDLE;
     VkDeviceMemory mem = VK_NULL_HANDLE;
     void*          map = nullptr;
     VkDeviceSize   size = 0;
+    VkDeviceSize   bytes = 0;  // N9.5 fase 5C: o tamanho alocado (o que o driver pediu) e a categoria
+    uint8_t        cat = 0;
+    bool           local = false;
 };
 struct Image {
     VkImage        img = VK_NULL_HANDLE;
     VkDeviceMemory mem = VK_NULL_HANDLE;
     VkImageView    view = VK_NULL_HANDLE;
+    VkDeviceSize   bytes = 0;  // N9.5 fase 5C
+    uint8_t        cat = 0;
 };
 
 // Dispositivo, fila e os auxiliares de memoria (o renderizador e a apresentacao usam os mesmos).
@@ -138,10 +158,16 @@ struct VkBase {
             freeBuffer(b);
             return {};
         }
+        if (telemetry::enabled()) {  // N9.5 fase 5C
+            b.bytes = mr.size, b.cat = uint8_t(t_memCat);
+            b.local = (mem_.memoryTypes[ai.memoryTypeIndex].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) != 0;
+            telemetry::mem_add(t_memCat, b.local, int64_t(mr.size));
+        }
         return b;
     }
     void freeBuffer(Buffer& b) {
         if (!b.buf) return;
+        if (b.bytes) telemetry::mem_add(telemetry::Mem(b.cat), b.local, -int64_t(b.bytes));
         if (b.map) f_.vkUnmapMemory(dev_, b.mem);
         f_.vkDestroyBuffer(dev_, b.buf, nullptr), --g_live;
         f_.vkFreeMemory(dev_, b.mem, nullptr), --g_live;
@@ -181,10 +207,12 @@ struct VkBase {
             return {};
         }
         ++g_live;
+        if (telemetry::enabled()) im.bytes = mr.size, im.cat = uint8_t(t_memCat), telemetry::mem_add(t_memCat, true, int64_t(mr.size));
         return im;
     }
     void freeImage(Image& im) {
         if (!im.img) return;
+        if (im.bytes) telemetry::mem_add(telemetry::Mem(im.cat), true, -int64_t(im.bytes));
         f_.vkDestroyImageView(dev_, im.view, nullptr), --g_live;
         f_.vkDestroyImage(dev_, im.img, nullptr), --g_live;
         f_.vkFreeMemory(dev_, im.mem, nullptr), --g_live;

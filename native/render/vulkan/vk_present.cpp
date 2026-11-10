@@ -340,6 +340,7 @@ private:
 
     bool ensureHost(Buffer& buf, VkDeviceSize size) {
         if (buf.size >= size) return true;
+        MemScope mc(telemetry::Mem::Present);  // N9.5 fase 5C
         b_.freeBuffer(buf);
         buf = b_.makeBuffer(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, true, true);
         return buf.map != nullptr;
@@ -348,6 +349,7 @@ private:
     // envio de uma imagem da CPU (ARGB = B8G8R8A8 na memoria) so quando a versao ou o tamanho mudam
     bool stage(Tex& t, const uint32_t* argb, uint32_t w, uint32_t h, uint64_t version) {
         if (t.image.img && t.w == w && t.h == h && t.version == version) return true;
+        MemScope mc(telemetry::Mem::Present);  // N9.5 fase 5C
         if (!t.image.img || t.w != w || t.h != h) {
             b_.freeImage(t.image);
             t.image = b_.makeImage(w, h, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,

@@ -1,5 +1,6 @@
 #include "game_host.h"
 #include "platform/stall_trace.h"
+#include "platform/telemetry.h"  // N9.5 fase 5C
 
 #include "boot/native_boot.h"
 #include "disc/disc_image.h"
@@ -495,6 +496,7 @@ void GameHost::applyRequests() {
 // atende pedidos de parada.
 void GameHost::vblank() {
     const uint64_t n   = vblanks_.fetch_add(1) + 1;
+    native::telemetry::game_tick();  // N9.5 fase 5C: a CPU da thread do jogo e, sem janela, a linha do segundo
     periph_vblank_in();  // N3-0: indice "vblank" dos roteiros e negativo do ponto de amostragem
 #if BS_VALIDACAO
     // N9.5 fase 5B (H7 de tools/dev/n95_headless.py), so validacao: BS_PROPORCAO_TROCA=<vblank>:<largura>[,...] pede a

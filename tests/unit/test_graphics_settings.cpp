@@ -6,9 +6,12 @@
 
 #include "platform/graphics_settings.h"
 #include "platform/user_settings.h"
+#include "platform/telemetry.h"
 
+#include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <string>
 
 namespace st = bs::native::settings;
 namespace fs = std::filesystem;
@@ -81,6 +84,62 @@ BS_TEST(graphics_confirmation_rule) {
     // N9.5 fase 5 (D5-2): a proporcao recria os alvos, mas vale na hora (sem a confirmacao de 15 s)
     b = a, b.aspect = st::Aspect::Wide16x9;
     BS_CHECK(st::apply_kind(a, b) == st::Apply::Recreate && !st::requires_confirmation(a, b));
+}
+
+// N9.5 fase 5C (D5-3): o destino da telemetria. So um arquivo novo numa pasta que existe; nunca um caminho de rede, nunca
+// sobrescreve, nada e criado.
+BS_TEST(telemetry_target_rules_fase5c) {
+    namespace tm = bs::native::telemetry;
+    // na pasta de execucao dos testes (o build, dentro da pasta de trabalho), nunca no %TEMP%
+    const fs::path dir = fs::current_path() / "bs_telemetria_teste";
+    fs::remove_all(dir);
+    fs::create_directories(dir);
+    BS_CHECK(tm::target_problem(dir / "t.csv").empty());
+    BS_CHECK(!tm::target_problem(dir / "nao_existe" / "t.csv").empty() && !fs::exists(dir / "nao_existe"));
+    { std::ofstream(dir / "existe.csv") << "x"; }
+    BS_CHECK(tm::target_problem(dir / "existe.csv").find("sobrescreve") != std::string::npos);
+    BS_CHECK(tm::target_problem(fs::path(L"\\\\servidor\\pasta\\t.csv")) == "caminho de rede");
+    BS_CHECK(tm::target_problem(fs::path("//servidor/pasta/t.csv")) == "caminho de rede");
+    BS_CHECK(!tm::target_problem(fs::path()).empty());
+    BS_CHECK(std::string(tm::mem_name(tm::Mem::Targets)) == "alvos" && std::string(tm::mem_name(tm::Mem::Other)) == "outros");
+    // a criacao exclusiva (revisao Codex 20261110-041638): cria um arquivo novo num volume local; nunca abre um que exista
+    // (o conteudo fica intacto), nem numa pasta que nao existe
+    std::string why;
+    std::FILE*  f = tm::create_exclusive(dir / "novo.csv", why);
+    BS_CHECK(f && why.empty());
+    if (f) {
+        std::fputs("a", f), std::fflush(f);
+        std::ifstream in(dir / "novo.csv");  // quem le o arquivo durante a execucao (a matriz) consegue abrir
+        std::string   c;
+        BS_CHECK(in.good() && std::getline(in, c) && c == "a");
+        in.close();
+        std::fclose(f);
+    }
+    BS_CHECK(!tm::create_exclusive(dir / "novo.csv", why) && !why.empty());
+    BS_CHECK(!tm::create_exclusive(dir / "existe.csv", why));
+    {
+        std::ifstream in(dir / "existe.csv");
+        std::string   c;
+        std::getline(in, c);
+        BS_CHECK(c == "x");
+    }
+    BS_CHECK(!tm::create_exclusive(dir / "nao_existe" / "t.csv", why) && !fs::exists(dir / "nao_existe"));
+    fs::remove_all(dir);
+}
+
+// N9.5 fase 5C: o relogio dos quadros (revisao Codex 20261110-041638). N apresentacoes vistas seguidas dao N - 1 frametimes
+// (a primeira so estabelece a base); uma volta sem quadro visto (minimizada, falha) quebra a sequencia e o tempo dela nunca
+// vira frametime.
+BS_TEST(telemetry_frame_clock_fase5c) {
+    bs::native::telemetry::FrameClock c;
+    BS_CHECK(c.present(1000.0) < 0);                 // a base
+    BS_CHECK(c.present(1016.5) == 16.5);
+    BS_CHECK(c.present(1033.0) == 16.5);
+    c.gap();                                         // minimizada por 10 s
+    BS_CHECK(c.present(11033.0) < 0);                // a volta: so a base, nao 10000 ms
+    BS_CHECK(c.present(11050.0) == 17.0);
+    c.gap(), c.gap();                                // duas voltas seguidas sem quadro
+    BS_CHECK(c.present(11100.0) < 0 && c.present(11116.0) == 16.0);
 }
 
 // N9.5 fase 5B: o limite da resolucao por proporcao (o alvo largo tem 854/640 da largura) e a altura em uso

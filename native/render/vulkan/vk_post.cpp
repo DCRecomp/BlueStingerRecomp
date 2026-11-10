@@ -242,6 +242,7 @@ private:
 
     bool targets(uint32_t w, uint32_t h) {
         if (w == w_ && h == h_ && fb_[0]) return true;
+        MemScope mc(telemetry::Mem::Post);  // N9.5 fase 5C
         freeTargets();
         for (int i = 0; i < 3; ++i) {
             img_[i] = b_.makeImage(w, h, VK_FORMAT_R8G8B8A8_UNORM,

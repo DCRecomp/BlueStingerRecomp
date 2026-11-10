@@ -4326,6 +4326,23 @@ não por uma única bateria contínua** (decisão do mantenedor, 2026-11-02).
 - **Pendências:** H9; D-N8-4 no gate pós-N9; ressalva do 7.1 e D-K1(a); limite de 3 h de `n6_h` no executor, defeito a
   corrigir antes de uma futura integral, sem enfraquecer os testes. N9 e N10 não iniciados.
 
+### N9.5 fase 5C: a telemetria e a matriz de desempenho (2026-11-10, commit local)
+
+Detalhes em `docs/N9-5-AUDITORIA.md`, seção 16.3, e `docs/TELEMETRIA.md`.
+- **Produto:** `BS_TELEMETRIA=<csv novo>` (`_DE`, `_ATE`), desligada por padrão (D5-3): somente leitura, nada pela rede
+  (volume remoto recusado, conferido também no arquivo aberto), criação atômica sem sobrescrever, nenhum caminho ou dado
+  pessoal; fps e frametime das apresentações vistas, CPU por thread, GPU por etapa (timestamps), memória da GPU por categoria,
+  `VK_EXT_memory_budget` só com ela ligada, memória do processo. Matriz `tools/dev/n95_desempenho.py`.
+- **Bateria (`tmp/sessao-20261110/bateria_5c.ps1`):** 45 casos completos, RTX 5080 e AMD Radeon integrada. RTX 5080 na janela:
+  ~60 fps e nenhum quadro acima de 25 ms nas oito configurações (4:3/16:9 × 480/1080/1440/2160). Integrada: 480 cabe;
+  1080 não se sustenta (o jogo cai a 30–34 VBlanks/s no fim do corredor). Alvos medidos ~268 B/px no 4:3 e 1,53× no 16:9,
+  contra os 96 B/px supostos pelo limite da resolução (não corrigido; recomendação ao mantenedor). Pico do driver 2,8 GB
+  (18,5 % do orçamento). Nenhum sinal de vazamento.
+- **A/B:** a marca leve do HUD +0,26 ms por campo (+2,6 %); a telemetria ligada +0,28 ms (+3,6 %); desligada, o produto
+  da 5B × o da 5C +0,13 ms (+1,7 %, abaixo da variação entre repetições; registrado como medido).
+- **Revisões Codex:** `codex-20261110-014042` (4 médios, 3 baixos) e `codex-20261110-041638` (2 médios, 2 baixos), todos aceitos
+  e corrigidos. Depois: `bs_unit_tests` 373/0, ctest 30/30 e 23/23 (5 pulados sem o disco), a recusa e a janela conferidas.
+
 ### N9.5 fase 5B: as transições e o limite da resolução (2026-11-10, commit local)
 
 Detalhes em `docs/N9-5-AUDITORIA.md`, seção 16.2.

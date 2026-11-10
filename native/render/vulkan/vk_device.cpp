@@ -96,6 +96,7 @@ public:
         VK_SFUNCS(LOADI)
 #undef LOADI
         if (!pick(error)) return false;
+        telemetry::set_device(st_.device, tsPeriod_ > 0);  // N9.5 fase 5C (o nome da GPU, sem dados pessoais)
         VkDeviceQueueCreateInfo qi{VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO};
         const float prios[2] = {1.0f, 1.0f};
         qi.queueFamilyIndex = qfam_, qi.queueCount = std::min(queueCount_, 2u), qi.pQueuePriorities = prios;
@@ -133,6 +134,9 @@ public:
             rawDepth_ = true, ext.push_back(VK_EXT_DEPTH_RANGE_UNRESTRICTED_EXTENSION_NAME);
         if (surfaceExt_ && has(VK_KHR_SWAPCHAIN_EXTENSION_NAME))  // apresentacao direta (N7c)
             swapchainExt_ = true, ext.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+        // N9.5 fase 5C: o orcamento da memoria so com a telemetria ligada (sem ela, o dispositivo e o de sempre)
+        if (telemetry::enabled() && has(VK_EXT_MEMORY_BUDGET_EXTENSION_NAME))
+            budgetExt_ = true, ext.push_back(VK_EXT_MEMORY_BUDGET_EXTENSION_NAME);
         VkDeviceCreateInfo dci{VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO};
         dci.queueCreateInfoCount = 1, dci.pQueueCreateInfos = &qi, dci.pEnabledFeatures = &feat;
         dci.enabledExtensionCount = uint32_t(ext.size()), dci.ppEnabledExtensionNames = ext.data();
@@ -162,7 +166,8 @@ public:
     // ---- IRenderDevice ----
     Result<TextureHandle> create_texture(const TextureDesc& desc, std::span<const std::byte> data) override {
         if (desc.format != PixelFormat::ARGB8888 || !desc.width || !desc.height) return Error::Unsupported;
-        Tex t;
+        Tex       t;
+        MemScope  mc(telemetry::Mem::Textures);  // N9.5 fase 5C
         t.desc = desc, t.desc.mip_levels = 1;  // o software amostra so o maior nivel (fase de fidelidade)
         t.image = makeImage(desc.width, desc.height, VK_FORMAT_B8G8R8A8_UNORM,
                             VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
@@ -235,6 +240,7 @@ public:
     }
 
     Result<void> submitFrame(const CommandList& cl) {
+        MemScope memScope(telemetry::Mem::FrameBuffers);  // N9.5 fase 5C: vertices, triangulos, envios (o alvo tem o seu)
         prepare_frame(cl, prep_, true, scale_);  // modo fiel: retangulos envolventes, a cobertura e a do shader
         if (!target(scaled_size(cl.frame.width, scale_), scaled_size(cl.frame.height, scale_), cl.frame.width, cl.frame.height))
             return fail("alvo do quadro (imagens/passe)");
@@ -253,6 +259,7 @@ public:
                 // Com uma fila so, nenhum semaforo: a ordem de submissao da a dependencia.
                 if (presentQueue_ != queue_ && !remakeReady(writeSlot_)) writeSlot_ = -1;
                 if (sl.w != w_ || sl.h != h_) {
+                    MemScope mc(telemetry::Mem::Slots);  // N9.5 fase 5C
                     freeImage(sl.image);
                     sl.image = makeImage(w_, h_, VK_FORMAT_R8G8B8A8_UNORM,
                                          VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
@@ -538,6 +545,8 @@ private:
     float            scale_ = 1.f;  // resolucao interna (N7c)
     bool             alwaysSlot_ = false;  // N9.5 fase 1: slot tambem na escala 1 (o quadro largo)
     bool             surfaceExt_ = false, swapchainExt_ = false;  // apresentacao direta possivel (N7c)
+    bool             budgetExt_ = false;                          // N9.5 fase 5C: VK_EXT_memory_budget (so com a telemetria)
+    VkQueryPool      tsPool_ = VK_NULL_HANDLE;                    // N9.5 fase 5C: timestamps por etapa (so com a telemetria)
     std::unique_ptr<PresenterImpl> presenter_;
     std::unique_ptr<PostChain>     post_;
     std::mutex                     postMutex_;
@@ -860,6 +869,7 @@ private:
     uint32_t dummyId_ = 0;
 
     bool fragments(uint32_t capacity) {
+        MemScope mc(telemetry::Mem::Targets);  // N9.5 fase 5C
         freeBuffer(frags_);
         frags_ = makeBuffer(VkDeviceSize(capacity) * kFragBytes, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, false);
         if (!frags_.buf) return false;
@@ -900,6 +910,7 @@ private:
     bool target(uint32_t w, uint32_t h, uint32_t gw, uint32_t gh) {
         gameW_ = gw, gameH_ = gh;
         if (w == w_ && h == h_ && gw == downW_ && gh == downH_ && pass_) return true;
+        MemScope mc(telemetry::Mem::Targets);  // N9.5 fase 5C
         waitIdle();
         freeTarget();
         w_ = w, h_ = h, downW_ = gw, downH_ = gh;
@@ -1326,6 +1337,9 @@ private:
         VkCommandBufferBeginInfo bi{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
         bi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
         f_.vkBeginCommandBuffer(cmd_, &bi);
+        // N9.5 fase 5C (BS_TELEMETRIA): os tempos de GPU por etapa, lidos depois da cerca que o render ja espera
+        const bool ts = timing();
+        if (ts) f_.vkCmdResetQueryPool(cmd_, tsPool_, 0, 5), f_.vkCmdWriteTimestamp(cmd_, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, tsPool_, 0);
         // envios de textura pendentes
         // diagnostico BS_VK_ENVIOS=1: cada envio (render, textura, tamanho, nova ou atualizada, deslocamento na area de envio)
         static const bool envios = std::getenv("BS_VK_ENVIOS") != nullptr;
@@ -1365,6 +1379,7 @@ private:
         clear[2].color.uint32[0] = 0;  // N8.7: o bit de sombra
         VkRenderPassBeginInfo rb{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
         rb.renderPass = pass_, rb.framebuffer = fb_, rb.renderArea = {{0, 0}, {w_, h_}}, rb.clearValueCount = 3, rb.pClearValues = clear;
+        if (ts) f_.vkCmdWriteTimestamp(cmd_, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, tsPool_, 1);  // os envios terminaram
         f_.vkCmdBeginRenderPass(cmd_, &rb, VK_SUBPASS_CONTENTS_INLINE);
         // com a profundidade crua, o clamp do depthClamp vai a +-1e30 (o 1/w do jogo cabe; o shader escreve gl_FragDepth)
         VkViewport vp{0, 0, float(w_), float(h_), rawDepth_ ? -1e30f : 0.f, rawDepth_ ? 1e30f : 1.f};
@@ -1420,6 +1435,7 @@ private:
             if (!second) f_.vkCmdNextSubpass(cmd_, VK_SUBPASS_CONTENTS_INLINE);
             f_.vkCmdEndRenderPass(cmd_);  // cor em GENERAL (dependencia externa: compute e transferencia)
         }
+        if (ts) f_.vkCmdWriteTimestamp(cmd_, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, tsPool_, 2);  // passes A e B e os volumes
         if (prep_.has_autosort) {
             f_.vkCmdBindPipeline(cmd_, VK_PIPELINE_BIND_POINT_COMPUTE, resolve_);
             f_.vkCmdBindDescriptorSets(cmd_, VK_PIPELINE_BIND_POINT_COMPUTE, compLayout_, 0, 1, &resolveSet_, 0, nullptr);
@@ -1429,6 +1445,7 @@ private:
             imageBarrier(color_.img, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
                          VK_ACCESS_SHADER_WRITE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_READ_BIT);
         }
+        if (ts) f_.vkCmdWriteTimestamp(cmd_, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, tsPool_, 3);  // o resolve
         bufferBarrier(heads_.buf, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
                       VK_ACCESS_TRANSFER_READ_BIT);
         // N7c: a imagem do alvo vai para o slot da apresentacao (a escrita do color_ ja terminou: barreira de quem chama)
@@ -1479,6 +1496,7 @@ private:
         VkMemoryBarrier hb{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
         hb.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT, hb.dstAccessMask = VK_ACCESS_HOST_READ_BIT;
         f_.vkCmdPipelineBarrier(cmd_, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT, 0, 1, &hb, 0, nullptr, 0, nullptr);
+        if (ts) f_.vkCmdWriteTimestamp(cmd_, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, tsPool_, 4);  // a saida (slot, reducao, leitura)
         f_.vkEndCommandBuffer(cmd_);
         VkSubmitInfo si{VK_STRUCTURE_TYPE_SUBMIT_INFO};
         si.commandBufferCount = 1, si.pCommandBuffers = &cmd_;
@@ -1531,11 +1549,45 @@ private:
         }
         const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
         st_.gpu_ms_total += ms, st_.gpu_ms_max = std::max(st_.gpu_ms_max, ms);
+        if (ts) {  // N9.5 fase 5C: o render ja terminou (cerca e fila ociosa): a leitura nao espera nada
+            uint64_t q[5] = {};
+            if (f_.vkGetQueryPoolResults(dev_, tsPool_, 0, 5, sizeof q, q, sizeof(uint64_t), VK_QUERY_RESULT_64_BIT) == VK_SUCCESS) {
+                auto d = [&](int a, int b) { return double(timestamp_delta(q[a], q[b], tsBits_)) * double(tsPeriod_) / 1e6; };
+                telemetry::gpu_frame({d(0, 1), d(1, 2), d(2, 3), d(3, 4)});
+            }
+        }
+        if (budgetExt_ && telemetry::enabled() && st_.frames % 60 == 0) queryBudget();
         uploads_.clear();  // ja copiados (uma nova tentativa do quadro nao os repete)
         return {};
     }
 
+    // N9.5 fase 5C: o conjunto de consultas de timestamp (5 por render), criado so com a telemetria e timestamps na fila
+    bool timing() {
+        if (!telemetry::enabled() || tsPeriod_ <= 0 || !f_.vkCreateQueryPool || !f_.vkCmdWriteTimestamp) return false;
+        if (!tsPool_) {
+            VkQueryPoolCreateInfo qi{VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO};
+            qi.queryType = VK_QUERY_TYPE_TIMESTAMP, qi.queryCount = 5;
+            if (f_.vkCreateQueryPool(dev_, &qi, nullptr, &tsPool_) != VK_SUCCESS) return tsPool_ = VK_NULL_HANDLE, false;
+            ++g_live;
+        }
+        return true;
+    }
+    // N9.5 fase 5C: o uso e o orcamento da memoria local (VK_EXT_memory_budget), a soma dos heaps locais
+    void queryBudget() {
+        if (!f_.vkGetPhysicalDeviceMemoryProperties2) return;
+        VkPhysicalDeviceMemoryBudgetPropertiesEXT b{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_BUDGET_PROPERTIES_EXT};
+        VkPhysicalDeviceMemoryProperties2         p{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PROPERTIES_2};
+        p.pNext = &b;
+        f_.vkGetPhysicalDeviceMemoryProperties2(phys_, &p);
+        int64_t usage = 0, budget = 0;
+        for (uint32_t i = 0; i < p.memoryProperties.memoryHeapCount; ++i)
+            if (p.memoryProperties.memoryHeaps[i].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT)
+                usage += int64_t(b.heapUsage[i]), budget += int64_t(b.heapBudget[i]);
+        telemetry::set_budget(usage, budget);
+    }
+
     void destroy() {
+        if (tsPool_) f_.vkDestroyQueryPool(dev_, tsPool_, nullptr), tsPool_ = VK_NULL_HANDLE, --g_live;
         presenter_.reset();  // a apresentacao primeiro (usa o dispositivo e a cadeia)
         post_.reset();
         if (dev_) {

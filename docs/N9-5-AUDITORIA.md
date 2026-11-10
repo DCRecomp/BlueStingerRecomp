@@ -1183,3 +1183,132 @@ até o fim da sessão) não chegava à janela nem ao menu.
 - **Média — o recuo para o SDL não devolvia a altura do 4:3:** `drop_wide` reaplica a configuração inteira; J7b.
 - **Média — o CRT decidia pela altura escolhida:** a altura em uso, no `apply` e no menu; unitário novo.
 - **Baixa — nenhum teste exercitava a altura junto com a largura:** `BS_VK_ALTURA_MAX` (só validação) e J7a/J7b.
+
+### 16.3 Fase 5C: a telemetria e a matriz de desempenho
+
+**A telemetria (D5-3):** no executável de produto, desligada por padrão; liga só com `BS_TELEMETRIA=<arquivo .csv novo>`
+(`_DE`/`_ATE` limitam o trecho). Regras, colunas e origem de cada número em `docs/TELEMETRIA.md`: somente leitura, nada pela
+rede (volume remoto recusado), criação atômica sem sobrescrever, nenhum caminho ou dado pessoal no arquivo, o resumo
+gravado depois das threads pararem. Código em `native/platform/telemetry.{h,cpp}`; os pontos de medida no `vk_device`
+(timestamps em cinco pontos do render, `VK_EXT_memory_budget` ligada só com a telemetria), nos escopos de memória
+(`MemScope`, inerte desligada), no `render_core`, no `game_host` e no `main_sdl` (um quadro conta só com a apresentação
+bem-sucedida e a janela visível). A matriz: `tools/dev/n95_desempenho.py`.
+
+**Bateria de 2026-11-10** (`tmp/sessao-20261110/bateria_5c.ps1`; os três builds do mesmo código, `bs_unit_tests` 372/0;
+todos os 45 casos "completo", o resumo gravado no `_ATE`). Exe de produto, Remastered, modo espectador, Vulkan; NVIDIA GeForce
+RTX 5080 (16 GB) e AMD Radeon(TM) Graphics (a integrada, memória compartilhada). Na janela, 1280×720 com V-Sync a 60 Hz (o
+padrão do produto). O jogo desenha a 30 renders por segundo (um a cada dois VBlanks).
+
+**NVIDIA, janela, o corredor (RCG02, VBlanks 3600–4700):**
+
+| Config | fps | frametime p99 (pico) | acima de 25 ms | VBlanks/s mín. | GPU por render (média / p99) |
+|---|---|---|---|---|---|
+| 4:3 480 | 59,9 | 20,0 ms | 0 % | 59 | 0,76 / 1,38 ms |
+| 16:9 480 | 60,0 | 19,5 ms | 0 % | 60 | 0,92 / 1,61 ms |
+| 4:3 1080 | 60,0 | 19,7 ms | 0 % | 60 | 1,88 / 4,56 ms |
+| 16:9 1080 | 59,8 | 20,8 ms | 0 % | 59 | 2,40 / 6,89 ms |
+| 4:3 1440 | 59,8 | 21,2 ms | 0 % | 59 | 3,02 / 8,13 ms |
+| 16:9 1440 | 59,8 | 21,3 ms | 0 % | 60 | 3,54 / 9,75 ms |
+| 4:3 2160 | 59,9 | 23,6 ms | 0 % | 59 | 3,38 / 11,26 ms |
+| 16:9 2160 | 59,9 | 22,8 ms | 0 % | 60 | 3,01 / 9,22 ms |
+
+- **Nenhum quadro perdido** (0 % acima de 25 ms) em nenhuma das oito; o jogo no tempo real. A coluna "acima de 16,7 ms"
+  marca 30–48 % só pela oscilação do V-Sync em torno de 16,67 ms (o p50 é 16,66).
+- CPU: a thread do jogo (o SH-4 recompilado e o render) usa 23,8–26,1 % de um núcleo, a da janela 0,0–1,9 %, sem relação com a altura.
+
+**NVIDIA, sem janela** (o render inteiro, sem apresentação; o jogo corre acima do tempo real, 71–110 VBlanks/s, então o
+relógio da GPU varia e a ordem entre configurações vizinhas não é estrita). GPU por render, média em ms:
+
+| Config | corredor | cais (RCG00) | exterior (RCG03) | combate (`passo_combate`) |
+|---|---|---|---|---|
+| 4:3 480 | 0,75 | 1,74 | 1,24 | |
+| 16:9 480 | 0,90 | 2,05 | 1,78 | |
+| 4:3 1080 | 1,36 | 3,09 | 2,82 | 3,09 |
+| 16:9 1080 | 1,72 | 2,19 | 2,19 | 1,80 |
+| 4:3 1440 | 1,82 | 2,53 | 2,24 | |
+| 16:9 1440 | 1,39 | 2,34 | 2,66 | |
+| 4:3 2160 | 1,58 | 3,93 | 3,67 | |
+| 16:9 2160 | 1,86 | 4,53 | 4,31 | 4,89 |
+
+O pior p99 por render na RTX 5080 fica em 11,3 ms (4:3 2160 na janela): sobra larga contra os 33 ms de um render a 30 Hz.
+
+**AMD Radeon integrada** (o corredor; GPU por render, média / p99):
+
+| Config | sem janela | janela |
+|---|---|---|
+| 4:3 480 | 5,50 / 11,2 ms | |
+| 16:9 480 | 6,24 / 12,6 ms | |
+| 4:3 1080 | 22,6 / 49,1 ms | 23,1 / 49,4 ms; fps 59,8, mas 12,0 % dos quadros acima de 25 ms e o jogo cai a 34 VBlanks/s |
+| 16:9 1080 | 26,0 / 55,6 ms | 26,5 / 54,9 ms; fps 59,2, 13,8 % acima de 25 ms, o jogo cai a 30 VBlanks/s |
+| 4:3 1440 | 36,9 / 83,0 ms | |
+| 16:9 1440 | 43,8 / 95,1 ms | |
+| 4:3 2160 | 81,2 / 184 ms | |
+| 16:9 2160 | 94,9 / 207 ms | |
+
+- **Na integrada, 1080 não se sustenta:** no trecho pesado do corredor (o fim, câmera de canto) o render passa de 40 ms,
+  o jogo fica mais lento que o tempo real (30–40 VBlanks por segundo em vez de 60) e a janela repete quadros. O `fps` da
+  janela continua perto de 60, porque a apresentação segue a 60 Hz: a lentidão aparece no `vblanks` e no `acima_25_pct`
+  (anotado em `docs/TELEMETRIA.md`). 480 linhas cabem (p99 de 11–13 ms); 720 não foi medido.
+- O 16:9 custa 13–19 % a mais de GPU que o 4:3 na mesma altura na integrada; na RTX 5080 a diferença some no ruído do relógio.
+
+**Memória da GPU** (pico por categoria, MiB, medido pelo tamanho das alocações; iguais nas duas GPUs a menos de 2 MiB):
+
+| Altura | alvos 4:3 | alvos 16:9 | slots | texturas | uso do driver (16:9, NVIDIA) | orçamento do driver |
+|---|---|---|---|---|---|---|
+| 480 | 95 | 97 | 34 | 3,6–11,3 | 359 | 15 209 (NVIDIA), 10 252 (AMD) |
+| 1080 | 398 | 610 | 34–36 | | 902 | |
+| 1440 | 707 | 1 084 | | | 1 402 | |
+| 2160 | 1 586 | 2 432 | 128 | | 2 817 | |
+
+- **Medido × estimado:** o limite da resolução interna (`vk_device.cpp`, N7c) supõe ~96 bytes por pixel do alvo e reserva
+  1/4 da maior memória local. Os alvos medidos dão **~268 B por pixel no 4:3** (1080, 1440 e 2160 iguais) e o 16:9 custa
+  **1,53×** o 4:3 na mesma altura (os pixels são 1,33×). Com a folga de 1/4, os alvos no limite ficariam em ~70 % da
+  memória no 4:3 e ~80 % no 16:9, sem estourar; mas a constante e o comentário estão errados por ~2,8×. Só pesa numa GPU
+  com menos de ~2,4 GB de memória local (abaixo disso o limite tira o 2160 do menu). **Não corrigido** (muda o que o menu
+  oferece nessas GPUs): fica como recomendação, com a decisão do mantenedor.
+- **O orçamento:** o pico do uso do driver (2,8 GB no 16:9 2160) é 18,5 % do orçamento da RTX 5080. Na NVIDIA o driver
+  usa ~220–250 MiB além das alocações do jogo; na AMD o uso do driver bate com elas.
+- **Indisponível:** a memória do driver por fora das alocações, por categoria; o tempo de GPU da apresentação (a cadeia de
+  troca da janela não tem timestamps); a integrada em 720.
+
+**Vazamento (a memória privada do processo, primeira linha × última × pico):** no corredor, +8 a +14 MiB em todas as 26
+execuções, igual em todas as alturas e nas duas GPUs (texturas e dados da sala que entram no trecho, não alvos); na rota do
+heliporto (256 s), +22 a +56 MiB, também sem relação com a altura, e a curva sobe e desce com as salas (ex.: 4:3 480:
+440 → 475 → 456 → 466 MiB); no combate (60 s), −1 a +2 MiB. **Nenhum sinal de vazamento.**
+
+**A/B** (sem janela, `passo_load_slot1`, 4700 VBlanks, o "trabalho por campo" do jogo, processos alternados):
+
+| Caso | Sem | Com | Diferença |
+|---|---|---|---|
+| A marca leve do HUD (`BS_HUD_MARCA=1`, validação, 4:3; 3 + 3) | 9,697 ms | 9,953 ms | +0,26 ms (+2,6 %) |
+| A telemetria ligada (produto, 16:9; 3 + 3) | 7,663 ms | 7,940 ms | +0,28 ms (+3,6 %) |
+| A telemetria desligada (o produto da 5B, `304922c`, × o da 5C; 5 + 5) | 7,698 ms (desvio 0,18) | 7,830 ms (desvio 0,11) | +0,13 ms (+1,7 %) |
+
+- A variação entre repetições do mesmo lado chega a 0,5 ms; as duas primeiras diferenças estão perto desse ruído.
+- **Desligada:** a diferença de +0,13 ms fica abaixo da variação do próprio lado da 5B (7,48–7,94 ms), mas nos pares da mesma
+  repetição a 5C nunca saiu mais rápida (0; +0,26; +0,10; +0,17; +0,13 ms). Desligados, os pontos de medida custam a leitura de
+  um `bool` algumas vezes por campo (nanossegundos: nenhum relógio, alocação, consulta na GPU, timestamp ou extensão); o que
+  sobra não se separa do arranjo do código entre os dois builds. Registrado como medido (até +1,7 %), não como zero.
+
+**Revisões Codex:**
+- **`codex-20261110-014042`** (quatro médios, três baixos; todos aceitos e corrigidos antes da bateria): a criação atômica
+  (`CREATE_NEW`/`O_EXCL`), o volume remoto pela pasta resolvida, o fim depois do `join` com o `atexit` sem bloquear, a matriz
+  que encerrava a janela antes do resumo, o fps de apresentações que falharam ou com a janela minimizada, o `_DE` além do fim
+  ("não alcançado"), o `MemScope` inerte com a telemetria desligada.
+- **`codex-20261110-041638`** (dois médios, dois baixos; todos aceitos):
+  - **Média — o tempo minimizado virava um frametime:** `FrameClock` e `frame_gap()`: uma volta sem quadro visto recomeça
+    a base; unitário `telemetry_frame_clock_fase5c`.
+  - **Média — a pasta podia mudar entre a consulta e a abertura (TOCTOU):** `create_exclusive` confere o volume do arquivo
+    aberto pelo handle (`GetFinalPathNameByHandleW`; `fstatfs`, com `O_NOFOLLOW`); recusado, nada é gravado e no Windows o
+    arquivo é apagado pelo handle.
+  - **Baixa — `quadros` contava os intervalos (N − 1):** um contador próprio das apresentações vistas.
+  - **Baixa — os testes não exercitavam o arquivo:** a criação exclusiva (cria, nunca abre um existente, o conteúdo intacto,
+    a leitura durante a gravação) e o relógio dos quadros. A pasta do teste passou do `%TEMP%` para a pasta de execução.
+  - Na correção, a primeira versão abria o arquivo com o acesso de exclusão e um leitor (a matriz) não conseguia abrir o
+    CSV durante a execução; o teste com janela pegou, o handle que grava ficou sem esse acesso (a exclusão é por
+    `ReOpenFile`) e o unitário lê o arquivo durante a gravação.
+- **Depois das correções:** `bs_unit_tests` 373/0; ctest 30/30 (`msvc-debug`) e 23/23 (`msvc-release`, 5 pulados sem a
+  imagem do disco); a recusa de um arquivo existente (o conteúdo intacto, o jogo segue); a janela no corredor 4:3 480: 1101
+  quadros apresentados em 1100 VBlanks, a soma das linhas igual ao resumo, nenhum quadro acima de 25 ms. A bateria da
+  matriz acima foi feita antes desta revisão: a contagem `quadros` tinha um a menos no total (o primeiro quadro); a janela não foi minimizada, então frametimes, GPU,
+  memória e CPU valem como estão.

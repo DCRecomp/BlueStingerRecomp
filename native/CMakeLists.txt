@@ -15,8 +15,10 @@ add_library(bs_native STATIC platform/data_files.cpp platform/clock.cpp platform
             platform/camera_settings.cpp     # N7c: camera livre ([camera] em controles.toml)
             platform/edition.cpp             # N9.0: perfil de edicao (Original, Remastered)
             platform/stall_trace.cpp         # N8.8: diagnostico BS_TRAVAS (travas, esperas, fila de audio)
+            platform/telemetry.cpp           # N9.5 fase 5C: telemetria de desempenho (BS_TELEMETRIA, desligada por padrao)
             platform/saves_io_${BS_PLAT}.cpp platform/xinput_pad_${BS_PLAT}.cpp)  # N9-L: backends de plataforma
-target_link_libraries(bs_native PUBLIC bs_native_api PRIVATE tomlplusplus::tomlplusplus $<$<PLATFORM_ID:Windows>:xinput>)
+target_link_libraries(bs_native PUBLIC bs_native_api PRIVATE tomlplusplus::tomlplusplus $<$<PLATFORM_ID:Windows>:xinput>
+                      $<$<PLATFORM_ID:Windows>:psapi>)
 
 # N5: filmes nativos (catalogo por ID com mods, leitura e gravacao MP4 por Media Foundation)
 add_library(bs_native_video STATIC video/movie_catalog.cpp video/movie_playback.cpp video/subtitles.cpp video/movie_color.cpp)

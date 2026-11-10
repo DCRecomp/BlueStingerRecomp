@@ -34,6 +34,7 @@
 #include "platform/user_settings.h"
 #include "render/vulkan/vk_device.h"
 #include "render/wide_frame.h"
+#include "platform/telemetry.h"  // N9.5 fase 5C
 #include "render_capture.h"
 #include "gdfs_adapter.h"
 #include "input/input.h"
@@ -439,6 +440,7 @@ std::function<void(const bs::GameFrame&)> headlessCapture(const Args& a) {
 int runHeadless(bs::GameHost& host, const Args& a) {
     // as capturas (--dump-every N --capture <dir>) sao feitas na thread do jogo (headlessCapture)
     host.join();
+    bs::native::telemetry::finish();  // N9.5 fase 5C: sem janela, o resumo depois da thread do jogo parar
     bs::GameFrame f;
     uint64_t      seq = 0;
     const bool    got = host.latestFrame(f, seq);
@@ -1454,7 +1456,16 @@ int runWindow(bs::GameHost& host, ni::InputSystem& input, const Args& a, SDL_Win
         const bool winShot = winDir && *winDir && frame.vblank && frame.vblank / winEvery != lastWinShot &&
                              frame.vblank >= winRange.first && frame.vblank <= winRange.second;
         std::vector<uint32_t> image;
-        ok &= pres.p->present(frame, seq, wideImage ? wideArea : area, area, layers, shot || winShot ? &image : nullptr);
+        const bool presented = pres.p->present(frame, seq, wideImage ? wideArea : area, area, layers, shot || winShot ? &image : nullptr);
+        ok &= presented;
+        // N9.5 fase 5C (BS_TELEMETRIA; desligada, so a leitura de um bool): o quadro apresentado (so os que deram certo, com a
+        // janela visivel: minimizada, a apresentacao nao mostra nada; revisao Codex 20261110-014042), a CPU desta thread, a linha.
+        // Uma volta sem quadro visto quebra a sequencia dos frametimes (revisao Codex 20261110-041638)
+        if (bs::native::telemetry::enabled()) {
+            if (presented && !(SDL_GetWindowFlags(window) & SDL_WINDOW_MINIMIZED)) bs::native::telemetry::frame_presented();
+            else bs::native::telemetry::frame_gap();
+            bs::native::telemetry::window_tick(), bs::native::telemetry::tick();
+        }
         if (shot && !image.empty()) menu.captured(image, ow, oh);
         if (const std::string why = pres.p->take_post_error(); !why.empty()) menu.shader_failed(why);
         if (winShot && !image.empty() && image.size() >= size_t(ow) * oh) {
@@ -1474,8 +1485,8 @@ int runWindow(bs::GameHost& host, ni::InputSystem& input, const Args& a, SDL_Win
             const char* v = std::getenv("BS_APRESENTACAO_FALHAR");
             return v && *v ? std::strtoull(v, nullptr, 10) : 0ull;
         }();
-        static uint64_t presented = 0;
-        if (failFrom && ++presented >= failFrom && std::strcmp(pres.p->name(), "Vulkan") == 0) ok = false;
+        static uint64_t presentCount = 0;
+        if (failFrom && ++presentCount >= failFrom && std::strcmp(pres.p->name(), "Vulkan") == 0) ok = false;
 #endif
         gfxFailures = ok ? 0 : gfxFailures + 1;
         if (gfxFailures >= 120 && std::strcmp(pres.p->name(), "Vulkan") == 0 && fallbackToSdl(window, pres, renderer)) {
@@ -1513,6 +1524,7 @@ int runWindow(bs::GameHost& host, ni::InputSystem& input, const Args& a, SDL_Win
     }
     host.requestStop();
     host.join();
+    bs::native::telemetry::finish();  // N9.5 fase 5C: o resumo depois de parar as threads do jogo (revisao Codex 20261110-014042)
     printStats(host);
     if (pres.p) std::fprintf(stderr, "%s", pres.p->stats().c_str());
     const std::string err = host.error();
@@ -1940,6 +1952,7 @@ int mainHeadless(Args& a) {
     const int rc = runHeadless(host, a);
     host.requestStop();
     host.join();
+    bs::native::telemetry::finish();  // N9.5 fase 5C: o resumo depois de parar as threads do jogo (revisao Codex 20261110-014042)
 #if BS_VALIDACAO
     ib::install(nullptr);  // a thread do jogo ja parou: a fonte pode sair antes do InputSystem
 #endif
@@ -2229,6 +2242,7 @@ int mainWindow(Args& a) {
         // os caminhos (revisao Codex 2026-10-14)
         host.requestStop();
         host.join();
+        bs::native::telemetry::finish();  // N9.5 fase 5C: o resumo depois de parar as threads do jogo
         endVblank = host.vblanks();
     }
     if (g_recorder) {  // o ponto final (passo e o VBlank em que o jogo parou): a reproducao para no mesmo VBlank
