@@ -496,6 +496,41 @@ void GameHost::applyRequests() {
 void GameHost::vblank() {
     const uint64_t n   = vblanks_.fetch_add(1) + 1;
     periph_vblank_in();  // N3-0: indice "vblank" dos roteiros e negativo do ponto de amostragem
+#if BS_VALIDACAO
+    // N9.5 fase 5B (H7 de tools/dev/n95_headless.py), so validacao: BS_PROPORCAO_TROCA=<vblank>:<largura>[,...] pede a
+    // largura do quadro (0 = 4:3, 854 = 16:9) nesse VBlank, pelo mesmo caminho do menu (setWideWidth, atendido logo abaixo);
+    // BS_VK_FALHAR=<vblank>[:sempre] injeta uma falha do dispositivo Vulkan no render seguinte (transitoria: a recuperacao;
+    // "sempre": o render fica no software ate o fim da sessao)
+    {
+        static const std::vector<std::pair<uint64_t, uint32_t>> kTrocas = [] {
+            std::vector<std::pair<uint64_t, uint32_t>> v;
+            if (const char* e = std::getenv("BS_PROPORCAO_TROCA"))
+                for (const char* p = e; *p;) {
+                    unsigned long long at = 0;
+                    unsigned           w = 0;
+                    int                used = 0;
+                    if (std::sscanf(p, "%llu:%u%n", &at, &w, &used) != 2) break;
+                    v.push_back({at, w}), p += used;
+                    if (*p == ',') ++p;
+                }
+            return v;
+        }();
+        for (const auto& [at, w] : kTrocas)
+            if (at == n) std::fprintf(stderr, "[validacao] proporcao no VBlank %llu: %u\n", static_cast<unsigned long long>(n), w), setWideWidth(w);
+        static const std::pair<uint64_t, bool> kFalha = [] {
+            unsigned long long at = 0;
+            const char*        e  = std::getenv("BS_VK_FALHAR");
+            if (!e || std::sscanf(e, "%llu", &at) != 1) return std::pair<uint64_t, bool>{0, false};
+            return std::pair<uint64_t, bool>{at, std::strstr(e, ":sempre") != nullptr};
+        }();
+        if (kFalha.first && kFalha.first == n) {
+            std::fprintf(stderr, "[validacao] falha do Vulkan injetada no VBlank %llu (%s)\n", static_cast<unsigned long long>(n),
+                         kFalha.second ? "permanente" : "transitoria");
+            transitional::render_capture::inject_fault(kFalha.second ? transitional::render_capture::Fault::Device
+                                                                     : transitional::render_capture::Fault::DeviceOnce);
+        }
+    }
+#endif
     applyRequests();  // N7c: pedidos do menu (volumes, idioma das legendas, renderizador)
     transitional::free_camera::vblank(n);  // N7c: um passo da camera livre (nada no modo Original)
 #if BS_VALIDACAO

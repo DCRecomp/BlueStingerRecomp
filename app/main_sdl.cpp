@@ -821,13 +821,19 @@ public:
     uint32_t wide_width() const { return wide_; }
     void     set_wide_frame(bool allowed) { wideAllowed_ = allowed; }
     void     set_aspect_override() { aspectOverride_ = true; }
+    // antes do apply(prefs, true): a --resolucao-interna e o limite 4:3 da GPU (VulkanStats::max_internal_height)
+    void     set_internal_height_override(uint32_t h, uint32_t gpuMax) { heightOverride_ = h, gpuMax_ = (std::max)(480u, gpuMax); }
     // a apresentacao recuou para o SDL (sem slots): o quadro largo deixa de existir nesta execucao
-    void drop_wide() {
+    // N9.5 fase 5B: tambem quando o Vulkan desiste (o render fica no software ate o fim da sessao, 4:3)
+    void drop_wide(const char* why = "a apresentacao SDL nao desenha o quadro largo") {
         if (!wideAllowed_) return;
         wideAllowed_ = false, wide_ = 0;
         menu_.set_wide_frame_available(false);  // N9.5 fase 5: o menu mostra 4:3 (16:9 indisponivel)
-        host_.setWideWidth(0);
-        std::fprintf(stderr, "[menu] proporcao: 4:3 (a apresentacao SDL nao desenha o quadro largo)\n");
+        host_.setWideWidth(0);  // a largura antes da altura (que pode subir)
+        std::fprintf(stderr, "[menu] proporcao: 4:3 (%s)\n", why);
+        // revisao Codex 20261110-011045: a altura e os efeitos do 4:3 voltam (a escolha inteira, se o limite do 16:9 a
+        // reduzia; o CRT pela altura em uso), pelo mesmo caminho do menu
+        apply(applied_, false);
     }
 
     void apply(const bs::Preferences& p, bool start) {
@@ -846,6 +852,23 @@ public:
         const auto& g = p.graphics;
         if (!start && g.vulkan != old.graphics.vulkan)
             host_.setRenderer(g.vulkan ? bs::RenderProvider::Native : bs::RenderProvider::Software);
+        // N9.5 fase 5A: a proporcao em uso pela regra pura (graphics_settings: effective_aspect); a troca vale na hora (D5-2)
+        const st::Capabilities& caps = menu_.capabilities();
+        const uint32_t          w    = st::effective_aspect(g, caps, editionProfile().wide_frame) == st::Aspect::Wide16x9
+                                           ? bs::native::render::kWideWidth
+                                           : 0;
+        // N9.5 fase 5B: a resolucao interna (so o Vulkan; o software desenha na do jogo) com o limite da proporcao em uso
+        // (max_height_wide no quadro largo): a escolha fica, a altura em uso desce pelos degraus do menu ate caber, e volta ao
+        // sair do 16:9. A --resolucao-interna vale ate o jogador mudar a resolucao no menu.
+        if (!start && (g.resolution != old.graphics.resolution || g.scale_pct != old.graphics.scale_pct)) heightOverride_ = 0;
+        const uint32_t wanted = heightOverride_ ? heightOverride_ : st::internal_height(g);
+        const uint32_t limit  = heightOverride_ ? st::max_internal_height(w ? st::Aspect::Wide16x9 : st::Aspect::Original4x3, gpuMax_, 4320)
+                                : w && caps.max_height_wide ? caps.max_height_wide
+                                                            : caps.max_height;
+        const uint32_t height = g.vulkan ? st::effective_internal_height(wanted, limit) : 480;
+        const bool     wideChanged = start || w != wide_, heightChanged = start || height != appliedHeight_;
+        // a ordem dos dois pedidos (a thread do jogo atende cada um no VBlank seguinte): a altura que desce vai antes do
+        // alargamento, a que sobe depois dele; assim nenhum render usa o alvo largo com a altura do 4:3 acima do limite
         // N7c (secao 21): efeitos de imagem na apresentacao (so a imagem do jogo; desligados = nenhum passe)
         if (pres_.p) {
             bs::PostSpec ps;
@@ -853,7 +876,8 @@ public:
             ps.tonemap = g.tonemap, ps.exposure = g.exposure, ps.highlights = g.highlights, ps.toneShadows = g.tone_shadows;
             ps.sharpen = g.sharpen;
             ps.bloom = g.bloom, ps.bloomThreshold = g.bloom_threshold, ps.bloomRadius = g.bloom_radius, ps.bloomStrength = g.bloom_strength;
-            ps.crt = g.crt && g.vulkan && st::internal_height(g) >= st::kCrtMinHeight;
+            // revisao Codex 20261110-011045: pela altura em uso (o limite do 16:9 pode reduzi-la abaixo de 1080)
+            ps.crt = g.crt && g.vulkan && height >= st::kCrtMinHeight;
             ps.crtScanlines = g.crt_scanlines, ps.crtMask = g.crt_mask, ps.crtVignette = g.crt_vignette;
             for (const auto& pkg : shaders_)
                 if (pkg.error.empty() && pkg.name == g.shader) {
@@ -872,18 +896,21 @@ public:
             }
         }
         // N9.5 fase 1: o quadro largo (so a Remastered com o Vulkan; o software e a Original ficam em 4:3)
-        // N9.5 fase 5A: a proporcao em uso pela regra pura (graphics_settings: effective_aspect); a troca vale na hora (D5-2)
-        if (const uint32_t w = st::effective_aspect(g, menu_.capabilities(), editionProfile().wide_frame) == st::Aspect::Wide16x9
-                                   ? bs::native::render::kWideWidth
-                                   : 0;
-            start || w != wide_) {
+        const bool heightFirst = heightChanged && height < appliedHeight_;
+        auto sendHeight = [&] {
+            appliedHeight_ = height;
+            host_.setRenderScale(float(height) / 480.f);
+            if (height < wanted && g.vulkan)
+                std::fprintf(stderr, "[menu] resolucao interna: %u pedida, %u em uso (limite da GPU %s)\n", wanted, height,
+                             w ? "para o quadro largo" : "");
+        };
+        if (heightFirst) sendHeight();
+        if (wideChanged) {
             wide_ = w;
             host_.setWideWidth(w);
             if (w || !start) std::fprintf(stderr, "[menu] proporcao: %s\n", w ? "16:9 (quadro largo)" : "4:3");
         }
-        // resolucao interna (so o Vulkan; o software desenha na do jogo): altura interna / 480
-        if (start || g.vulkan != old.graphics.vulkan || st::internal_height(g) != st::internal_height(old.graphics))
-            host_.setRenderScale(g.vulkan ? float(st::internal_height(g)) / 480.f : 1.f);
+        if (heightChanged && !heightFirst) sendHeight();
         if ((start || g.vsync != old.graphics.vsync) && pres_.p) pres_.p->set_vsync(g.vsync);
         if (start || g.window != old.graphics.window || g.window_w != old.graphics.window_w || g.window_h != old.graphics.window_h) {
             if (!applyWindow(g)) {  // o SDL recusou: nunca fica sem imagem
@@ -973,6 +1000,8 @@ private:
     // proporcao veio da linha de comando (so nesta execucao)
     bool                              wideAllowed_ = false, aspectOverride_ = false;
     uint32_t                          wide_ = 0;
+    // N9.5 fase 5B: a --resolucao-interna (0 = a do graficos.toml; so nesta execucao) e a altura interna enviada ao jogo
+    uint32_t                          heightOverride_ = 0, appliedHeight_ = 0, gpuMax_ = 480;
     st::GraphicsSettings              confirmed_;  // a ultima tela aceita (a que vai para o arquivo)
 
     static bool sameDisplay(const st::GraphicsSettings& a, const st::GraphicsSettings& b) {
@@ -1453,6 +1482,10 @@ int runWindow(bs::GameHost& host, ni::InputSystem& input, const Args& a, SDL_Win
             gfxFailures = 0;
             menu.drop_wide();  // N9.5: o SDL nao desenha o slot; o quadro volta ao 4:3 (revisao Codex 20261105-180747)
         }
+        // revisao Codex 20261110-011045: tambem com o 4:3 em uso (o 16:9 sai do menu); drop_wide so age uma vez
+        if (bs::transitional::render_capture::vulkan_gave_up()) {
+            menu.drop_wide("o renderizador ficou no software: a recuperacao do Vulkan falhou");
+        }
         if (gfxFailures >= 120) {
             gfxError = std::string("falha ao apresentar o quadro: ") + SDL_GetError();
             break;
@@ -1680,6 +1713,21 @@ std::string subtitlesLanguage(const Args& a) {
     return cfg.subtitles == "auto" ? resolveAutoSubtitles() : cfg.subtitles;
 }
 
+// N9.5 fase 5B (so validacao, revisao Codex 20261110-011045): BS_VK_ALTURA_MAX=<altura> finge uma GPU com esse limite
+// 4:3 (VulkanStats::max_internal_height), para provar o limite do 16:9 e as transicoes numa GPU com folga
+uint32_t simulatedGpuLimit(uint32_t real) {
+#if BS_VALIDACAO
+    if (const char* v = std::getenv("BS_VK_ALTURA_MAX"); v && *v) {
+        const uint32_t h = uint32_t(std::strtoul(v, nullptr, 10));
+        if (h >= 480 && h < real) {
+            std::fprintf(stderr, "[validacao] limite da GPU simulado: %u (real %u)\n", h, real);
+            return h;
+        }
+    }
+#endif
+    return real;
+}
+
 fs::path savesRoot(const Args& a) {
     // Precedencia: --saves-pasta > --saves-portatil > instalacao.toml (modo portatil gravado pelo
     // BlueStinger-Recompiler; vale ao abrir o executavel direto) > no --headless, cartao temporario >
@@ -1860,8 +1908,24 @@ int mainHeadless(Args& a) {
     if (assist) opt.vblankHook = [&assist](const bs::GameOptions::VblankView& v) { return assist->onVblank(v); };
     bs::GameHost host;
     if (a.dumpEvery && !a.capture.empty()) opt.captureEvery = a.dumpEvery, opt.capture = headlessCapture(a);
+    const bool headlessNative = opt.render == bs::RenderProvider::Native;
     host.start(std::move(opt));
-    if (a.internalHeight) host.setRenderScale(float(a.internalHeight) / 480.f);
+    if (a.internalHeight) {
+        // N9.5 fase 5B: o mesmo limite da janela (o alvo largo tem outro); a altura desce pelos degraus do menu ate caber
+        uint32_t h = a.internalHeight;
+        if (h > 480 && headlessNative) {
+            std::string vkErr;
+            if (const auto dev = bs::native::render::vulkan_shared(&vkErr)) {
+                const uint32_t lim = st::max_internal_height(a.aspect == 2 ? st::Aspect::Wide16x9 : st::Aspect::Original4x3,
+                                                             simulatedGpuLimit(dev->stats().max_internal_height), 4320);
+                h = st::effective_internal_height(h, lim);
+                if (h != a.internalHeight)
+                    std::fprintf(stderr, "[render] resolucao interna: %u pedida, %u em uso (limite da GPU%s)\n", a.internalHeight, h,
+                                 a.aspect == 2 ? " para o quadro largo" : "");
+            }
+        }
+        host.setRenderScale(float(h) / 480.f);
+    }
     if (a.aspect == 2) host.setWideWidth(bs::native::render::kWideWidth);  // validado antes de comecar (headlessAspect)
 #if BS_VALIDACAO
     // N9.2: prova do reinicio (GameHost::restart, "Menu principal" da Remastered): BS_REINICIO_TESTE=<vblanks> reinicia a
@@ -2087,7 +2151,7 @@ int mainWindow(Args& a) {
         std::string vkErr;
         const auto  dev = bs::native::render::vulkan_shared(&vkErr);  // o dispositivo do processo (o mesmo da janela)
         caps.vulkan     = dev != nullptr;
-        if (dev) gpuMaxHeight = dev->stats().max_internal_height;
+        if (dev) gpuMaxHeight = simulatedGpuLimit(dev->stats().max_internal_height);
         if (!caps.vulkan) std::fprintf(stderr, "[menu] Vulkan indisponivel (%s): so o renderizador em software\n", vkErr.c_str());
     }
     caps.max_height = 480, caps.features.window_modes = true, caps.features.vsync = true;
@@ -2103,16 +2167,19 @@ int mainWindow(Args& a) {
     // nao existe nesta execucao (caps.wide_frame; o recuo para o SDL), e so a imagem fica em 4:3 (effective_aspect)
     caps.features.aspect_wide = caps.vulkan && editionProfile().wide_frame;
     if (a.aspect) prefs.graphics.aspect = a.aspect == 2 ? st::Aspect::Wide16x9 : st::Aspect::Original4x3;  // so nesta execucao
-    // N9.5 (revisao Codex 20261105-180747): o limite da GPU (max_internal_height) e calculado para um alvo 4:3; o quadro
-    // largo tem 854/640 da largura. Com ele pedido, o limite cai pelo fator da largura ((480/854) / (3/4), o mais
-    // conservador entre a memoria e a dimensao maxima da imagem), para a altura aceita sempre caber no alvo largo.
-    if (caps.wide_frame && prefs.graphics.aspect == st::Aspect::Wide16x9)
-        caps.max_height = (std::max)(480u, (std::min)(caps.max_height, uint32_t(double(gpuMaxHeight) * (480.0 / 854.0) / 0.75)));
+    // N9.5 (revisao Codex 20261105-180747; fase 5B): o limite da GPU (max_internal_height) e calculado para um alvo 4:3; o
+    // quadro largo tem 854/640 da largura e o seu limite e outro (graphics_settings: max_internal_height). Antes da fase 5B
+    // ele so valia com o 16:9 ja no inicio; agora vale na proporcao em uso, inclusive depois de uma troca pelo menu, e a
+    // escolha do jogador nao muda (a altura em uso desce ate caber: InGameMenu::apply).
+    if (caps.wide_frame && caps.features.scaling)
+        caps.max_height_wide = st::max_internal_height(st::Aspect::Wide16x9, gpuMaxHeight, caps.max_height);
     // shaders de pos-processamento de mods (mods\shaders\<nome>): validados aqui; os invalidos ficam com o motivo
     auto postShaders = bs::native::render::discover_post_shaders(modsPath(L"shaders"));
     for (const auto& p : postShaders)
         std::fprintf(stderr, "[pos] shader de mod %s: %s\n", p.name.c_str(), p.error.empty() ? "valido" : ("INVALIDO: " + p.error).c_str());
-    if (caps.vulkan) std::fprintf(stderr, "[menu] resolucao interna: ate %u (GPU: ate %u)\n", caps.max_height, gpuMaxHeight);
+    if (caps.vulkan)
+        std::fprintf(stderr, "[menu] resolucao interna: ate %u, no quadro largo ate %u (GPU: ate %u)\n", caps.max_height,
+                     caps.max_height_wide ? caps.max_height_wide : caps.max_height, gpuMaxHeight);
     prefs.graphics = st::clamp_to(prefs.graphics, caps);
     if (!prefs.graphics.vulkan) a.render = 0;
     std::vector<std::string> languages;  // os idiomas dos pacotes de legendas encontrados
@@ -2155,8 +2222,8 @@ int mainWindow(Args& a) {
         menu.set_wide_frame(caps.wide_frame);
         if (a.aspect) menu.set_aspect_override();
         menu.set_speakers_available(speakers);
+        menu.set_internal_height_override(a.internalHeight, gpuMaxHeight);  // so nesta execucao (com o limite da proporcao em uso)
         menu.apply(prefs, true);
-        if (a.internalHeight) host.setRenderScale(float(a.internalHeight) / 480.f);  // so nesta execucao
         rc = runWindow(host, *input, a, window, pres, renderer, menu);
         // a thread do jogo le a fonte de entrada: para e espera ANTES de destrui-la, em todos
         // os caminhos (revisao Codex 2026-10-14)

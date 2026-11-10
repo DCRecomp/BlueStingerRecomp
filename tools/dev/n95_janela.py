@@ -11,6 +11,8 @@ Casos (todos com a janela do Blue Stinger aberta durante ~1,5 min cada):
   J3 Original com o graficos.toml pedindo 16:9, janela 1280x720: continua 4:3 (faixas pretas nas laterais), com o motivo;
   J4 Remastered, 4:3, janela 1280x720: igual a Original (faixas pretas nas laterais);
   J5 Remastered pedindo 16:9 com a apresentacao SDL (sem slots): fica 4:3, sem esticar a imagem do jogo.
+  J6 (fase 5B) Remastered, a troca 4:3 -> 16:9 -> 4:3 pelo menu da pausa durante o gameplay (controle virtual), ~2 min.
+  J7 (fase 5B, --exe-validacao) a altura junto com a largura, com o limite da GPU simulado (ver j7), ~3 min.
 
   python tools/dev/n95_janela.py --exe build/msvc-release/app/bluestinger.exe --data dist/BlueStinger-Preview/data
                                  --cartao <pasta de saves sintetica> [--casos J1,J2] [--manter]
@@ -168,6 +170,179 @@ def caso(nome, c, a, falhas):
             shutil.rmtree(tmp, ignore_errors=True)
 
 
+def j6(a, falhas, nome="J6", exe_origem=None, res="original", env_extra=None, conferir=None):
+    """N9.5 fase 5B: a troca 4:3 -> 16:9 -> 4:3 pelo menu da pausa, durante o gameplay, na janela real (1280x720). Controle
+    virtual (so a janela do jogo recebe os botoes): no menu inicial, Continuar (o perfil do cartao de teste: o corredor RCG02),
+    pausa, Configuracoes > Graficos > Proporcao, Direita, volta ao jogo; mais tarde o mesmo para voltar ao 4:3. As capturas da
+    imagem APRESENTADA (BS_JANELA_CAPTURA, nao a area de trabalho) de cada trecho: 4:3 com as laterais pretas, 16:9 com a cena
+    na largura inteira, e de novo 4:3 sem nenhum quadro largo velho."""
+    tmp = tempfile.mkdtemp(prefix="n95_janela_%s_" % nome)
+    try:
+        exe = os.path.join(tmp, os.path.basename(exe_origem or a.exe))
+        shutil.copy2(exe_origem or a.exe, exe)
+        open(os.path.join(tmp, "instalacao.toml"), "w").write('[edicao]\nperfil = "remastered"\n')
+        open(os.path.join(tmp, "graficos.toml"), "w").write(GRAFICOS.format(res=res, w=1280, h=720, prop="4:3"))
+        shutil.copytree(a.cartao, os.path.join(tmp, "saves"))
+        # pausa (View/Back), Continuar 0 / Salvar (desativado) / Carregar 1 / Configuracoes 2; principal: Graficos; Proporcao 3
+        troca = ["back", "dpdown", "dpdown", "a", "a"] + ["dpdown"] * 3 + ["dpright", "b", "b", "b"]
+        linhas, t = ["0 conectar"], 32000
+        for marca, botoes in ((32000, ["a"]), (62000, troca), (92000, troca)):
+            t = marca
+            for b in botoes:
+                linhas += ["%d %s 1" % (t, b), "%d %s 0" % (t + 100, b)]
+                t += 600
+        linhas.append("%d sair" % (t + 20000))
+        pad = os.path.join(tmp, "pad.txt")
+        open(pad, "w").write("\n".join(linhas) + "\n")
+        cap = os.path.join(tmp, "cap")
+        env = {k: v for k, v in os.environ.items() if not k.startswith("BS_")}
+        env.update({"BS_RELOGIO_FIXO": "1700000000", "BS_CONTROLE_VIRTUAL": pad, "BS_JANELA_CAPTURA": cap,
+                    "BS_JANELA_CAPTURA_CADA": "60"})
+        env.update(env_extra or {})
+        log = os.path.join(tmp, "jogo.txt")
+        with open(log, "w", encoding="utf-8") as out:
+            p = subprocess.Popen([exe, "--data", os.path.abspath(a.data), "--saves-pasta", os.path.join(tmp, "saves"),
+                                  "--apresentacao", "vulkan"], stdout=out, stderr=subprocess.STDOUT, env=env, cwd=tmp)
+            try:
+                p.wait(200)
+            except subprocess.TimeoutExpired:  # so o processo deste caso
+                p.kill()
+        texto = open(log, encoding="utf-8", errors="replace").read()
+        pausas = [int(x) for x in re.findall(r"\[remaster\] pausa no VBlank (\d+)", texto)]
+        trocas = re.findall(r"\[menu\] proporcao: ([^\n]+)", texto)
+        caps = sorted(os.listdir(cap)) if os.path.isdir(cap) else []
+        print("[%s] remastered, troca pelo menu da pausa, janela 1280x720: pausas nos VBlanks %s; trocas %s; %d capturas" %
+              (nome, pausas, trocas, len(caps)))
+        f0 = len(falhas)
+        if p.returncode != 0:
+            falhas.append("%s: rc=%s" % (nome, p.returncode))
+        if len(pausas) != 2 or trocas != ["16:9 (quadro largo)", "4:3"]:
+            falhas.append("%s: esperava 2 pausas e as trocas 16:9 e 4:3 (%s, %s)" % (nome, pausas, trocas))
+        else:
+            fases = {"4:3 antes": [], "16:9": [], "4:3 depois": []}
+            for x in caps:
+                v = int(re.match(r"janela_v(\d+)_", x).group(1))
+                # longe das pausas (a interface e o fade); o jogo nao anda pausado, entao o VBlank e o do jogo. Antes da
+                # primeira pausa, so os 12 s de gameplay que a antecedem (o log nao da o VBlank do fim do carregamento; antes
+                # dele vem o boot, o titulo e a tela de espera, sem o corredor: a primeira execucao, de 2026-11-10, os contou)
+                if pausas[0] - 30 - 12 * 60 <= v < pausas[0] - 30:
+                    fases["4:3 antes"].append(x)
+                elif pausas[0] + 60 < v < pausas[1] - 30:
+                    fases["16:9"].append(x)
+                elif v > pausas[1] + 60:
+                    fases["4:3 depois"].append(x)
+            x0, y0, aw, ah = fit(1280, 720, 640, 480)
+            for fase, lista in fases.items():
+                if len(lista) < 2:
+                    falhas.append("%s: so %d capturas no trecho %s" % (nome, len(lista), fase))
+                    continue
+                comCena = 0
+                for x in lista:
+                    iw, ih, px = ler_bmp(os.path.join(cap, x))
+                    fora = media(px, 0, max(1, x0 - 2), 0, ih)  # as faixas do 4:3 na janela 16:9
+                    dentro = media(px, x0 + 8, x0 + aw - 8, y0 + 8, y0 + ah - 8)
+                    if dentro < 4:
+                        falhas.append("%s %s: area do jogo vazia (%s)" % (nome, x, fase))
+                    if fase == "16:9":
+                        comCena += fora >= 4
+                    elif fora > 1:
+                        falhas.append("%s %s: laterais nao pretas no %s (%.1f): quadro largo fora de hora" % (nome, x, fase, fora))
+                print("    %s: %d capturas%s" % (fase, len(lista), (", %d com cena nas laterais" % comCena) if fase == "16:9" else ""))
+                if fase == "16:9" and comCena * 2 <= len(lista):
+                    falhas.append("%s: so %d de %d capturas do 16:9 com cena nas laterais" % (nome, comCena, len(lista)))
+        if conferir:
+            falhas.extend("%s: %s" % (nome, f) for f in conferir(texto))
+        print("    %s" % ("ok" if len(falhas) == f0 else "FALHOU"))
+    finally:
+        if a.manter:
+            print("    pasta mantida: " + tmp)
+        else:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+
+def tamanhos(texto):
+    """Os alvos de cada render (BS_VK_LENTOS com limite minimo: uma linha por render, com o tamanho do alvo)."""
+    return [(int(w), int(h)) for w, h in re.findall(r"\[render-vk\] render lento \d+: [^;]*;[^;]*;[^;]*;[^;]*; (\d+)x(\d+);", texto)]
+
+
+def j7(a, falhas):
+    """N9.5 fase 5B (revisao Codex 20261110-011045; exe de validacao): a altura e a largura juntas, com o limite da GPU
+    simulado (BS_VK_ALTURA_MAX=2160: no quadro largo, 1618, isto e, 1440 em uso).
+      J7a 2160p no 4:3, troca pelo menu para o 16:9 e de volta: nenhum render largo acima do limite (3843x2160), 1440 em uso
+          no 16:9 (2562x1440) e a escolha inteira de volta no 4:3 (2880x2160);
+      J7b 2160p no 16:9 (1440 em uso) e o recuo para o SDL (BS_APRESENTACAO_FALHAR): a altura escolhida volta com o 4:3;
+      J7c 4:3 e o Vulkan desistindo (BS_VK_FALHAR=...:sempre): o 16:9 sai do menu."""
+    if not a.exe_validacao:
+        falhas.append("J7: precisa do --exe-validacao")
+        return
+    ev = os.path.abspath(a.exe_validacao)
+    base = {"BS_VK_ALTURA_MAX": "2160", "BS_VK_LENTOS": "0.0001"}
+
+    def conferir_a(texto):
+        f, ts = [], tamanhos(texto)
+        if "[validacao] limite da GPU simulado: 2160" not in texto:
+            f.append("sem o limite simulado")
+        if "[menu] resolucao interna: 2160 pedida, 1440 em uso (limite da GPU para o quadro largo)" not in texto:
+            f.append("sem a reducao para 1440 no 16:9")
+        acima = sorted({t for t in ts if t[0] > 2880})
+        if acima:
+            f.append("renders acima do limite: %s" % acima)
+        for t in ((2562, 1440), (2880, 2160)):
+            if t not in ts:
+                f.append("nenhum render %dx%d" % t)
+        # a ordem: 2160 (4:3), 1440 largo, 2160 de novo
+        seq = [t for i, t in enumerate(ts) if i == 0 or t != ts[i - 1]]
+        if [t for t in seq if t in ((2880, 2160), (2562, 1440))][-3:] != [(2880, 2160), (2562, 1440), (2880, 2160)]:
+            f.append("sequencia de alvos inesperada: %s" % seq[-6:])
+        print("    alvos (na ordem, sem repeticao): %s" % seq[-6:])
+        return f
+
+    j6(a, falhas, nome="J7a", exe_origem=ev, res="2160p", env_extra=base, conferir=conferir_a)
+    for nome, graf, env, esperado in (
+            ("J7b", "16:9", {"BS_APRESENTACAO_FALHAR": "600"},
+             ["[menu] resolucao interna: 2160 pedida, 1440 em uso", "[menu] proporcao: 4:3 (a apresentacao SDL nao desenha o quadro largo)",
+              "[render] resolucao interna: escala 4.5 (2880x2160)"]),
+            ("J7c", "4:3", {"BS_VK_FALHAR": "900:sempre"},
+             ["[validacao] falha do Vulkan injetada no VBlank 900 (permanente)",
+              "[menu] proporcao: 4:3 (o renderizador ficou no software: a recuperacao do Vulkan falhou)"])):
+        tmp = tempfile.mkdtemp(prefix="n95_janela_%s_" % nome)
+        try:
+            exe = os.path.join(tmp, os.path.basename(ev))
+            shutil.copy2(ev, exe)
+            open(os.path.join(tmp, "instalacao.toml"), "w").write('[edicao]\nperfil = "remastered"\n')
+            open(os.path.join(tmp, "graficos.toml"), "w").write(GRAFICOS.format(res="2160p", w=1280, h=720, prop=graf))
+            pad = os.path.join(tmp, "pad.txt")
+            open(pad, "w").write("0 conectar\n30000 sair\n")
+            e = {k: v for k, v in os.environ.items() if not k.startswith("BS_")}
+            e.update(base), e.update(env), e.update({"BS_RELOGIO_FIXO": "1700000000", "BS_CONTROLE_VIRTUAL": pad})
+            log = os.path.join(tmp, "jogo.txt")
+            with open(log, "w", encoding="utf-8") as out:
+                pr = subprocess.Popen([exe, "--data", os.path.abspath(a.data), "--saves-pasta", os.path.join(tmp, "saves"),
+                                       "--apresentacao", "vulkan"], stdout=out, stderr=subprocess.STDOUT, env=e, cwd=tmp)
+                try:
+                    pr.wait(120)
+                except subprocess.TimeoutExpired:  # so o processo deste caso
+                    pr.kill()
+            texto = open(log, encoding="utf-8", errors="replace").read()
+            pos, f0 = -1, len(falhas)
+            for linha in esperado:  # na ordem
+                q = texto.find(linha, pos + 1)
+                if q < 0:
+                    falhas.append("%s: sem a linha (na ordem) %r" % (nome, linha))
+                    break
+                pos = q
+            ts = tamanhos(texto)
+            if nome == "J7b" and sorted({t for t in ts if t[0] > 2880}):
+                falhas.append("%s: renders acima do limite: %s" % (nome, sorted({t for t in ts if t[0] > 2880})))
+            print("[%s] %s: rc=%s; %s" % (nome, "recuo para o SDL com 1440 em uso" if nome == "J7b" else "o Vulkan desiste no 4:3",
+                                          pr.returncode, "ok" if len(falhas) == f0 else "FALHOU"))
+        finally:
+            if a.manter:
+                print("    pasta mantida: " + tmp)
+            else:
+                shutil.rmtree(tmp, ignore_errors=True)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--exe", required=True)
@@ -175,11 +350,17 @@ def main():
     ap.add_argument("--cartao", required=True, help="pasta de saves SINTETICA com o slot 1 (copiada para a pasta do caso)")
     ap.add_argument("--casos", default="J1,J2,J3,J4,J5")
     ap.add_argument("--manter", action="store_true")
+    ap.add_argument("--exe-validacao", help="exe de validacao (para o J7)")
     a = ap.parse_args()
     a.exe = os.path.abspath(a.exe)
     falhas = []
     for n in a.casos.split(","):
-        caso(n, CASOS[n], a, falhas)
+        if n == "J6":
+            j6(a, falhas)
+        elif n == "J7":
+            j7(a, falhas)
+        else:
+            caso(n, CASOS[n], a, falhas)
     print("\n%d falha(s)" % len(falhas))
     for f in falhas:
         print("  " + f)

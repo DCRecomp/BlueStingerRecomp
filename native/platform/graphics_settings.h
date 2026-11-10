@@ -88,7 +88,8 @@ struct Capabilities {
     Features features;
     uint32_t max_msaa       = 1;
     uint32_t max_anisotropy = 1;
-    uint32_t max_height     = 480;  // maior altura interna que cabe na memoria/limites da GPU
+    uint32_t max_height     = 480;  // maior altura interna que cabe na memoria/limites da GPU (alvo 4:3)
+    uint32_t max_height_wide = 0;   // N9.5 fase 5B: a mesma para o quadro largo (0 = igual a max_height)
     bool     wide_hud       = false;  // correcao do HUD em 16:9 disponivel
     // N9.5 fase 1: o quadro largo (hor+) existe nesta edicao e neste renderizador (Remastered + Vulkan com apresentacao
     // direta). Libera Aspect::Wide16x9 no graficos.toml e, desde a fase 5, a opcao 4:3/16:9 no menu (aspect_choice);
@@ -127,6 +128,15 @@ Aspect effective_aspect(const GraphicsSettings& s, const Capabilities& caps, boo
 // sem o quadro largo nesta execucao, com o software), quando ela veio da linha de comando (`--proporcao`, so nesta
 // execucao) ou quando a escolha nao chegou a valer (`effective` diferente); senao, a escolhida (que e a aplicada).
 Aspect aspect_for_file(Aspect selected, Aspect effective, Aspect on_file, AspectChoice choice, bool from_command_line);
+
+// N9.5 fase 5B: o limite da resolucao interna acompanha a proporcao em uso. `gpu_max_4x3` = VulkanStats::max_internal_height
+// (calculado para um alvo 4:3); o quadro largo tem 854/640 da largura, e o limite cai pelo fator da largura
+// ((480/854) / (3/4)), o mais conservador entre a memoria e a dimensao maxima da imagem. `cap` = o maior degrau do menu.
+uint32_t max_internal_height(Aspect effective, uint32_t gpu_max_4x3, uint32_t cap = 2160);
+// A altura interna que vale com o limite `max_height`: a escolhida, reduzida pelos degraus do menu (a escala volta a 100 %,
+// depois a resolucao desce) ate caber. A escolha do jogador nao muda: de volta ao 4:3, a altura escolhida volta.
+uint32_t effective_internal_height(const GraphicsSettings& s, uint32_t max_height);
+uint32_t effective_internal_height(uint32_t wanted, uint32_t max_height);  // uma altura pedida (a --resolucao-interna)
 
 enum class Apply : uint8_t { None, Immediate, Recreate };  // nada mudou / no proximo quadro / recriar alvos e swapchain
 Apply apply_kind(const GraphicsSettings& from, const GraphicsSettings& to);

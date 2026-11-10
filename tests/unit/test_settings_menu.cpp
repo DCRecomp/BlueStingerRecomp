@@ -177,6 +177,38 @@ BS_TEST(settings_menu_aspect_fase5) {
     BS_CHECK(value(m, &on) == "4:3 (16:9 s\u00f3 com Vulkan)" && !on);
     m.input(MenuAction::Right, 21.0);  // de volta ao Vulkan: o 16:9 volta
     BS_CHECK(value(m) == "16:9");
+    // N9.5 fase 5B: no 16:9 com a GPU no limite, a resolucao escolhida fica e a altura em uso aparece
+    {
+        st::Capabilities lim = caps;
+        lim.features.scaling = true, lim.max_height = 2160, lim.max_height_wide = 1618;
+        bs::Preferences q = pt();
+        q.graphics.resolution = st::Resolution::P2160, q.graphics.aspect = st::Aspect::Wide16x9;
+        bs::SettingsMenu r(q, lim, {"en-US"}, ed::profile_for(ed::Edition::Remastered));
+        r.open();
+        go(r, "Gráficos");
+        r.input(MenuAction::Confirm, 0);
+        const auto  v  = r.view();
+        const int   ri = find(v, "Resolução interna");
+        BS_CHECK(ri >= 0 && v.items[size_t(ri)].value == "4K (16:9: em uso 1440p)" && r.prefs().graphics.resolution == st::Resolution::P2160);
+        go(r, "Proporção");
+        r.input(MenuAction::Right, 1.0);  // 4:3: a escolha inteira vale
+        BS_CHECK(r.view().items[size_t(ri)].value == "4K");
+    }
+    {  // revisao Codex 20261110-011045: o CRT pela altura em uso (1080p escolhido, 720p em uso no 16:9)
+        st::Capabilities lim = caps;
+        lim.features.scaling = lim.features.crt = true, lim.max_height = 2160, lim.max_height_wide = 1000;
+        bs::Preferences q = pt();
+        q.graphics.resolution = st::Resolution::P1080, q.graphics.aspect = st::Aspect::Wide16x9;
+        bs::SettingsMenu r(q, lim, {"en-US"}, ed::profile_for(ed::Edition::Remastered));
+        r.open();
+        go(r, "Gráficos");
+        r.input(MenuAction::Confirm, 0);
+        go(r, "Efeitos de imagem");
+        r.input(MenuAction::Confirm, 0);
+        const auto v = r.view();
+        const int  c = find(v, "Filtro CRT");
+        BS_CHECK(c >= 0 && !v.items[size_t(c)].enabled && v.items[size_t(c)].value.find("1080p") != std::string::npos);
+    }
     // a apresentacao recuou para o SDL
     m.set_wide_frame_available(false);
     BS_CHECK(value(m, &on) == "4:3 (16:9 indispon\u00edvel)" && !on && m.prefs().graphics.aspect == st::Aspect::Wide16x9);

@@ -809,14 +809,21 @@ BS_TEST(render_capture_vulkan_failures_fall_back_to_software) {
         rc::inject_fault(rc::Fault::DeviceOnce);
         BS_CHECK(textured(s) == 0xF800);
         BS_CHECK(rc::stats().vk_recoveries == 1 && rc::stats().vk_frames == 1 && rc::stats().vk_error.empty());
+        BS_CHECK(!rc::vulkan_gave_up());  // N9.5 fase 5B: a recuperacao nao tira o quadro largo
     }
     {  // perda que se repete na recuperacao: software ate o fim da sessao
         CaptureScene s(rc::Mode::Native);
+        BS_CHECK(!rc::vulkan_gave_up());
         rc::inject_fault(rc::Fault::Device);
         BS_CHECK(textured(s) == 0xF800);
         BS_CHECK(rc::stats().vk_failures == 2 && rc::stats().vk_error.find("dispositivo") != std::string::npos);
+        BS_CHECK(rc::vulkan_gave_up());  // N9.5 fase 5B: a janela tira o quadro largo e o menu mostra 4:3
         s.reg(0x144, 0x80000000);
         BS_CHECK(textured(s) == 0xF800 && rc::stats().vk_frames == 0);  // sem Vulkan ate o fim da sessao
+    }
+    {  // um renderizador novo (install) tenta o Vulkan de novo
+        CaptureScene s(rc::Mode::Native);
+        BS_CHECK(!rc::vulkan_gave_up());
     }
     rc::inject_fault(rc::Fault::None);
 }

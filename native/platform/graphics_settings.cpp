@@ -192,6 +192,28 @@ Aspect effective_aspect(const GraphicsSettings& s, const Capabilities& caps, boo
                                                                                                       : Aspect::Original4x3;
 }
 
+uint32_t max_internal_height(Aspect effective, uint32_t gpu_max_4x3, uint32_t cap) {
+    uint32_t h = std::min(cap, gpu_max_4x3);
+    if (effective == Aspect::Wide16x9) h = std::min(h, uint32_t(double(gpu_max_4x3) * (480.0 / 854.0) / 0.75));
+    return std::max(480u, h);
+}
+
+uint32_t effective_internal_height(const GraphicsSettings& s, uint32_t max_height) {
+    GraphicsSettings t = s;
+    while (internal_height(t) > max_height && (t.resolution != Resolution::Original || t.scale_pct > 100)) {
+        if (t.scale_pct > 100) t.scale_pct = 100;
+        else t.resolution = Resolution(uint8_t(t.resolution) - 1);
+    }
+    return internal_height(t);
+}
+
+uint32_t effective_internal_height(uint32_t wanted, uint32_t max_height) {
+    if (wanted <= max_height) return wanted;
+    for (uint32_t h : {2160u, 1440u, 1080u, 720u})  // os degraus do menu
+        if (h <= max_height) return h;
+    return 480;
+}
+
 Aspect aspect_for_file(Aspect selected, Aspect effective, Aspect on_file, AspectChoice choice, bool from_command_line) {
     if (choice != AspectChoice::Free || from_command_line || selected != effective) return on_file;
     return selected;

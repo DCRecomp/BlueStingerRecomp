@@ -83,6 +83,25 @@ BS_TEST(graphics_confirmation_rule) {
     BS_CHECK(st::apply_kind(a, b) == st::Apply::Recreate && !st::requires_confirmation(a, b));
 }
 
+// N9.5 fase 5B: o limite da resolucao por proporcao (o alvo largo tem 854/640 da largura) e a altura em uso
+BS_TEST(graphics_internal_height_limit_fase5b) {
+    using st::Aspect;
+    // GPU que comporta 2160 no 4:3 (o limite do menu) com folga: no 16:9 o fator da largura vale
+    BS_CHECK(st::max_internal_height(Aspect::Original4x3, 5720) == 2160 && st::max_internal_height(Aspect::Wide16x9, 5720) == 2160);
+    // GPU no limite: 2160 no 4:3; no 16:9, 2160 * (480/854) / 0.75 = 1618
+    BS_CHECK(st::max_internal_height(Aspect::Original4x3, 2160) == 2160);
+    BS_CHECK(st::max_internal_height(Aspect::Wide16x9, 2160) == 1618);
+    BS_CHECK(st::max_internal_height(Aspect::Wide16x9, 500) == 480);  // nunca abaixo do original
+    st::GraphicsSettings s;
+    s.resolution = st::Resolution::P2160;
+    BS_CHECK(st::effective_internal_height(s, 2160) == 2160 && st::effective_internal_height(s, 1618) == 1440);
+    BS_CHECK(st::effective_internal_height(s, 1000) == 720 && st::effective_internal_height(s, 480) == 480);
+    s.resolution = st::Resolution::P1080, s.scale_pct = 200;  // 2160 pela escala: a escala volta a 100 % primeiro
+    BS_CHECK(st::effective_internal_height(s, 1618) == 1080);
+    BS_CHECK(st::effective_internal_height(2160u, 1618) == 1440 && st::effective_internal_height(900u, 1618) == 900);
+    BS_CHECK(st::effective_internal_height(4320u, 600) == 480);
+}
+
 // N9.5 fase 5A (D5-1, D5-2, D5-4): disponibilidade, proporcao em uso, arquivo antigo com "automatico" e a regra do arquivo
 BS_TEST(graphics_aspect_rules_fase5) {
     using st::Aspect;

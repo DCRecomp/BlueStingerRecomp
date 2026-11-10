@@ -4326,6 +4326,20 @@ não por uma única bateria contínua** (decisão do mantenedor, 2026-11-02).
 - **Pendências:** H9; D-N8-4 no gate pós-N9; ressalva do 7.1 e D-K1(a); limite de 3 h de `n6_h` no executor, defeito a
   corrigir antes de uma futura integral, sem enfraquecer os testes. N9 e N10 não iniciados.
 
+### N9.5 fase 5B: as transições e o limite da resolução (2026-11-10, commit local)
+
+Detalhes em `docs/N9-5-AUDITORIA.md`, seção 16.2.
+- **Produto:** o limite da resolução interna acompanha a proporção em uso (`max_internal_height`, `effective_internal_height`):
+  a escolha do jogador fica, a altura em uso desce pelos degraus do menu até caber no alvo largo e volta no 4:3; a altura e o
+  alargamento são pedidos numa ordem que nunca deixa o alvo largo acima do limite; a `--resolucao-interna` com o mesmo limite;
+  a desistência do Vulkan e o recuo para o SDL tiram o 16:9 do menu e devolvem a altura e o CRT do 4:3; o CRT pela altura em
+  uso. Só validação: `BS_PROPORCAO_TROCA`, `BS_VK_FALHAR`, `BS_VK_ALTURA_MAX`.
+- **Resultados:** `bs_unit_tests` 371/0, `bs_render_tests` 91/0, ctest 30/30 e 23/23; H1–H7 0 falhas (H7 novo: as trocas no
+  gameplay e as falhas do Vulkan, estado idêntico, quadros iguais ao 4:3 e ao 16:9, nenhum slot velho); J6 e J7a–c (novos, na
+  janela) 0 falhas; P1–P5 0 falhas. J6 com o primeiro trecho restrito ao gameplay (16.2).
+- **Revisão Codex `codex-20261110-011045`:** três médios (a desistência com o 4:3 em uso, a altura no recuo para o SDL, o CRT)
+  e um baixo (testes da altura com a largura), todos aceitos e corrigidos.
+
 ### N9.5 fase 5A: a proporção no menu e no arquivo (2026-11-10, commit local)
 
 Detalhes em `docs/N9-5-AUDITORIA.md`, seções 16.0 e 16.1. Autorizada pelo mantenedor com as decisões D5-1 a D5-4.

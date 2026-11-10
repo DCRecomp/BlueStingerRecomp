@@ -1125,3 +1125,61 @@ e "4:3 (16:9 indisponível)" sem o quadro largo, as duas sem mudança. **`main_s
 **Revisão Codex `codex-20261110-004711`:**
 - **Média — o limite da resolução não acompanha a troca para 16:9:** aceita; é a lacuna da fase 5B (16.2).
 - **Baixa — faltavam o `--proporcao` e o recuo para o SDL nos testes integrados:** aceita; P4 e P5.
+
+### 16.2 Fase 5B: as transições e o limite da resolução
+
+**Como era:** o limite da resolução interna do quadro largo (o alvo tem 854/640 da largura) só valia quando o jogo já
+começava em 16:9, e ele reduzia a própria escolha do jogador; uma troca para 16:9 pelo menu (desde a 5A) podia pedir um alvo
+largo acima do limite da GPU. A `--resolucao-interna` passava por fora do limite. A desistência do Vulkan (o render no software
+até o fim da sessão) não chegava à janela nem ao menu.
+
+**O que mudou:**
+
+| Peça | Onde | O que faz |
+|---|---|---|
+| O limite por proporção | `graphics_settings`: `max_internal_height`, `effective_internal_height`; `Capabilities::max_height_wide` | o limite largo é `limite 4:3 × (480/854) / 0,75` (o mais conservador entre a memória e a dimensão máxima da imagem); a altura em uso desce pelos degraus do menu (a escala volta a 100 %, depois a resolução) até caber, e a escolha do jogador não muda: de volta ao 4:3, a escolha inteira vale |
+| A ordem dos pedidos | `InGameMenu::apply` | a thread do jogo atende a altura e a largura no VBlank seguinte; a altura que desce vai antes do alargamento e a que sobe depois dele, então nenhum render usa o alvo largo com a altura do 4:3 acima do limite |
+| A linha de comando | `--resolucao-interna` | vale até o jogador mudar a resolução no menu, com o limite da GPU da proporção em uso; sem janela, o mesmo limite |
+| A desistência do Vulkan | `render_capture::vulkan_gave_up` (atômico; recomeça a cada `install`) | a janela tira o quadro largo e o menu mostra "4:3 (16:9 indisponível)", também com o 4:3 em uso |
+| O recuo para o SDL | `drop_wide` | reaplica a configuração inteira pelo caminho do menu: a altura escolhida e o CRT voltam com o 4:3 |
+| O CRT | `apply` e o menu | pela altura em uso (o limite do 16:9 pode reduzi-la abaixo de 1080) |
+| O menu | `settings_menu` | "4K (16:9: em uso 1440p)" quando o limite reduz a escolha |
+| Diagnóstico | `render_core` | `[render] pilar: desligado com o 4:3` quando a troca encontra um pilar ligado |
+| Só validação | `game_host`, `main_sdl` | `BS_PROPORCAO_TROCA=<vblank>:<largura>[,...]` (a troca pelo mesmo caminho do menu), `BS_VK_FALHAR=<vblank>[:sempre]` (falha do dispositivo transitória ou permanente), `BS_VK_ALTURA_MAX=<altura>` (uma GPU com esse limite) |
+
+**Verificado (o pedido do mantenedor):**
+
+| Transição | Prova |
+|---|---|
+| 4:3 → 16:9 → 4:3 → 16:9 no gameplay | H7 (sem janela, VBlanks 3000/3900/4500) e J6 (pelo menu da pausa, na janela) |
+| Vulkan ↔ software | P3 (pelo menu) e H7 (a falha permanente) |
+| Recuperação e perda do dispositivo | H7 (transitória: continua no largo; permanente: o software até o fim, sem imagem larga, o quadro igual ao do 4:3) e J7c (a janela tira o 16:9) |
+| Limites de resolução e de memória | unitários; J7a (2160p com o limite simulado: 1440 em uso no 16:9, a escolha inteira de volta, nenhum render acima do limite) |
+| Recuo para o SDL com a altura reduzida | J7b |
+| Pilar, marcas do HUD, slots | H7: o pilar religa depois da volta ao 16:9; o quadro do jogo no 4:3 igual ao da execução 4:3 (as marcas limpas: o HUD de volta ao lugar); nenhuma imagem larga no 4:3 (nenhum slot velho) |
+| Menus, filmes e legendas | J6 (a pausa e as configurações da N9.2 nas duas proporções), J1–J5 e P1–P5 |
+| Redimensionamento da janela | sem estado: a área é recalculada a cada quadro (`frame_area`); J1/J2 (1280×720 e 1024×768); o redimensionamento durante o jogo fica para a conferência visual do mantenedor |
+
+**Resultados (2026-11-10, exes do worktree com a 5B):**
+
+| Teste | Resultado |
+|---|---|
+| `bs_unit_tests` / `bs_render_tests` | 371/0, 91/0 (novos: `graphics_internal_height_limit_fase5b`, o rótulo "em uso" e o CRT pela altura em uso no menu, `vulkan_gave_up` no recuo do render) |
+| ctest `msvc-debug` / `msvc-release` | 30/30, 23/23 |
+| H1–H7 (sem janela) | 0 falhas. H7: estado e efeitos idênticos ao 4:3 nas quatro execuções (as trocas, a 16:9 do início, a falha transitória e a permanente); as três trocas na ordem; imagem larga nas capturas largas e nenhuma no 4:3; o quadro do jogo no 4:3 igual ao da execução 4:3 (0 px); a imagem larga depois da volta igual à da execução 16:9 desde o início (0 px); o pilar religa; falha transitória: recuperado e ainda largo; permanente: o software até o fim, sem imagem larga, o quadro igual ao 4:3 do Vulkan (0 px) |
+| J6 (janela, pelo menu da pausa) | 0 falhas: 12 capturas no 4:3 antes, 22 no 16:9 (todas com cena nas laterais), 19 no 4:3 depois (laterais pretas: nenhum quadro largo velho) |
+| J7a (2160p, limite simulado de 2160 no 4:3) | 0 falhas: os alvos na ordem 2880×2160 → 2562×1440 → 2880×2160; nenhum render acima do limite; o aviso "2160 pedida, 1440 em uso" |
+| J7b (16:9 com 1440 em uso e o recuo para o SDL) | 0 falhas: a escala volta a 4,5 (2880×2160) depois do recuo |
+| J7c (o Vulkan desiste no 4:3) | 0 falhas: "4:3 (o renderizador ficou no software...)" e o 16:9 sai do menu |
+| P1–P5 | 0 falhas |
+
+- **J6, critério do primeiro trecho:** a primeira execução contou as capturas do boot (logotipos e telas pretas) como "4:3
+  antes" e falhou em 14 delas por "área do jogo vazia"; o log não dá o VBlank do fim do carregamento, e o trecho passou a ser
+  os 12 s de gameplay antes da primeira pausa. Os outros dois trechos e todos os critérios ficaram iguais.
+- Memória: pico de 5,1 GB do `bluestinger`, commit livre mínimo de 19,7 GB.
+
+**Revisão Codex `codex-20261110-011045`** (três médios e um baixo, todos aceitos):
+- **Média — a desistência do Vulkan com o 4:3 em uso não tirava o 16:9 do menu:** a janela consulta `vulkan_gave_up` sempre; J7c.
+- **Média — o recuo para o SDL não devolvia a altura do 4:3:** `drop_wide` reaplica a configuração inteira; J7b.
+- **Média — o CRT decidia pela altura escolhida:** a altura em uso, no `apply` e no menu; unitário novo.
+- **Baixa — nenhum teste exercitava a altura junto com a largura:** `BS_VK_ALTURA_MAX` (só validação) e J7a/J7b.

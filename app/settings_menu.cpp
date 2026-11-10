@@ -21,6 +21,13 @@ std::string pct(uint32_t v) { return std::to_string(v) + " %"; }
 
 template <class E> E cycle(E e, int dir, int count) { return E((int(e) + dir + count) % count); }
 
+// N9.5 fase 5B: a altura interna em uso (o limite do 16:9 pode reduzir a escolha: graphics_settings effective_internal_height)
+uint32_t height_in_use(const st::GraphicsSettings& g, const st::Capabilities& caps, bool edition_wide) {
+    if (caps.max_height_wide && st::effective_aspect(g, caps, edition_wide) == st::Aspect::Wide16x9)
+        return st::effective_internal_height(g, caps.max_height_wide);
+    return st::internal_height(g);
+}
+
 uint32_t step(uint32_t v, int dir, uint32_t lo, uint32_t hi, uint32_t by) {
     const int64_t n = int64_t(v) + int64_t(dir) * by;
     return uint32_t(std::clamp<int64_t>(n, lo, hi));
@@ -96,9 +103,15 @@ std::vector<SettingsMenu::Entry> SettingsMenu::entries() const {
         int resolutions = 1;
         for (const uint32_t hh : {720u, 1080u, 1440u, 2160u}) resolutions += hh <= caps_.max_height;
         const bool        scaling  = f.scaling && g.vulkan;
-        const std::string resValue = !f.scaling ? soon(false, res[size_t(g.resolution)])
-                                     : g.vulkan ? std::string(res[size_t(g.resolution)])
-                                                : std::string(res[size_t(g.resolution)]) + L(" (só com Vulkan)", " (Vulkan only)");
+        std::string resValue = !f.scaling ? soon(false, res[size_t(g.resolution)])
+                               : g.vulkan ? std::string(res[size_t(g.resolution)])
+                                          : std::string(res[size_t(g.resolution)]) + L(" (só com Vulkan)", " (Vulkan only)");
+        // N9.5 fase 5B: no 16:9 o alvo e mais largo e o limite da GPU menor; a altura em uso aparece quando ele reduz a escolha
+        if (scaling) {
+            const uint32_t eff = height_in_use(g, caps_, profile_.wide_frame);
+            if (eff < st::internal_height(g))
+                resValue += std::string(L(" (16:9: em uso ", " (16:9: using ")) + std::to_string(eff) + "p)";
+        }
         e.push_back({L("Resolução interna", "Internal resolution"), resValue, scaling, [resolutions](Preferences& p, int d) {
                          p.graphics.resolution = cycle(p.graphics.resolution, d, resolutions);
                      }});
@@ -196,7 +209,8 @@ std::vector<SettingsMenu::Entry> SettingsMenu::entries() const {
                      fstep([](Preferences& p) { return &p.graphics.bloom_strength; }, 0.1f, 0.f, 2.f)});
         e.push_back({"SSAO", soon(false, onoff(g.ssao)), false, nullptr});
         {
-            const bool tall = st::internal_height(g) >= st::kCrtMinHeight;  // as linhas do jogo precisam de espaco
+            // as linhas do jogo precisam de espaco; a altura em uso (revisao Codex 20261110-011045)
+            const bool tall = height_in_use(g, caps_, profile_.wide_frame) >= st::kCrtMinHeight;
             e.push_back({L("Filtro CRT", "CRT filter"),
                          !f.crt ? soon(false, onoff(g.crt))
                          : tall ? onoff(g.crt)

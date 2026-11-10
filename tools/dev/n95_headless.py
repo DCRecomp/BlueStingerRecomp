@@ -9,6 +9,13 @@ Roteiro passo_load_slot1 (LOAD do slot 1 e corredor RCG02). Casos:
   H4 Remastered 16:9 em 1080, 1440 e 2160 linhas: a imagem larga com round(854 x e) colunas, o centro reduzido igual ao
      quadro do jogo (PSNR) e as laterais com cena; estado identico ao H3;
   H5 Remastered 4:3 na escala 1: nenhuma imagem larga (o caminho do N7c como antes).
+  H6 (fase 4) o pilar dinamico no fim do corredor (004640) e sem pilar no corredor de frente (003800).
+  H7 (fase 5B; precisa do --exe-validacao: BS_PROPORCAO_TROCA e BS_VK_FALHAR so existem na validacao) as transicoes, todas
+     contra uma execucao do mesmo exe sem a troca: 4:3 -> 16:9 no VBlank 3000, -> 4:3 no 3900 e -> 16:9 no 4500. Estado por
+     passo e efeitos identicos; a imagem larga so nas capturas largas (3800 e 4640) e nenhuma no 4:3 (4200: nenhum slot
+     largo velho); o quadro do jogo no 4:3 (4200) igual ao da execucao 4:3 (o HUD de volta ao lugar: as marcas limpas); o
+     pilar de novo ligado em 4640. Falha do Vulkan transitoria no VBlank 3500 (16:9): a recuperacao continua no largo;
+     permanente: o software ate o fim, sem imagem larga depois, o quadro do jogo igual ao do 4:3 e o estado identico.
 
   python tools/dev/n95_headless.py --exe build/msvc-release/app/bluestinger.exe --data dist/BlueStinger-Preview/data
                                    --cartao <pasta de saves sintetica> [--casos H1,H3] [--manter]
@@ -32,11 +39,11 @@ VBLANKS, CAPTURAS = 4700, "3800-3800,4640-4640"
 
 
 class Corrida:
-    def __init__(self, base, nome, a, edicao, extra, capturar=True):
+    def __init__(self, base, nome, a, edicao, extra, capturar=True, exe=None, capturas=CAPTURAS):
         self.dir = os.path.join(base, nome)
         os.makedirs(self.dir)
-        self.exe = os.path.join(self.dir, os.path.basename(a.exe))
-        shutil.copy2(a.exe, self.exe)
+        self.exe = os.path.join(self.dir, os.path.basename(exe or a.exe))
+        shutil.copy2(exe or a.exe, self.exe)
         if edicao == "remastered":
             open(os.path.join(self.dir, "instalacao.toml"), "w").write('[edicao]\nperfil = "remastered"\n')
         shutil.copytree(a.cartao, os.path.join(self.dir, "saves"))
@@ -46,7 +53,7 @@ class Corrida:
             env.pop(k, None)
         env.update({"BS_RELOGIO_FIXO": "1700000000", "BS_INPUT_SCRIPT": ROTEIRO, "BS_STATE_PASSO_CADA": "1",
                     "BS_STATE_PASSO": os.path.join(self.dir, "passos.tsv"), "BS_EFEITOS_WAV": os.path.join(self.dir, "efeitos.wav"),
-                    "BS_CAPTURA_VBLANKS": CAPTURAS})
+                    "BS_CAPTURA_VBLANKS": capturas})
         self.cmd = [self.exe, "--data", os.path.abspath(a.data), "--saves-pasta", os.path.join(self.dir, "saves")] + extra + \
                    ["--headless", str(VBLANKS)]
         if capturar:
@@ -108,6 +115,7 @@ def main():
     ap.add_argument("--data", required=True)
     ap.add_argument("--cartao", required=True, help="pasta de saves SINTETICA com o slot 1")
     ap.add_argument("--casos", default="H1,H2,H3,H4,H5")
+    ap.add_argument("--exe-validacao", help="exe de validacao (para o H7)")
     ap.add_argument("--manter", action="store_true")
     a = ap.parse_args()
     a.exe = os.path.abspath(a.exe)
@@ -137,6 +145,17 @@ def main():
                                                ["--render", "nativo", "--proporcao", "16:9", "--resolucao-interna", str(alt)])
         if "H5" in casos:
             rodadas["h5"] = Corrida(base, "h5", a, "remastered", ["--render", "nativo", "--proporcao", "4:3"])
+        H7CAP = "3800-3800,4200-4200,4640-4640"
+        if "H7" in casos and a.exe_validacao:
+            ev = os.path.abspath(a.exe_validacao)
+            rodadas["v43"] = Corrida(base, "v43", a, "remastered", ["--render", "nativo", "--proporcao", "4:3"], exe=ev, capturas=H7CAP)
+            rodadas["v169"] = Corrida(base, "v169", a, "remastered", ["--render", "nativo", "--proporcao", "16:9"], exe=ev, capturas=H7CAP)
+            rodadas["h7"] = Corrida(base, "h7", a, "remastered", ["--render", "nativo", "--proporcao", "4:3"], exe=ev, capturas=H7CAP)
+            rodadas["h7"].env["BS_PROPORCAO_TROCA"] = "3000:854,3900:0,4500:854"
+            rodadas["h7t"] = Corrida(base, "h7t", a, "remastered", ["--render", "nativo", "--proporcao", "16:9"], exe=ev, capturas=H7CAP)
+            rodadas["h7t"].env["BS_VK_FALHAR"] = "3500"
+            rodadas["h7p"] = Corrida(base, "h7p", a, "remastered", ["--render", "nativo", "--proporcao", "16:9"], exe=ev, capturas=H7CAP)
+            rodadas["h7p"].env["BS_VK_FALHAR"] = "3500:sempre"
         with ThreadPoolExecutor(max_workers=3) as ex:
             list(ex.map(lambda r: r.rodar(), rodadas.values()))
 
@@ -236,6 +255,44 @@ def main():
                     check("H4 %d centro reduzido ~ quadro do jogo" % alt, p >= 30, "PSNR %.1f dB" % p)
                     esq, dir_ = cena(hd[:, :int(90 * e)]), cena(hd[:, -int(90 * e):])
                     check("H4 %d laterais com cena" % alt, esq > 0.5 and dir_ > 0.5, "%.0f%% / %.0f%%" % (100 * esq, 100 * dir_))
+        if "H7" in casos and not a.exe_validacao:
+            check("H7 precisa do --exe-validacao", False, "")
+        if "H7" in casos and a.exe_validacao:
+            v43, v169, h7, h7t, h7p = (rodadas[k] for k in ("v43", "v169", "h7", "h7t", "h7p"))
+            check("H7 execucoes", all(r.rc == 0 for r in (v43, v169, h7, h7t, h7p)),
+                  "rc=" + "/".join(str(r.rc) for r in (v43, v169, h7, h7t, h7p)))
+            ref, wref = v43.passos(), v43.wav()
+            for r in (v169, h7, h7t, h7p):
+                nome = os.path.basename(r.dir)
+                check("H7 %s estado por passo identico ao 4:3" % nome, len(ref) > 2000 and r.passos() == ref,
+                      "%d/%d linhas" % (len(ref), len(r.passos())))
+                check("H7 %s efeitos identicos ao 4:3" % nome, len(wref) > 0 and np.array_equal(r.wav(), wref), "")
+            trocas = [l for l in h7.log.splitlines() if l.startswith("[validacao] proporcao") or l.startswith("[render] quadro:")]
+            check("H7 as tres trocas no log, na ordem", [l.split("quadro:")[1].strip()[:5] for l in trocas if l.startswith("[render]")] ==
+                  ["largo", "4:3", "largo"], "; ".join(trocas))
+            hd = lambda r, v: r.img("v%s_hd.bmp" % v)
+            check("H7 imagem larga nas capturas largas (3800, 4640)", all(hd(h7, v) is not None and hd(h7, v).shape[1] == 854
+                                                                          for v in ("003800", "004640")), "")
+            check("H7 nenhuma imagem larga no 4:3 (4200: nenhum slot velho)", hd(h7, "004200") is None, "")
+            g, g43 = h7.img("v004200.bmp"), v43.img("v004200.bmp")
+            check("H7 quadro do jogo no 4:3 igual ao da execucao 4:3 (o HUD de volta ao lugar)",
+                  g is not None and g43 is not None and np.array_equal(g, g43),
+                  "" if g is None or g43 is None else "%d px" % int((np.abs(g - g43).max(axis=2) > 0).sum()))
+            for v in ("003800", "004640"):  # depois de voltar ao 16:9, a imagem larga igual a da execucao 16:9 desde o inicio
+                a1, b1 = hd(h7, v), hd(v169, v)
+                check("H7 %s imagem larga igual a da execucao 16:9" % v, a1 is not None and b1 is not None and np.array_equal(a1, b1),
+                      "" if a1 is None or b1 is None else "%d px" % int((np.abs(a1 - b1).max(axis=2) > 0).sum()))
+            check("H7 o pilar liga de novo depois da volta ao 16:9", "[captura] v004640 pilar esquerda=1" in h7.log, "")
+            # falha transitoria do Vulkan: a recuperacao e o quadro largo continuam
+            check("H7 falha transitoria: recuperado e ainda largo", "falha do Vulkan injetada" in h7t.log and
+                  "software ate o fim" not in h7t.log and hd(h7t, "003800") is not None and hd(h7t, "004640") is not None, "")
+            # falha permanente: o software (4:3) ate o fim, sem imagem larga depois dela
+            check("H7 falha permanente: software ate o fim, sem imagem larga depois",
+                  "software ate o fim da sessao" in h7p.log and hd(h7p, "003800") is None and hd(h7p, "004640") is None, "")
+            g, g43 = h7p.img("v004200.bmp"), v43.img("v004200.bmp")
+            check("H7 falha permanente: quadro do jogo (software) igual ao do 4:3 no Vulkan",
+                  g is not None and g43 is not None and np.array_equal(g, g43),
+                  "" if g is None or g43 is None else "%d px" % int((np.abs(g - g43).max(axis=2) > 0).sum()))
         if "H5" in casos:
             r = rodadas["h5"]
             hds = [f for f in os.listdir(r.cap) if f.endswith("_hd.bmp")] if os.path.isdir(r.cap) else []

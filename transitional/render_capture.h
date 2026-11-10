@@ -167,6 +167,9 @@ struct PillarSides {
     bool left = false, right = false;
 };
 PillarSides pillar_sides();
+// N9.5 fase 5B: o Vulkan desistiu nesta sessao (o render ficou no software ate o fim: a recuperacao falhou). A janela tira o
+// quadro largo (o software e 4:3) e o menu mostra 4:3. Pode ser lido de outra thread; recomeca a cada install.
+bool        vulkan_gave_up();
 
 // A imagem maior do que esta sendo EXIBIDO: `shown` e o quadro que o video do PVR leu da VRAM (pvr_video_frame). Se
 // ele e um dos ultimos renders na escala (o conteudo confere com a imagem reduzida que foi para a VRAM, tolerando a

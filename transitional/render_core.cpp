@@ -19,6 +19,7 @@
 #include "kamui/draw_class.h"  // N9.5 fase 2: a marca cena/HUD no TSV da proveniencia
 #endif
 
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -34,6 +35,7 @@ namespace {
 nr::ITextureReplacements* g_replacements = nullptr;  // texturas HD (set_texture_replacements)
 Fault                     g_fault        = Fault::None;     // testes do recuo (inject_fault)
 float                     g_scale        = 1.f;             // resolucao interna (set_scale)
+std::atomic<bool>         g_vkGaveUp{false};              // N9.5 fase 5B: vulkan_gave_up
 uint32_t                  g_wide         = 0;               // N9.5 fase 1: largura do quadro largo (set_wide; 0 = 4:3)
 
 std::unique_ptr<Renderer> g_core;
@@ -332,6 +334,7 @@ bool Renderer::vk_render(uint32_t w, uint32_t h, std::vector<uint32_t>& out) {
     }
     st.vk_error = "falha do dispositivo Vulkan no render " + std::to_string(st.renders + 1) + " (" + why +
                   "): renderizador em software ate o fim da sessao";
+    g_vkGaveUp.store(true);  // N9.5 fase 5B: a janela tira o quadro largo (vulkan_gave_up)
     std::fprintf(stderr, "[render] %s\n", st.vk_error.c_str());
     drop_vk(true);
     vkTried_ = true;  // nao tenta mais
@@ -411,6 +414,9 @@ bool Renderer::vk_attempt(uint32_t w, uint32_t h, std::vector<uint32_t>& out, st
         }
         cl = &wideCl_;
     } else if (!g_wide) {
+        // N9.5 fase 5B: a troca para o 4:3 com um pilar ligado fica no log (H7)
+        if (pillar_.left() || pillar_.right())
+            std::fprintf(stderr, "[render] pilar: desligado com o 4:3 (render %llu)\n", static_cast<unsigned long long>(st.renders));
         pillar_.reset();  // sem o quadro largo, o pilar recomeca desligado (um render de outro tamanho nao conta)
     }
     // testes: Device falha esta tentativa e a da recuperacao; DeviceOnce so esta
@@ -674,6 +680,7 @@ float scale() { return g_scale; }
 
 void     set_wide(uint32_t width) { g_wide = width; }
 uint32_t wide() { return g_wide; }
+bool        vulkan_gave_up() { return g_vkGaveUp.load(); }
 PillarSides pillar_sides() { return g_core ? PillarSides{g_core->pillar().left(), g_core->pillar().right()} : PillarSides{}; }
 
 HiresImage hires_for(std::span<const uint32_t> shown, uint32_t width, uint32_t height) {
@@ -810,6 +817,7 @@ void install(Mode m, uint32_t every) {
         g_core.reset();
         return;
     }
+    g_vkGaveUp.store(false);  // N9.5 fase 5B: um renderizador novo tenta o Vulkan de novo
     auto next       = std::make_unique<Renderer>();  // estatisticas, quadro e conjuntos de ids recomecam
     next->dumpDir   = g_core ? g_core->dumpDir : std::string();
     next->dumpEvery = g_core ? g_core->dumpEvery : 300;
