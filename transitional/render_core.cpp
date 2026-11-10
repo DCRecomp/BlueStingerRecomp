@@ -379,6 +379,13 @@ bool Renderer::vk_attempt(uint32_t w, uint32_t h, std::vector<uint32_t>& out, st
     if (wideW) {
         wideCl_ = frame.cl;
         nr::widen(wideCl_, wideW, frame.roles);  // N9.5 fase 3B: o HUD do canto na borda esquerda
+        // N9.5 fase 4 (decisao do mantenedor): o pilar dinamico. Onde a IR nao cobre uma faixa nova (o vazio fora da sala),
+        // a faixa vira pilar (os desenhos da cena ficam fora dela; o HUD continua), com a histerese de PillarState
+        const uint32_t off = nr::wide_offset(w, wideW);
+        if (pillarAt_ != st.renders && (pillarAt_ = st.renders, pillar_.update(nr::band_uncovered(wideCl_, off, frame.roles))))
+            std::fprintf(stderr, "[render] pilar: esquerda %s, direita %s (render %llu)\n", pillar_.left() ? "ligado" : "desligado",
+                         pillar_.right() ? "ligado" : "desligado", static_cast<unsigned long long>(st.renders));
+        nr::pillar_bands(wideCl_, off, pillar_.left(), pillar_.right(), frame.roles);
         // Diagnostico (N9.5 fase 3B, criterio H3 de tools/dev/n95_headless.py): BS_HUD_ANCORAS_LOG=<arquivo> grava, a cada
         // render com desenhos ancorados, o retangulo deles nas coordenadas do 4:3 (da IR, antes do deslocamento)
         static std::FILE* ancoras = [] {
@@ -403,6 +410,8 @@ bool Renderer::vk_attempt(uint32_t w, uint32_t h, std::vector<uint32_t>& out, st
             }
         }
         cl = &wideCl_;
+    } else if (!g_wide) {
+        pillar_.reset();  // sem o quadro largo, o pilar recomeca desligado (um render de outro tamanho nao conta)
     }
     // testes: Device falha esta tentativa e a da recuperacao; DeviceOnce so esta
     const bool injected = g_fault == Fault::Device || g_fault == Fault::DeviceOnce || g_fault == Fault::DeviceAgain;
@@ -665,6 +674,7 @@ float scale() { return g_scale; }
 
 void     set_wide(uint32_t width) { g_wide = width; }
 uint32_t wide() { return g_wide; }
+PillarSides pillar_sides() { return g_core ? PillarSides{g_core->pillar().left(), g_core->pillar().right()} : PillarSides{}; }
 
 HiresImage hires_for(std::span<const uint32_t> shown, uint32_t width, uint32_t height) {
     return g_core ? g_core->hires_for(shown, width, height) : HiresImage{};

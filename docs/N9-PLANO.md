@@ -285,8 +285,11 @@ só como histórico:
 - **Fase 3, Parte B (2026-11-09, commit local):** marca leve A1 (escolha do mantenedor): o gerador marca só cinco pontos de
   chamada medidos; na Remastered 16:9, a moldura do alvo, o nome e a barra de vida ficam na borda esquerda; mensagens, menus
   e cena como na fase 1. Original × N8.7 10/0, H1–H5, R1–R4, J1–J5 sem falhas; o H3 ajustado por decisão do mantenedor
-  (seção 14.9 da auditoria). Arma, munição, mira de combate e GAME OVER sem identificação. As fases 4 e 5 esperam
-  autorização.
+  (seção 14.9 da auditoria). Arma, munição, mira de combate e GAME OVER sem identificação. Publicada como `v0.9.5-3`.
+- **Fase 4 (autorizada em 2026-11-09, commit local):** as bordas. O levantamento de cinco salas achou o vazio fora da sala
+  só no fim do corredor RCG02; o mantenedor escolheu o pilar dinâmico: na Remastered 16:9, a faixa sem geometria (≥ 80 %
+  da grade, por 10 renders) mostra o fundo, com o HUD por cima. Estado do jogo e Original intactos (H1–H6, N8.7 10/0,
+  R1–R4, J1–J5; seção 15 da auditoria). O resto do jogo não foi medido (C8 bloqueado). A fase 5 espera autorização.
 
 ### N9.6 — Iluminação, sombras e materiais (R, GG)
 

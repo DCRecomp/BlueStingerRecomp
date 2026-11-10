@@ -5,6 +5,7 @@
 // na validacao o adaptador do decodificador do legado (render_capture.cpp) monta `frame` e chama draw().
 #include "render_capture.h"
 #include "render/soft/soft_device.h"
+#include "render/wide_frame.h"
 #include "render/vulkan/vk_device.h"
 
 #include <deque>
@@ -36,6 +37,7 @@ public:
     bool soft_render(uint32_t w, uint32_t h, std::vector<uint32_t>& out);
     void compare(std::span<const uint32_t> sw, uint32_t w, uint32_t h);  // Mode::Compare: o Vulkan contra o software
     bool vk_ok() const { return vkOk_; }                                   // o ultimo draw() saiu do Vulkan
+    const nr::PillarState& pillar() const { return pillar_; }              // N9.5 fase 4: o pilar dinamico (diagnostico)
     HiresImage hires_for(std::span<const uint32_t> shown, uint32_t w, uint32_t h);
     bool       read_hires(const HiresImage& h, std::vector<uint32_t>& argb, uint32_t& w);
 
@@ -66,6 +68,8 @@ private:
     std::vector<uint32_t>             vkImage_;
     nr::CommandList                   wideCl_;   // N9.5 fase 1: a IR do quadro largo (a do jogo deslocada)
     std::vector<uint32_t>             wideImg_;  // o quadro largo lido de volta (o recorte central vai ao framebuffer)
+    nr::PillarState                   pillar_;   // N9.5 fase 4: o pilar dinamico de cada faixa (histerese)
+    uint64_t                          pillarAt_ = ~0ull;  // o render ja contado (a recuperacao do Vulkan repete a tentativa)
     TexCache                          vkTex_;
     std::vector<uint8_t>              raw_;
     std::vector<uint32_t>             argb_;

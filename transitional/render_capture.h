@@ -162,6 +162,11 @@ float scale();
 // 0 = desligado (o padrao; a Original nunca liga). O software (recuo) continua em 4:3. Thread do jogo.
 void     set_wide(uint32_t width);
 uint32_t wide();
+// N9.5 fase 4: o pilar dinamico de cada faixa no ultimo render largo (diagnostico das capturas, tools/dev/n95_headless.py H6)
+struct PillarSides {
+    bool left = false, right = false;
+};
+PillarSides pillar_sides();
 
 // A imagem maior do que esta sendo EXIBIDO: `shown` e o quadro que o video do PVR leu da VRAM (pvr_video_frame). Se
 // ele e um dos ultimos renders na escala (o conteudo confere com a imagem reduzida que foi para a VRAM, tolerando a

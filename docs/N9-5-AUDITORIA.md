@@ -977,4 +977,85 @@ caminhos de chamada, as threads e as interrupções, e a recusa de um retângulo
 - **Framebuffer 4:3 com o quadro largo:** sem o HUD ancorado (14.9).
 - **Marca de um bloco reescrito pela cena antes da cópia:** sem tratamento no código; não observada (14.10).
 - **C8:** continua bloqueado (as gravações reais de 2026-10-21 não existem mais).
-- **Fases 4 e 5:** esperam autorização (bordas por sala e câmeras fixas; menu 4:3/16:9, 21:9, desempenho).
+- **Fase 4:** autorizada com a publicação da fase 3 (seção 15). **Fase 5:** espera autorização (menu 4:3/16:9, 21:9, desempenho).
+
+## 15. Fase 4: as bordas do widescreen (2026-11-09)
+
+Autorizada pelo mantenedor com a publicação da fase 3. O objetivo (bloqueador B2): onde a sala não tem geometria nas
+faixas novas, não mostrar o vazio fora da sala.
+
+### 15.1 O levantamento por sala
+
+`tools/dev/n95_bordas.py` roda o produto sem janela na Remastered 16:9 (Vulkan, o quadro largo da fase 1) nas rotas por
+passo, captura a imagem larga (o slot, 854 colunas) a cada 180 VBlanks e liga cada captura à sala pelo registro de arquivos
+(`BS_FILE_LOG`: o último `R*.BIN` lido). Em cada captura, a fração de vazio (preto) em cada faixa e no centro.
+
+| Sala | Capturas largas | Com cena no centro | Com vazio só nas faixas |
+|---|---|---|---|
+| título, LOAD (sem sala) | 30 | 2 | 0 |
+| RCG00 (o cais) | 12 | 12 | 0 |
+| RCG00A | 58 | 55 | 0 |
+| RCG02 (o corredor) | 11 | 11 | **2** (o fim do corredor: faixa esquerda 95 % e 89 % vazia) |
+| RCG03 (o exterior) | 70 | 58 | 0 |
+
+- Rotas: `passo_heliporto` (do NEW GAME ao GAME OVER: cais, C-GATE, RCG02, exterior, menus, o monstro) e
+  `passo_load_slot1`. 181 capturas largas (as outras são filmes e telas de outro tamanho).
+- **O vazio fora da sala só aparece no fim do corredor RCG02**: a câmera de canto mostra além da parede. As outras salas
+  medidas têm cena nas faixas em todas as capturas, inclusive as cenas de câmera fixa e a cena roteirizada do cais.
+- **Cobertura limitada:** cinco salas do começo do jogo. As gravações reais que cobririam o resto se perderam
+  (`C8 bloqueado`); o restante do jogo não foi medido.
+
+### 15.2 O tratamento: o pilar dinâmico (decisão do mantenedor, 2026-11-09)
+
+O mantenedor escolheu, entre o pilar dinâmico, o pilar por sala (tabela), manter como está e esperar mais rotas, o
+**pilar dinâmico**: vale para qualquer sala, inclusive as que as rotas não cobrem.
+
+| Peça | Onde | O que faz |
+|---|---|---|
+| A medida | `native/render/wide_frame` (`band_uncovered`) | uma grade de 8 × 24 pontos em cada faixa contra os triângulos da IR alargada, com as regras de descarte do rasterizador (degenerado, orientação, "small cull") e o recorte "dentro"/"fora" de cada desenho; sem o HUD ancorado nem as faixas de largura inteira (fades) |
+| A histerese | `PillarState` | liga depois de 10 renders seguidos com ≥ 80 % da faixa descoberta, desliga depois de 10 com ≤ 50 %; uma vez por render lógico (a recuperação do Vulkan não conta duas vezes) |
+| O pilar | `pillar_bands` | os desenhos da cena perdem as colunas da faixa (o recorte "dentro" de cada um); a faixa mostra o fundo, com borda reta em x = 107, e o HUD continua por cima |
+| Onde liga | `transitional/render_core` | só no quadro largo (a Remastered 16:9 com o Vulkan); no 4:3, na Original e no software nada muda; um render de outro tamanho (para textura) não zera o estado |
+| Diagnóstico | log `[render] pilar: …` a cada troca; `[captura] vNNNNNN pilar esquerda=… direita=…` em cada captura larga | o estado do pilar por captura (o critério H6) |
+
+- **O que o pilar não toca:** o centro (o 4:3 e o framebuffer do jogo, o recorte central), o HUD ancorado, as faixas de
+  largura inteira (fades e barras) e os desenhos com recorte "fora".
+- **Escolha visual registrada:** com o limiar de 80 %, até 20 % da grade de uma faixa pode ter cena e ainda assim ser
+  recortada quando o pilar liga (revisão Codex 15.4). Nos dois casos medidos, a faixa tinha 89–95 % de vazio.
+
+### 15.3 Os resultados (bateria de 2026-11-09)
+
+Builds `msvc-validacao`, `msvc-debug` e `msvc-release` do mesmo código (o script para no primeiro erro; os exes testados
+são os do build, conferidos pela hora). Logs em `tmp/sessao-20261109/logs` (fora do git).
+
+| Teste | Resultado |
+|---|---|
+| ctest `msvc-debug` / `msvc-release` | 30/30, 23/23 |
+| `bs_unit_tests` / `bs_render_tests` | 368/0, 91/0 (os novos: a medida com descarte e recorte, a histerese, o pilar) |
+| H1–H5 (fase 1, sem janela) | 0 falhas: estado e efeitos idênticos ao 4:3 |
+| **H6** (o pilar) | 0 falhas: RCG02 003800 (corredor de frente, 93 % da faixa com cena) sem pilar; 004640 (o fim do corredor) com o pilar esquerdo, a faixa esquerda com 0 % de cena fora do HUD e o centro intacto (74 % com cena); o estado do pilar registrado em cada captura confere |
+| Original × `referencias_n87` | 10 casos, 0 diferentes |
+| R1–R4 (`test_remaster`) | 4 casos, 0 falhas |
+| J1–J5 (janela real, só as do Blue Stinger) | 0 falhas; quadro largo só em J1 e J2, como na fase 1 |
+
+- Memória: pico de 5,1 GB do `bluestinger`, commit livre mínimo de 20 GB; o vigia não interrompeu nada.
+- O pilar não muda o estado do jogo (H1 e R1–R4) nem a Original (N8.7); só a imagem das faixas do quadro largo.
+
+### 15.4 Revisão Codex
+
+**`reviews/codex-20261109-203527.md`** (dois médios, dois baixos; todos aceitos):
+- **Média — o limiar de 50 % podia apagar até metade da faixa com cena.** O limiar passou a 80 % (desliga em 50 %), e a
+  escolha está documentada (15.2).
+- **Média — a medida contava triângulos que o rasterizador descarta ou recorta.** A medida aplica agora o descarte
+  (degenerado, orientação, "small cull") e o recorte "dentro"/"fora" de cada desenho; testes com cada caso.
+- **Baixa — a recuperação do Vulkan contava o mesmo render duas vezes na histerese.** Uma atualização por render lógico.
+- **Baixa — o H6 não ligava o estado do pilar à captura.** O produto registra o estado do pilar em cada captura larga, e o
+  H6 confere o da captura (004640 com o pilar esquerdo; 003800 sem pilar).
+
+### 15.5 Pendências
+
+- **Cobertura:** cinco salas do começo do jogo; o resto do jogo não foi medido (sem rotas). O pilar dinâmico vale para
+  todas, mas o efeito nas outras salas não foi visto.
+- **Sprites descartados além do 4:3** (a nota do B2 da fase 1): o jogo não envia algumas sprites que ficariam nas faixas;
+  com o pilar ou sem ele, elas não aparecem. Não tratado.
+- **Fase 5:** espera autorização (menu 4:3/16:9, 21:9, desempenho, o risco residual da marca do HUD da seção 14.10).

@@ -4326,6 +4326,26 @@ não por uma única bateria contínua** (decisão do mantenedor, 2026-11-02).
 - **Pendências:** H9; D-N8-4 no gate pós-N9; ressalva do 7.1 e D-K1(a); limite de 3 h de `n6_h` no executor, defeito a
   corrigir antes de uma futura integral, sem enfraquecer os testes. N9 e N10 não iniciados.
 
+### N9.5 fase 4: o pilar dinâmico nas bordas do widescreen (2026-11-09, commit local)
+
+Detalhes em `docs/N9-5-AUDITORIA.md`, seção 15. Autorizada com a publicação da fase 3; o tratamento (pilar dinâmico)
+escolhido pelo mantenedor; sem push, tag nem release.
+- **Levantamento (`tools/dev/n95_bordas.py`):** 181 capturas largas de cinco salas (título/LOAD, RCG00, RCG00A, RCG02,
+  RCG03) nas rotas `passo_heliporto` e `passo_load_slot1`; o vazio fora da sala só aparece no fim do corredor RCG02 (2
+  capturas, faixa esquerda 95 % e 89 % vazia).
+- **Produto (`native/render/wide_frame`, `transitional/render_core`):** só no quadro largo (Remastered 16:9 com o Vulkan),
+  uma grade 8 × 24 por faixa contra a IR alargada (sem o HUD ancorado nem os fades, com o descarte e o recorte do
+  rasterizador); histerese de 10 renders (liga com ≥ 80 % descoberto, desliga com ≤ 50 %); com o pilar, a cena perde as
+  colunas da faixa e o HUD continua por cima. Diagnóstico `[render] pilar:` e o estado por captura larga.
+- **Resultados:** ctest 30/30 e 23/23; `bs_unit_tests` 368/0, `bs_render_tests` 91/0; H1–H6 0 falhas (H6: 003800 sem
+  pilar, 004640 com o pilar esquerdo e 0 % de cena na faixa, centro intacto); Original × `referencias_n87` 10/0; R1–R4 4/0;
+  J1–J5 0 falhas. Pico de memória 5,1 GB.
+- **Revisão Codex `codex-20261109-203527`:** dois médios (o limiar, passou de 50 % a 80 %; a medida sem o descarte e o
+  recorte, corrigida) e dois baixos (a recuperação do Vulkan contava duas vezes; o H6 sem o estado da captura), todos
+  aceitos e corrigidos com testes.
+- **Pendências:** cobertura de cinco salas (C8 bloqueado, sem rotas para o resto); sprites que o jogo não envia além do 4:3;
+  a fase 5 espera autorização.
+
 ### N9.5 fase 3, Parte B: o HUD do canto na borda esquerda da Remastered 16:9 (2026-11-09, commit local)
 
 Detalhes em `docs/N9-5-AUDITORIA.md`, seções 14.6–14.11. Arquitetura A1 (marca de escopo) escolhida pelo mantenedor; sem

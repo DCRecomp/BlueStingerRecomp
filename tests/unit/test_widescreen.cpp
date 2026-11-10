@@ -222,3 +222,99 @@ BS_TEST(wide_frame_left_anchored_draws_stay_at_the_left_edge) {
     nr::widen(d, 640, {nr::kAnchorCenter, nr::kAnchorLeft});
     BS_CHECK(d.vertices[3].x == a.vertices[3].x && d.frame.width == 640);
 }
+
+// N9.5 fase 4: o pilar dinamico. A cobertura das faixas pela IR (sem o HUD ancorado nem as faixas de largura inteira), o
+// recorte dos desenhos da cena para fora da faixa e a histerese.
+namespace {
+nr::CommandList quadro_largo(float x0, float x1) {  // 854x480: um quad de cena de x0 a x1 na altura inteira
+    nr::CommandList cl;
+    cl.frame.width = 854, cl.frame.height = 480;
+    auto v = [](float x, float y) {
+        nr::Vertex r;
+        r.x = x, r.y = y, r.inv_w = 0.5f, r.color = 0xFF808080;
+        return r;
+    };
+    cl.vertices = {v(x0, 0), v(x1, 0), v(x0, 480), v(x1, 480)};
+    nr::Draw d;
+    d.first_vertex = 0, d.vertex_count = 4;
+    d.state.texture.value = 1;  // com textura: um desenho de cena, nao uma faixa de largura inteira (fade)
+    cl.draws = {d};
+    return cl;
+}
+} // namespace
+
+BS_TEST(wide_frame_band_coverage_from_the_ir) {
+    const nr::CommandList todo = quadro_largo(0, 854);
+    auto c = nr::band_uncovered(todo, 107);
+    BS_CHECK(c.left == 0.f && c.right == 0.f);
+    const nr::CommandList so_centro = quadro_largo(200, 854);  // a faixa esquerda vazia
+    c = nr::band_uncovered(so_centro, 107);
+    BS_CHECK(c.left == 1.f && c.right == 0.f);
+    // o mesmo quad ancorado (HUD) nao conta como cena
+    c = nr::band_uncovered(todo, 107, {nr::kAnchorLeft});
+    BS_CHECK(c.left == 1.f && c.right == 1.f);
+    const nr::CommandList metade = quadro_largo(53.5f, 854);  // metade da faixa esquerda
+    c = nr::band_uncovered(metade, 107);
+    BS_CHECK(c.left == 0.5f);
+    // um fade de largura inteira (sem textura, cor e 1/w uniformes, borda a borda) nao conta como cena e nao e recortado
+    nr::CommandList fade = quadro_largo(0, 854);
+    fade.draws[0].state.texture.value = 0;
+    c = nr::band_uncovered(fade, 107);
+    BS_CHECK(c.left == 1.f && c.right == 1.f);
+    BS_CHECK(nr::pillar_bands(fade, 107, true, true) == 0 && fade.draws[0].state.clip == nr::Clip::None);
+    // revisao Codex 20261109-203527: as regras de descarte e de recorte do rasterizador valem na medida
+    nr::CommandList dentro = quadro_largo(0, 854);  // recorte "dentro" so no centro: as faixas ficam vazias
+    dentro.draws[0].state.clip = nr::Clip::Inside, dentro.draws[0].state.clip_x0 = 107, dentro.draws[0].state.clip_x1 = 746;
+    dentro.draws[0].state.clip_y0 = 0, dentro.draws[0].state.clip_y1 = 479;
+    c = nr::band_uncovered(dentro, 107);
+    BS_CHECK(c.left == 1.f && c.right == 1.f);
+    nr::CommandList fora = quadro_largo(0, 854);  // recorte "fora" cobrindo a faixa esquerda: ela fica vazia
+    fora.draws[0].state.clip = nr::Clip::Outside, fora.draws[0].state.clip_x0 = 0, fora.draws[0].state.clip_x1 = 106;
+    fora.draws[0].state.clip_y0 = 0, fora.draws[0].state.clip_y1 = 479;
+    c = nr::band_uncovered(fora, 107);
+    BS_CHECK(c.left == 1.f && c.right == 0.f);
+    nr::CommandList degenerado = quadro_largo(0, 854);  // todos os vertices na mesma linha: area zero
+    for (auto& v : degenerado.vertices) v.y = 100;
+    BS_CHECK(nr::band_uncovered(degenerado, 107).left == 1.f);
+    nr::CommandList culled = quadro_largo(0, 854);  // os dois triangulos do strip descartados pela orientacao
+    nr::CommandList keep   = culled;
+    culled.draws[0].state.cull = nr::Cull::CounterClockwise, keep.draws[0].state.cull = nr::Cull::Clockwise;
+    const auto ca = nr::band_uncovered(culled, 107), cb = nr::band_uncovered(keep, 107);
+    BS_CHECK((ca.left == 1.f) != (cb.left == 1.f));  // uma das duas orientacoes descarta o quad, a outra o mantem
+}
+
+BS_TEST(wide_frame_pillar_clips_scene_draws_out_of_the_band) {
+    nr::CommandList cl = quadro_largo(0, 854);
+    nr::CommandList hud = cl;
+    cl.draws.push_back(cl.draws[0]);  // 2: com recorte "dentro" ja (intersecao)
+    cl.draws[1].state.clip = nr::Clip::Inside, cl.draws[1].state.clip_x0 = 50, cl.draws[1].state.clip_x1 = 300;
+    cl.draws.push_back(cl.draws[0]);  // 3: recorte "fora" (fica como esta)
+    cl.draws[2].state.clip = nr::Clip::Outside, cl.draws[2].state.clip_x0 = 10, cl.draws[2].state.clip_x1 = 20;
+    cl.draws.push_back(cl.draws[0]);  // 4: ancorado (o HUD)
+    const uint32_t n = nr::pillar_bands(cl, 107, true, false, {0, 0, 0, nr::kAnchorLeft});
+    BS_CHECK(n == 2);
+    BS_CHECK(cl.draws[0].state.clip == nr::Clip::Inside && cl.draws[0].state.clip_x0 == 107 && cl.draws[0].state.clip_x1 == 853 &&
+             cl.draws[0].state.clip_y0 == 0 && cl.draws[0].state.clip_y1 == 479);
+    BS_CHECK(cl.draws[1].state.clip_x0 == 107 && cl.draws[1].state.clip_x1 == 300);
+    BS_CHECK(cl.draws[2].state.clip == nr::Clip::Outside && cl.draws[2].state.clip_x0 == 10);
+    BS_CHECK(cl.draws[3].state.clip == nr::Clip::None);
+    nr::pillar_bands(hud, 107, true, true);
+    BS_CHECK(hud.draws[0].state.clip_x0 == 107 && hud.draws[0].state.clip_x1 == 746);
+    BS_CHECK(nr::pillar_bands(hud, 107, false, false) == 0);
+}
+
+BS_TEST(wide_frame_pillar_hysteresis) {
+    nr::PillarState p;
+    for (uint32_t k = 1; k < nr::kPillarFrames; ++k) BS_CHECK(!p.update({0.9f, 0.f}) && !p.left());
+    BS_CHECK(p.update({0.9f, 0.f}) && p.left() && !p.right());  // o 10o render seguido liga
+    BS_CHECK(!p.update({0.6f, 0.f}) && p.left());               // entre os limites (0,5 e 0,8): continua
+    for (uint32_t k = 1; k < nr::kPillarFrames; ++k) p.update({0.2f, 0.f});
+    BS_CHECK(p.left());
+    p.update({0.6f, 0.f});  // a sequencia foi interrompida: recomeca
+    for (uint32_t k = 1; k < nr::kPillarFrames; ++k) p.update({0.2f, 0.f});
+    BS_CHECK(p.left());
+    BS_CHECK(p.update({0.2f, 0.f}) && !p.left());
+    p.update({1.f, 1.f});
+    p.reset();
+    BS_CHECK(!p.left() && !p.right());
+}

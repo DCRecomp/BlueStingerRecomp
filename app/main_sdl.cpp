@@ -34,6 +34,7 @@
 #include "platform/user_settings.h"
 #include "render/vulkan/vk_device.h"
 #include "render/wide_frame.h"
+#include "render_capture.h"
 #include "gdfs_adapter.h"
 #include "input/input.h"
 #include "input_bridge.h"
@@ -425,6 +426,12 @@ std::function<void(const bs::GameFrame&)> headlessCapture(const Args& a) {
             hd.width = f.hiresWidth, hd.height = f.hiresRows;
             std::snprintf(name, sizeof name, "v%06llu_hd.bmp", (unsigned long long)v);
             writeBmp(dir / name, hd);
+            // N9.5 fase 4: o estado do pilar dinamico nesta captura (o criterio H6 de tools/dev/n95_headless.py)
+            if (hd.width > hd.height * 4 / 3) {
+                const auto p = bs::transitional::render_capture::pillar_sides();
+                std::fprintf(stderr, "[captura] v%06llu pilar esquerda=%d direita=%d\n", (unsigned long long)v, p.left ? 1 : 0,
+                             p.right ? 1 : 0);
+            }
         }
     };
 }

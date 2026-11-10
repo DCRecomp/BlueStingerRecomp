@@ -56,6 +56,44 @@ struct AreaRect {
 inline constexpr bool is_wide_slot(uint32_t w, uint32_t h) { return uint64_t(w) * 480 > uint64_t(h) * 640; }
 inline constexpr bool use_slot(uint64_t seq, uint32_t w, uint32_t h, bool wide_on) { return seq && (wide_on || !is_wide_slot(w, h)); }
 AreaRect fit_area(int w, int h, uint32_t fw, uint32_t fh);
+
+// N9.5 fase 4 (docs/N9-5-AUDITORIA.md secao 15; decisao do mantenedor: o pilar dinamico): onde a sala nao tem geometria
+// numa faixa nova (o vazio fora da sala, B2), a faixa vira pilar. Tudo sobre a IR ja alargada (widen), sem ler pixels.
+//
+// band_uncovered: a fracao de uma grade de 8 x 24 pontos de cada faixa (as `off` colunas de cada lado) que nenhum
+// triangulo cobre. Nao contam os ancorados (o HUD) nem as faixas de largura inteira (fades). Com as regras de descarte do
+// rasterizador (frame_prep): triangulo degenerado, culling por orientacao e o "small cull", e o recorte "dentro"/"fora" do
+// desenho em cada ponto (revisao Codex 20261109-203527).
+struct BandCoverage {
+    float left = 0, right = 0;  // fracao descoberta (0 = toda coberta, 1 = vazia)
+};
+BandCoverage band_uncovered(const CommandList& cl, uint32_t off, const std::vector<uint8_t>& anchors = {});
+// pillar_bands: os desenhos que nao sao ancorados nem faixas de largura inteira ficam fora da faixa (o recorte "dentro"
+// de cada um perde as colunas da faixa): a faixa mostra o fundo, com borda reta, e o HUD continua por cima. Um desenho
+// com recorte "fora" fica como esta. Devolve quantos desenhos foram recortados.
+uint32_t pillar_bands(CommandList& cl, uint32_t off, bool left, bool right, const std::vector<uint8_t>& anchors = {});
+// A histerese: uma faixa liga o pilar depois de kPillarFrames renders seguidos com >= kPillarOn descoberta e desliga
+// depois de kPillarFrames seguidos com <= kPillarOff (o pilar nao pisca com a camera andando). Revisao Codex
+// 20261109-203527: o pilar recorta a faixa inteira, entao so liga com a faixa quase toda vazia (no maximo 20 % da grade com
+// cena; os casos medidos no RCG02 tem 89-95 % de vazio). E uma escolha visual: a cena da faixa ate esse limite some.
+inline constexpr float    kPillarOn = 0.8f, kPillarOff = 0.5f;
+inline constexpr uint32_t kPillarFrames = 10;
+class PillarState {
+public:
+    // um render: a cobertura medida; devolve se algum lado mudou
+    bool update(const BandCoverage& c);
+    bool left() const { return left_.on; }
+    bool right() const { return right_.on; }
+    void reset() { left_ = right_ = {}; }
+
+private:
+    struct Side {
+        bool     on  = false;
+        uint32_t run = 0;  // renders seguidos pedindo a troca
+    };
+    static bool step(Side& s, float uncovered);
+    Side        left_, right_;
+};
 AreaRect center_part(const AreaRect& outer, uint32_t inner_w, uint32_t outer_w);
 
 } // namespace bs::native::render

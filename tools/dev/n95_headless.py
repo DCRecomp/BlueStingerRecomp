@@ -202,6 +202,21 @@ def main():
                     check("H3 %s laterais com cena" % v, esq > 0.5 and dir_ > 0.5, "%.0f%% / %.0f%%" % (100 * esq, 100 * dir_))
                 else:  # informativo (B2, fase 4): o vazio fora da sala aparece nas faixas onde o jogo nao tem geometria
                     print("[info] H3 %s laterais com cena: %.0f%% / %.0f%% (o resto: vazio fora da sala, B2)" % (v, 100 * esq, 100 * dir_))
+                # H6 (N9.5 fase 4, o pilar dinamico): no fim do corredor (004640) a IR nao cobre a faixa esquerda (o vazio fora da
+                # sala) e ela vira pilar: fora do HUD, nenhuma cena, borda reta em x = 107. No corredor de frente (003800), sem
+                # pilar (as duas faixas com a sala, conferidas acima)
+                faixa = hd[:, :107].copy()
+                if anc is not None:
+                    x0, y0, x1, y1 = anc
+                    faixa[max(0, y0):y1 + 1, max(0, x0):min(107, x1 + 1)] = 0  # o HUD fica por cima do pilar
+                # revisao Codex 20261109-203527: o estado do pilar desta captura (o produto o registra ao gravar o _hd)
+                estado = "[captura] v%s pilar esquerda=%d direita=0" % (v, 1 if v == "004640" else 0)
+                check("H6 %s estado do pilar na captura" % v, estado in r169.log, estado)
+                if v == "004640":
+                    check("H6 %s faixa esquerda so com o fundo fora do HUD" % v, cena(faixa) <= 0.01, "%.1f%% com cena" % (100 * cena(faixa)))
+                    check("H6 %s centro intacto (o 4:3 do quadro largo)" % v, cena(hd[:, 107:747]) > 0.5, "%.0f%%" % (100 * cena(hd[:, 107:747])))
+                else:
+                    check("H6 %s sem pilar no corredor de frente" % v, cena(faixa) > 0.5, "%.0f%% com cena" % (100 * cena(faixa)))
         if "H4" in casos:
             for alt in (1080, 1440, 2160):
                 r = rodadas["e%d" % alt]
