@@ -3542,7 +3542,7 @@ Plano: `docs/PLANO-PORT-NATIVO.md`, seções 4 e 4.2.
 | N6 Áudio | **concluída** (2026-10-23): H9 aprovado 3/3 com o Vulkan padrão (0 faltas); legado fora do produto no N8.6. H9 reaberto no N8.8: intermitente, não corrigido, não aprovado | 100 |
 | N7 Vulkan | **funcional, em fechamento técnico**: Vulkan padrão da janela com recuo seguro para o software; N7a, N7b e N7c validadas. Os dois bloqueios ganharam evidência no N8.7 (2026-10-28). **AMD:** a causa do `Invalid Read` foi demonstrada e corrigida (descritor não reescrito no realloc de `tris_`; 0/90 depois). **Fog e volumes:** implementados no software e no Vulkan, iguais em 32 bits, com a sombra conferida com o Flycast; falta um quadro de fog pareado. O N7 fica em 95% até o mantenedor encerrar formalmente esses bloqueios. SSAO, 16:9 real e MSAA permanecem no N9 (`docs/N7-PLANO.md` seção 25) | 95 |
 | N8 Sem legado | **iniciada** em 2026-10-24 (D-N8-1 a D-N8-4). N8.0 **concluído** em 2026-10-25 (regressão nível 3, correções, 16 referências validadas e reproduzidas, fixação do áudio nas suítes históricas); N8.1 **concluído** em 2026-10-26 (cadência B, TMU, CCN, cabo e ponte de interrupções no tempo lógico); N8.2 **concluído** em 2026-10-26 (produto × validação: papéis, `BS_VALIDACAO`, catraca do mapa); N8.3 **concluído** em 2026-10-26 (serviço nativo das syscalls; BIOS, drive e flash simulados fora do produto); N8.4 **concluído** em 2026-10-27 (barramento sem dispositivos; Maple, `--controles/--saves legado` fora do produto); N8.5 **concluído** em 2026-10-27 (filme legado e conversor YUV fora do produto); N8.6 **concluído** em 2026-10-27 (área de som nativa; AICA, áudio legado e DMA do G2 fora do produto); N8.7 **concluído** em 2026-10-30: AMD corrigida, fog e volumes nos dois renderizadores, o caminho gráfico do legado (TA, PVR, VRAM, vídeo, interrupções, DMAC, system block, rasterizador de referência) fora do produto e em sombra na validação; a fronteira guest fica no contrato do jogo (D-K1 a); N8.8 com **fechamento técnico em 2026-11-02, com ressalvas**: regressão nível 3 por composição, H9 e campanha completa abertos (`docs/N8-8-FECHAMENTO.md`) | 95 |
-| N9 Remasterização | **iniciada** em 2026-11-02 (`docs/N9-PLANO.md`): duas edições, Original e Remastered, do mesmo núcleo. N9.0 fechado (2026-11-02). N9-L L0–L5 e a v0.8.0 Preview publicados (validação no Bazzite com o mantenedor). **N9.1 (instalador) e N9.2 (interface da Remastered) com fechamento técnico aceito** (2026-11-04 e 2026-11-05), com as conferências visuais manuais pendentes com o mantenedor. **N9.3 (saves de PC) cancelado em 2026-11-05** por decisão do mantenedor. **N9.5 (widescreen e HUD) com fases 0–5 concluídas tecnicamente** (fases 1–3 publicadas como v0.9.5-1..3; fases 4 e 5 em commits locais, bateria final de 2026-11-10 sem falhas; visual na janela com o mantenedor). Próximo: N9.6; ordem gráfica N9.5 → N9.8 e depois N9.4, N9.9–N9.11. A campanha completa continua sendo o gate obrigatório depois do N9 | 27 |
+| N9 Remasterização | **iniciada** em 2026-11-02 (`docs/N9-PLANO.md`): duas edições, Original e Remastered, do mesmo núcleo. N9.0 fechado (2026-11-02). N9-L L0–L5 e a v0.8.0 Preview publicados (validação no Bazzite com o mantenedor). **N9.1 (instalador) e N9.2 (interface da Remastered) com fechamento técnico aceito** (2026-11-04 e 2026-11-05), com as conferências visuais manuais pendentes com o mantenedor. **N9.3 (saves de PC) cancelado em 2026-11-05** por decisão do mantenedor. **N9.5 (widescreen e HUD) com fases 0–5 concluídas tecnicamente** (fases 1–3 publicadas como v0.9.5-1..3; fases 4 e 5 em commits locais, bateria final de 2026-11-10 sem falhas; visual na janela com o mantenedor). N9.6 autorizado em 2026-11-10; N9.12 (estabilização no final do N9, com a do N9.5) registrado. Ordem gráfica N9.5 → N9.8 e depois N9.4, N9.9–N9.11. A campanha completa continua sendo o gate obrigatório depois do N9 | 27 |
 | N10 Mods e elevação | não iniciada (extensões preparadas: mídia do N5/N6, texturas HD por conteúdo e shaders validados do N7) | 0 |
 
 Progresso geral: ~81 % (onze etapas de peso igual; N8 em 95 % é estimativa, com campanha e H9 abertos).
@@ -4325,6 +4325,26 @@ não por uma única bateria contínua** (decisão do mantenedor, 2026-11-02).
   do jogo e os rótulos de provedor de `fronteiras_us.toml` defasados desde o N2a.
 - **Pendências:** H9; D-N8-4 no gate pós-N9; ressalva do 7.1 e D-K1(a); limite de 3 h de `n6_h` no executor, defeito a
   corrigir antes de uma futura integral, sem enfraquecer os testes. N9 e N10 não iniciados.
+
+### N9.6 fase 0: o que a IR permite para a iluminação (2026-11-10, só investigação)
+
+Detalhes em `docs/N9-6-AUDITORIA.md`. Autorizado pelo mantenedor ("Pode continuar para a 9.6"); o produto e a Original não
+mudaram.
+- **Método:** IRs guardadas (`BS_RENDER_IR_GUARDAR`, exe de validação de `2346602`, sem janela) em RCG00, RCG02 e RCG03 da
+  rota `passo_heliporto` e a do cais da fase 1 do N9.5; `bs-ir-tela geometria` (novo, só investigação): posições da câmera,
+  normais, imagem das normais, picos de direção por pixel e exportação dos vértices; ajuste da luz em
+  `tmp/sessao-20261110/n96/luz_ajuste.py` (local); disassembly de `8C15F078` e `8C17EC50`.
+- **Provado:** a posição na câmera volta exata pela projeção do Ninja (dist 500): no corredor, chão, paredes, teto e fundo a
+  88,1–91,9° entre si e as faces opostas a 179,6–180,0°; no exterior, 90,0–92,4°. A profundidade dos opacos já fica
+  guardada no passe A (D32 amostrável). A luz original é por vértice na CPU: o percurso só aceita o chunk `NJD_CV_VN`
+  (posição com normal) e `8C17EC50` faz `ftrv`, `fipr` e `fsrra` (direcional e pontual).
+- **Medido:** uma luz direcional explica só R² 0,25–0,37 das cores por vértice (luz e material não se separam pela IR); a
+  geometria é pobre (cada parede do corredor é um plano; o detalhe está nas texturas); 74–86 % das posições se repetem entre
+  desenhos (normais suaves pela posição são possíveis).
+- **Testes:** só o alvo `bs-ir-tela` (validação) foi compilado; nenhum código do jogo mudou. Sem revisão Codex nesta fase (só
+  a ferramenta de investigação).
+- **Escolhas do mantenedor (2026-11-10):** D6-1 C (a IR primeiro, as normais do Ninja só se faltarem), D6-2 i (a luz
+  original fica e as novas somam), D6-4 a + b (volumes originais com borda suave e sombras de contato); commits locais por fase.
 
 ### N9.5: bateria final (2026-11-10, HEAD `5fc25f2`)
 

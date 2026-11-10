@@ -305,6 +305,11 @@ só como histórico:
 - Provas técnicas antes de escolher os algoritmos.
 - **Aceitação:** prova de cada técnica numa sala de referência com custo medido; nenhuma mudança no estado por passo;
   o preset Original continua idêntico ao modo fiel.
+- **Fase 0 (autorizada em 2026-11-10, só investigação; `docs/N9-6-AUDITORIA.md`):** a posição na câmera volta exata da IR
+  pela projeção do Ninja (ângulos de 88–92° entre chão, paredes e teto no corredor); a profundidade dos opacos já fica
+  guardada no passe A; a geometria é pobre e o detalhe está nas texturas; a luz original é por vértice na CPU (modelos
+  chunk com normal, `8C17EC50`, direcionais e pontuais) e não se separa do material pela IR. Escolhas do mantenedor:
+  D6-1 C (a IR primeiro), D6-2 i (a luz original fica e as novas somam), D6-4 a + b (volumes suaves e sombras de contato).
 
 ### N9.7 — Água e reflexos (R, G)
 
@@ -357,6 +362,19 @@ objetivos preservam a descoberta e as regras do jogo, sem revelar conteúdo ante
   rotas; percentil 99 do tempo de quadro dentro do orçamento do perfil; 0 faltas de áudio no H9 em cada perfil; campanha
   completa nas duas edições, com **uma única gravação** (gate pós-N9, seção 14).
 
+### N9.12 — Estabilização (E, M) — registrada em 2026-11-10
+
+Etapa no final do N9, depois do N9.11 e antes do gate de campanha (seção 14), para tratar a instabilidade acumulada
+pelas subetapas (decisão do mantenedor, 2026-11-10). Não começa sem autorização. Inclui:
+- **Estabilização do N9.5:** "estabilização do N9.5 para corrigir o cálculo de VRAM, testar a árvore integrada e conferir os
+  riscos identificados." Itens conhecidos: a constante de 96 B por pixel do limite da resolução interna (`vk_device.cpp`;
+  medido ~268 B/px no 4:3 e 1,53× no 16:9, auditoria 16.3); a árvore principal com o protótipo de água e a fase 5 juntos,
+  que não foi compilada; a AMD integrada sem sustentar 1080 na janela; arma, munição, mira e GAME OVER sem identificação
+  no HUD; o 21:9 não habilitado (auditoria 16.4); o Linux sem pacote nem bateria do N9.5.
+- O mesmo para os riscos que as subetapas seguintes registrarem.
+- **Aceitação:** cada risco registrado resolvido ou aceito pelo mantenedor com evidência; as baterias do N9.5 em diante
+  (H, R, P, J, Original × `referencias_n87`) sem falhas na árvore integrada.
+
 ---
 
 ## 6. Requisitos não funcionais
@@ -388,6 +406,7 @@ Pré-requisito: **N8 encerrado** (executável sem legado, com a regressão integ
 | 9 | N9.9 filmes, áudio e acessibilidade | 3 |
 | 10 | N9.10 refinamentos | 3 (o 4 foi cancelado; tempo de jogo e perfis leem o sistema original) |
 | 11 | N9.11 otimização e validação final | todos |
+| 12 | N9.12 estabilização (registrada em 2026-11-10) | todos; antes do gate de campanha |
 
 Reorganização técnica sugerida: a marca cena/HUD na IR e a profundidade guardada (pré-requisitos do N7) entram no
 começo do marco 6, porque servem ao 16:9, ao SSAO e à água. O instalador (marco 2) pode andar em paralelo com os
@@ -601,3 +620,10 @@ Na Remastered, ficam do N9.2:
 
 Nos pontos de save, o painel do jogo (com a VMU) continua o original, nas duas edições.
 
+## 16. Registro de 2026-11-10: N9.6 autorizado e a etapa de estabilização
+
+Decisões do mantenedor, em 2026-11-10, depois da bateria final do N9.5:
+- **N9.6 autorizado** ("Pode continuar para a 9.6"). A ordem N9.6 → N9.7 → N9.8 → N9.4 → N9.9–N9.11 não muda.
+- **Uma etapa no final do N9 para a instabilidade:** o N9.12 (seção 5), depois do N9.11 e antes do gate de campanha.
+- **Registrado:** "estabilização do N9.5 para corrigir o cálculo de VRAM, testar a árvore integrada e conferir os riscos
+  identificados." Fica dentro do N9.12.

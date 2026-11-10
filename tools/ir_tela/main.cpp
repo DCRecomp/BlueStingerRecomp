@@ -9,6 +9,7 @@
 //        "tela"     o mesmo desenho sem mudar nada (2D em coordenadas de tela: HUD, textos, filtros);
 //        "so_4x3" / "so_larga"  enviado so num dos dois.
 //   A largura da tela larga e a do 4:3 + 2 dx (o centro anda dx).
+//   bs-ir-tela geometria <ir> ...  N9.6 fase 0: posicoes da camera, normais e o sinal da luz (geometria.cpp)
 // Saida 0 = ok, 1 = erro de leitura ou de desenho, 2 = uso.
 #include "render/render.h"
 #include "render/soft/soft_device.h"
@@ -255,7 +256,13 @@ uint32_t opt_width(int argc, char** argv) {
 
 } // namespace
 
+bool ir_tela_write_bmp(const char* path, const std::vector<uint32_t>& argb, uint32_t w, uint32_t h) {
+    return write_bmp(path, argb, w, h);
+}
+int ir_tela_geometria(int argc, char** argv);  // geometria.cpp (N9.6 fase 0)
+
 int main(int argc, char** argv) {
+    if (argc >= 3 && std::strcmp(argv[1], "geometria") == 0) return ir_tela_geometria(argc, argv);
     if (argc >= 4 && std::strcmp(argv[1], "quadro") == 0) {
         Ir ir;
         return load(argv[2], ir) ? draw(ir, argv[3], opt_width(argc, argv)) : 1;
@@ -270,6 +277,7 @@ int main(int argc, char** argv) {
         return compare(a, b, std::strtof(argv[4], nullptr), argv[5]);
     }
     std::fprintf(stderr, "uso: bs-ir-tela quadro <ir> <saida.bmp> [--largura W] | medir <ir> [--largura W] |\n"
-                         "      comparar <ir_4x3> <ir_larga> <dx> <saida.tsv>\n");
+                         "      comparar <ir_4x3> <ir_larga> <dx> <saida.tsv> |\n"
+                         "      geometria <ir> [--dist D] [--cx X] [--cy Y] [--normais <bmp>] [--tsv <tsv>]\n");
     return 2;
 }

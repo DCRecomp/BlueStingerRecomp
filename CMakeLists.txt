@@ -114,7 +114,7 @@ add_subdirectory(app)
 
 # N9.5 fase 0 (so investigacao): desenha uma IR guardada numa largura escolhida e mede a geometria
 if(BS_BUILD_TOOLS AND BS_VALIDACAO)
-  add_executable(bs-ir-tela tools/ir_tela/main.cpp)
+  add_executable(bs-ir-tela tools/ir_tela/main.cpp tools/ir_tela/geometria.cpp)  # geometria: N9.6 fase 0
   target_link_libraries(bs-ir-tela PRIVATE bs_transitional)
 endif()
 
