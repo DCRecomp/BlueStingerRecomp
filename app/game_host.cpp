@@ -423,6 +423,11 @@ void GameHost::setWideWidth(uint32_t width) {
     notifyRequest();
 }
 
+void GameHost::setAmbientOcclusion(bool on, uint32_t quality) {
+    aoPending_.store((on ? 1 : 0) | int(std::min<uint32_t>(quality, 2) << 1));  // bit 0 ligado; bits 1-2 a qualidade
+    notifyRequest();
+}
+
 void GameHost::setCamera(const native::settings::CameraSettings& s) {
     {
         std::lock_guard<std::mutex> lock(reqMutex_);
@@ -479,6 +484,15 @@ void GameHost::applyRequests() {
         // N9.5 fase 3B: a marca leve de HUD so com o quadro largo (a Remastered 16:9); no 4:3 e na Original fica desligada
         hud_marks_enable(wv != 0);
         std::fprintf(stderr, "[render] quadro: %s\n", wv ? ("largo " + std::to_string(wv) + "x480 (hor+), HUD ancorado").c_str() : "4:3");
+    }
+    if (const int ao = aoPending_.exchange(-1);
+        ao >= 0 && (((ao & 1) != 0) != transitional::render_capture::ambient_occlusion() ||
+                    ((ao & 1) && uint32_t(ao >> 1) != transitional::render_capture::ambient_occlusion_quality()))) {
+        static const char* const kQ[] = {"baixa", "media", "alta"};
+        transitional::render_capture::set_ambient_occlusion_quality(uint32_t(ao >> 1));
+        transitional::render_capture::set_ambient_occlusion((ao & 1) != 0);
+        if (ao & 1) std::fprintf(stderr, "[render] oclusao ambiente: ligada (qualidade %s)\n", kQ[std::min(ao >> 1, 2)]);  // N9.6
+        else std::fprintf(stderr, "[render] oclusao ambiente: desligada\n");
     }
     if (const float s = scalePending_.exchange(0.f); s > 0 && s != transitional::render_capture::scale()) {
         transitional::render_capture::set_scale(s);

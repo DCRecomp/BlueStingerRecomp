@@ -310,6 +310,11 @@ só como histórico:
   guardada no passe A; a geometria é pobre e o detalhe está nas texturas; a luz original é por vértice na CPU (modelos
   chunk com normal, `8C17EC50`, direcionais e pontuais) e não se separa do material pela IR. Escolhas do mantenedor:
   D6-1 C (a IR primeiro), D6-2 i (a luz original fica e as novas somam), D6-4 a + b (volumes suaves e sombras de contato).
+- **Fase 1 (2026-11-10, commit local; auditoria seção 7):** oclusão ambiente de tela só na Remastered com o Vulkan,
+  desligada por padrão em todos os presets; qualidades alta (o alvo inteiro), média (meia resolução, o padrão quando
+  ligada) e baixa; custo medido na RTX 5080 e na AMD integrada (inviável ali em 1080). Decisões de 2026-11-10: a marca de
+  cena pela proveniência (rotinas comprovadas, sem instrumentação pesada, partículas/HUD/ambíguos preservados) fica na
+  fase 2; os modelos 3D dos menus não recebem AO.
 
 ### N9.7 — Água e reflexos (R, G)
 
@@ -371,6 +376,9 @@ pelas subetapas (decisão do mantenedor, 2026-11-10). Não começa sem autoriza�
   medido ~268 B/px no 4:3 e 1,53× no 16:9, auditoria 16.3); a árvore principal com o protótipo de água e a fase 5 juntos,
   que não foi compilada; a AMD integrada sem sustentar 1080 na janela; arma, munição, mira e GAME OVER sem identificação
   no HUD; o 21:9 não habilitado (auditoria 16.4); o Linux sem pacote nem bateria do N9.5.
+- **Do N9.6 fase 1** (`docs/N9-6-AUDITORIA.md` 7.6): o AO inviável na AMD integrada em 1080; a cobertura da cena (paredes
+  de frente para a câmera, translúcidas; 56 % no quarto do VBlank 4640); a distância de projeção fixa em 500; a
+  estimativa de VRAM agora 96 + 4 B/px; os artefatos da qualidade baixa.
 - O mesmo para os riscos que as subetapas seguintes registrarem.
 - **Aceitação:** cada risco registrado resolvido ou aceito pelo mantenedor com evidência; as baterias do N9.5 em diante
   (H, R, P, J, Original × `referencias_n87`) sem falhas na árvore integrada.

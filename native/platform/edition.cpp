@@ -18,6 +18,7 @@ EditionProfile profile_for(Edition e) {
     p.free_camera_required = e == Edition::Remastered;
     p.native_menus         = e == Edition::Remastered;
     p.wide_frame           = e == Edition::Remastered;
+    p.lighting_effects     = e == Edition::Remastered;
     return p;
 }
 

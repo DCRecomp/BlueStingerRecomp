@@ -38,6 +38,8 @@ Fault                     g_fault        = Fault::None;     // testes do recuo (
 float                     g_scale        = 1.f;             // resolucao interna (set_scale)
 std::atomic<bool>         g_vkGaveUp{false};              // N9.5 fase 5B: vulkan_gave_up
 uint32_t                  g_wide         = 0;               // N9.5 fase 1: largura do quadro largo (set_wide; 0 = 4:3)
+bool                      g_ao           = false;           // N9.6 fase 1: oclusao ambiente (set_ambient_occlusion)
+nr::AoQuality             g_aoQuality    = nr::AoQuality::Medium;  // a qualidade dela (set_ambient_occlusion_quality)
 
 std::unique_ptr<Renderer> g_core;
 
@@ -378,6 +380,9 @@ bool Renderer::vk_attempt(uint32_t w, uint32_t h, std::vector<uint32_t>& out, st
     const uint32_t wideW = mode == Mode::Native && g_wide > w && w == 640 && h == 480 ? g_wide : 0;
     vk_->set_scale(sc);
     vk_->set_always_slot(wideW != 0);
+    // N9.6 fase 1: o AO so no nativo e no render do framebuffer (o desenho em textura fica como esta)
+    vk_->set_ambient_occlusion(mode == Mode::Native && g_ao && w == 640 && h == 480);
+    vk_->set_ambient_occlusion_quality(g_aoQuality);
     bs::native::telemetry::set_image(uint32_t(480 * sc + 0.5f), wideW != 0);  // N9.5 fase 5C (so le um bool sem a telemetria)
     if (sc == 1.f && !wideW) hires_.clear();
     const nr::CommandList* cl = &frame.cl;
@@ -454,6 +459,8 @@ bool Renderer::vk_attempt(uint32_t w, uint32_t h, std::vector<uint32_t>& out, st
         st.vk_fragment_retries = vk_->stats().fragment_retries, st.vk_negative_depth = vk_->stats().negative_depth_frames;
         st.vk_gpu_ms_total = vk_->stats().gpu_ms_total, st.vk_gpu_ms_max = vk_->stats().gpu_ms_max;
         st.vk_max_layers   = vk_->stats().max_layers;
+        st.vk_ao_frames    = vk_->stats().ao_frames;  // N9.6 fase 1
+        st.vk_ao_half_frames = vk_->stats().ao_half_frames;
         return true;
     }
     *why = injected                           ? std::string("falha injetada")
@@ -681,6 +688,12 @@ void  set_scale(float s) { g_scale = s > 0 ? s : 1.f; }
 float scale() { return g_scale; }
 
 void     set_wide(uint32_t width) { g_wide = width; }
+void     set_ambient_occlusion(bool on) { g_ao = on; }
+void     set_ambient_occlusion_quality(uint32_t q) {
+    g_aoQuality = nr::AoQuality(std::min<uint32_t>(q, uint32_t(nr::AoQuality::High)));
+}
+uint32_t ambient_occlusion_quality() { return uint32_t(g_aoQuality); }
+bool     ambient_occlusion() { return g_ao; }
 uint32_t wide() { return g_wide; }
 bool        vulkan_gave_up() { return g_vkGaveUp.load(); }
 PillarSides pillar_sides() { return g_core ? PillarSides{g_core->pillar().left(), g_core->pillar().right()} : PillarSides{}; }
@@ -887,7 +900,7 @@ std::string summary() {
                       "[render-vk] %s: quadros %llu, falhas %llu; texturas enviadas %llu (pelo decodificador do legado %llu, "
                       "descartadas do cache %llu, HD %llu, HD incompativeis %llu); dispositivo recriado %llu vez(es); comparados %llu: pixels diferentes %.4f%% (> 8 niveis %.4f%%), maior "
                       "diferenca %u, pior render %llu (%.3f%%); PSNR minimo %.1f dB, medio %.1f dB, quadros abaixo de 40 dB %llu; GPU por "
-                      "quadro: media %.2f ms, pior %.1f ms; camadas translucidas por pixel ate %llu%s%s\n",
+                      "quadro: media %.2f ms, pior %.1f ms; camadas translucidas por pixel ate %llu; AO em %llu renders (meia resolucao %llu)%s%s\n",
                       s.vk_device.empty() ? "indisponivel" : s.vk_device.c_str(), (unsigned long long)s.vk_frames,
                       (unsigned long long)s.vk_failures, (unsigned long long)s.tex_uploads, (unsigned long long)s.tex_legacy,
                       (unsigned long long)s.tex_evicted, (unsigned long long)s.tex_replaced,
@@ -898,7 +911,8 @@ std::string summary() {
                       (unsigned long long)s.cmp_worst_render, 100.0 * s.cmp_worst_fraction, s.cmp_frames ? s.cmp_min_psnr : 0.0,
                       s.cmp_frames ? s.cmp_psnr_sum / double(s.cmp_frames) : 0.0, (unsigned long long)s.cmp_below40,
                       s.vk_frames ? s.vk_gpu_ms_total / double(s.vk_frames) : 0.0, s.vk_gpu_ms_max,
-                      (unsigned long long)s.vk_max_layers,
+                      (unsigned long long)s.vk_max_layers, (unsigned long long)s.vk_ao_frames,
+                      (unsigned long long)s.vk_ao_half_frames,
                       s.vk_error.empty() ? "" : "; ",
                       s.vk_error.c_str());
         out += v;

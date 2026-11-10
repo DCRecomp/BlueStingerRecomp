@@ -312,3 +312,188 @@ BS_TEST(render_vulkan_ignored_volume_does_not_shift_depth_range) {
     }
     BS_CHECK(nr::vulkan_live_objects() == 0);
 }
+
+// N9.6 fase 1 (docs/N9-6-AUDITORIA.md): a oclusao ambiente. Uma cena projetada como a do jogo (dist 500, cx 320, cy 240,
+// 1/w = 1/z): o chao (y = 100) encontra a parede do fundo (z = 600) numa quina; um quadro 2D (1/w constante, o HUD) por
+// cima. Desligado: a imagem e a do software (o modo fiel). Ligado: a quina escurece dos dois lados, o longe da quina fica,
+// o HUD fica bit a bit e o render de outro tamanho (desenho em textura) nao recebe AO.
+namespace {
+nr::CommandList ao_scene(uint32_t w = 640, uint32_t h = 480) {
+    nr::CommandList cl;
+    cl.frame.width = w, cl.frame.height = h, cl.frame.clear_color = 0xFF000000;
+    auto proj = [&](float x, float y, float z) {
+        nr::Vertex v;
+        v.x = float(w) / 2 + 500.f * x / z, v.y = float(h) / 2 + 500.f * y / z, v.inv_w = 1.f / z, v.color = 0xFFC0C0C0;
+        return v;
+    };
+    auto strip = [&](std::initializer_list<nr::Vertex> vs) {
+        nr::Draw d;
+        d.first_vertex = uint32_t(cl.vertices.size()), d.vertex_count = uint32_t(vs.size());
+        for (const auto& v : vs) cl.vertices.push_back(v);
+        cl.draws.push_back(d);
+    };
+    strip({proj(-400, 100, 200), proj(400, 100, 200), proj(-400, 100, 580), proj(400, 100, 620)});      // chao
+    // a parede um pouco inclinada (z de 580 a 620): de frente exata para a camera, o 1/w seria constante no desenho e o
+    // criterio da cena (1/w variando) a deixaria fora, como o HUD (limite registrado na auditoria, secao 6)
+    strip({proj(-500, -300, 580), proj(500, -300, 620), proj(-500, 100, 580), proj(500, 100, 620)});    // parede
+    nr::Vertex a{20, 20, 0.01f, 0, 0, 0xFFFFFFFF, 0}, b{120, 20, 0.01f, 0, 0, 0xFFFFFFFF, 0};
+    nr::Vertex c{20, 60, 0.01f, 0, 0, 0xFFFFFFFF, 0}, e{120, 60, 0.01f, 0, 0, 0xFFFFFFFF, 0};
+    strip({a, b, c, e});  // o HUD: 1/w constante, na frente de tudo
+    return cl;
+}
+double lum(uint32_t p) { return 0.299 * ((p >> 16) & 0xFF) + 0.587 * ((p >> 8) & 0xFF) + 0.114 * (p & 0xFF); }
+} // namespace
+
+BS_TEST(render_vulkan_ambient_occlusion) {
+    std::string err;
+    {
+        auto d = nr::VulkanDevice::create(&err);
+        if (!d) BS_SKIP("dispositivo Vulkan");
+        const nr::CommandList cl = ao_scene();
+        nr::soft::SoftwareDevice sw;
+        std::vector<uint32_t>    soft, off, on, again;
+        uint32_t                 w = 0, h = 0;
+        BS_CHECK(sw.submit(cl).ok() && sw.read_frame(soft, w, h).ok());
+        BS_CHECK(d->submit(cl).ok() && d->read_frame(off, w, h).ok());
+        BS_CHECK(off == soft && !off.empty());  // desligado = o modo fiel
+        const uint64_t before = d->stats().ao_frames;
+        d->set_ambient_occlusion(true);
+        BS_CHECK(d->submit(cl).ok() && d->read_frame(on, w, h).ok() && w == 640 && h == 480);
+        BS_CHECK(d->stats().ao_frames == before + 1);
+        BS_CHECK(d->submit(cl).ok() && d->read_frame(again, w, h).ok() && again == on);  // determinismo
+        if (on.size() != off.size()) return;
+        const float yq = 240.f + 500.f * 100.f / 600.f;  // a quina na tela (~323)
+        auto        at = [&](const std::vector<uint32_t>& img, int x, int y) { return img[size_t(y) * 640 + x]; };
+        auto        ratio = [&](int x, int y) { return lum(at(on, x, y)) / std::max(1.0, lum(at(off, x, y))); };
+        const int   q = int(yq);
+        const double wall = ratio(320, q - 3), flo = ratio(320, q + 3), farWall = ratio(320, 60), farFloor = ratio(320, 470);
+        std::fprintf(stderr, "  AO: quina parede %.3f chao %.3f; longe parede %.3f chao %.3f\n", wall, flo, farWall, farFloor);
+        BS_CHECK(wall < 0.9 && flo < 0.9);           // a quina escurece dos dois lados
+        BS_CHECK(farWall > 0.97 && farFloor > 0.97);   // longe dela, quase nada
+        for (int y = 20; y < 60; ++y)
+            for (int x = 20; x < 120; ++x) BS_CHECK(at(on, x, y) == at(off, x, y));  // o HUD fica bit a bit
+        // o render de outro tamanho (o desenho em textura do jogo, 256x256) nao recebe AO
+        const nr::CommandList small = ao_scene(256, 256);
+        std::vector<uint32_t> s_soft, s_on;
+        BS_CHECK(sw.submit(small).ok() && sw.read_frame(s_soft, w, h).ok());
+        BS_CHECK(d->submit(small).ok() && d->read_frame(s_on, w, h).ok() && s_on == s_soft);
+        // a parede de frente exata para a camera (1/w constante no desenho) fica fora da cena, como o HUD: o lado seguro do
+        // limite registrado (revisao Codex 20261110-113738, MEDIA, adiada para a fase 2 / N9.12): nunca escurece um 2D
+        nr::CommandList front = cl;
+        for (uint32_t k = 0; k < 4; ++k) {
+            nr::Vertex& v = front.vertices[cl.draws[1].first_vertex + k];
+            v.inv_w = 1.f / 600.f;
+        }
+        std::vector<uint32_t> f_soft, f_on;
+        BS_CHECK(sw.submit(front).ok() && sw.read_frame(f_soft, w, h).ok());
+        BS_CHECK(d->submit(front).ok() && d->read_frame(f_on, w, h).ok() && f_on.size() == f_soft.size());
+        if (f_on.size() == f_soft.size())
+            for (int y = 0; y < int(yq) - 2; ++y) BS_CHECK(at(f_on, 320, y) == at(f_soft, 320, y));  // a parede, acima da quina
+        d->set_ambient_occlusion(false);
+        std::vector<uint32_t> back;
+        BS_CHECK(d->submit(cl).ok() && d->read_frame(back, w, h).ok() && back == off);  // desligado de novo = o fiel
+    }
+    BS_CHECK(nr::vulkan_live_objects() == 0);
+}
+
+// N9.6 fase 1: as tres qualidades (alta: o alvo inteiro, a primeira versao; media e baixa: meia resolucao com a reconstrucao
+// pela profundidade). Uma parede estreita (x de -150 a 150, z de 580 a 620) na frente de um plano distante (z ~3000): a
+// quina com o chao escurece nas tres; o plano distante logo ao lado da borda da parede nao recebe o AO dela (nenhum
+// vazamento entre profundidades diferentes); o HUD fica bit a bit; so a media e a baixa contam como meia resolucao.
+BS_TEST(render_vulkan_ambient_occlusion_quality) {
+    std::string err;
+    {
+        auto d = nr::VulkanDevice::create(&err);
+        if (!d) BS_SKIP("dispositivo Vulkan");
+        nr::CommandList cl;
+        cl.frame.width = 640, cl.frame.height = 480, cl.frame.clear_color = 0xFF000000;
+        auto proj = [&](float x, float y, float z) {
+            nr::Vertex v;
+            v.x = 320.f + 500.f * x / z, v.y = 240.f + 500.f * y / z, v.inv_w = 1.f / z, v.color = 0xFFC0C0C0;
+            return v;
+        };
+        auto strip = [&](std::initializer_list<nr::Vertex> vs) {
+            nr::Draw dr;
+            dr.first_vertex = uint32_t(cl.vertices.size()), dr.vertex_count = uint32_t(vs.size());
+            for (const auto& v : vs) cl.vertices.push_back(v);
+            cl.draws.push_back(dr);
+        };
+        strip({proj(-6000, -4000, 3000), proj(6000, -4000, 3100), proj(-6000, 4000, 3000), proj(6000, 4000, 3100)});  // fundo
+        strip({proj(-400, 100, 200), proj(400, 100, 200), proj(-400, 100, 580), proj(400, 100, 620)});      // chao
+        strip({proj(-150, -300, 580), proj(150, -300, 620), proj(-150, 100, 580), proj(150, 100, 620)});    // parede
+        nr::Vertex a{20, 20, 0.01f, 0, 0, 0xFFFFFFFF, 0}, b{120, 20, 0.01f, 0, 0, 0xFFFFFFFF, 0};
+        nr::Vertex c{20, 60, 0.01f, 0, 0, 0xFFFFFFFF, 0}, e{120, 60, 0.01f, 0, 0, 0xFFFFFFFF, 0};
+        strip({a, b, c, e});  // o HUD
+        nr::soft::SoftwareDevice sw;
+        std::vector<uint32_t>    soft, off;
+        uint32_t                 w = 0, h = 0;
+        BS_CHECK(sw.submit(cl).ok() && sw.read_frame(soft, w, h).ok());
+        BS_CHECK(d->submit(cl).ok() && d->read_frame(off, w, h).ok() && off == soft && !off.empty());
+        if (off.size() != size_t(640) * 480) return;
+        auto at = [](const std::vector<uint32_t>& img, int x, int y) { return img[size_t(y) * 640 + x]; };
+        const int edge = int(std::ceil(320.f + 500.f * 150.f / 620.f));  // a borda direita da parede (~441)
+        for (nr::AoQuality q : {nr::AoQuality::High, nr::AoQuality::Medium, nr::AoQuality::Low}) {
+            d->set_ambient_occlusion_quality(q);
+            d->set_ambient_occlusion(true);
+            const uint64_t half0 = d->stats().ao_half_frames;
+            std::vector<uint32_t> on, again;
+            BS_CHECK(d->submit(cl).ok() && d->read_frame(on, w, h).ok() && on.size() == off.size());
+            BS_CHECK(d->submit(cl).ok() && d->read_frame(again, w, h).ok() && again == on);  // determinismo
+            BS_CHECK(d->stats().ao_half_frames - half0 == (q == nr::AoQuality::High ? 0u : 2u));
+            // revisao Codex 20261110-161728: so a imagem da qualidade escolhida fica viva (a outra sai na troca)
+            BS_CHECK(d->stats().ao_image_bytes == (q == nr::AoQuality::High ? uint64_t(640) * 480 * 4 : uint64_t(320) * 240 * 16));
+            if (on.size() != off.size()) continue;
+            auto ratio = [&](int x, int y) { return lum(at(on, x, y)) / std::max(1.0, lum(at(off, x, y))); };
+            const int    yq = int(240.f + 500.f * 100.f / 600.f);
+            const double wall = ratio(320, yq - 3), flo = ratio(320, yq + 3), farFloor = ratio(320, 470);
+            double       leak = 1.0;  // o fundo logo a direita da borda, da altura da parede ate a quina
+            for (int y = 2; y < yq - 4; ++y)
+                for (int x = edge + 2; x < edge + 8; ++x) leak = std::min(leak, ratio(x, y));
+            std::fprintf(stderr, "  AO qualidade %d: quina parede %.3f chao %.3f; chao longe %.3f; fundo junto a borda %.3f\n",
+                         int(q), wall, flo, farFloor, leak);
+            BS_CHECK(wall < 0.9 && flo < 0.9);  // a quina escurece dos dois lados
+            BS_CHECK(farFloor > 0.97);          // longe dela, quase nada
+            BS_CHECK(leak > 0.97);              // o fundo nao recebe o AO da parede
+            for (int y = 20; y < 60; ++y)
+                for (int x = 20; x < 120; ++x) BS_CHECK(at(on, x, y) == at(off, x, y));  // o HUD fica bit a bit
+            for (size_t i = 0; i < on.size(); ++i) {  // o AO so escurece
+                const uint32_t p = on[i], o = off[i];
+                if (((p >> 16) & 0xFF) > ((o >> 16) & 0xFF) || ((p >> 8) & 0xFF) > ((o >> 8) & 0xFF) || (p & 0xFF) > (o & 0xFF)) {
+                    BS_CHECK(!"o AO clareou um pixel");
+                    break;
+                }
+            }
+        }
+        d->set_ambient_occlusion(false);
+        std::vector<uint32_t> back;
+        BS_CHECK(d->submit(cl).ok() && d->read_frame(back, w, h).ok() && back == off);  // desligado = o fiel
+        BS_CHECK(d->stats().ao_image_bytes == 0);                                         // e a memoria do AO volta
+        // revisao Codex 20261110-161728: um alvo de lados impares (641 x 481, a escala 481/480): a meia resolucao
+        // arredonda para cima (321 x 241) e as bordas direita e inferior nao saem do alvo nem clareiam
+        d->set_scale(481.f / 480.f);
+        std::vector<uint32_t> oddOff;
+        BS_CHECK(d->submit(cl).ok() && d->read_frame(oddOff, w, h).ok() && w == 640 && h == 480);
+        for (nr::AoQuality q : {nr::AoQuality::High, nr::AoQuality::Medium, nr::AoQuality::Low}) {
+            d->set_ambient_occlusion_quality(q);
+            d->set_ambient_occlusion(true);
+            std::vector<uint32_t> oddOn, oddAgain;
+            BS_CHECK(d->submit(cl).ok() && d->read_frame(oddOn, w, h).ok() && oddOn.size() == oddOff.size());
+            BS_CHECK(d->submit(cl).ok() && d->read_frame(oddAgain, w, h).ok() && oddAgain == oddOn);
+            BS_CHECK(d->stats().ao_image_bytes ==
+                     (q == nr::AoQuality::High ? uint64_t(641) * 481 * 4 : uint64_t(321) * 241 * 16));
+            bool lighter = false, changed = false;
+            for (size_t i = 0; i < oddOn.size() && i < oddOff.size(); ++i) {
+                const uint32_t p = oddOn[i], o = oddOff[i];
+                lighter = lighter || ((p >> 16) & 0xFF) > ((o >> 16) & 0xFF) || ((p >> 8) & 0xFF) > ((o >> 8) & 0xFF) ||
+                          (p & 0xFF) > (o & 0xFF);
+                changed = changed || p != o;
+            }
+            BS_CHECK(!lighter && changed);
+            for (int y = 22; y < 58; ++y)
+                for (int x = 22; x < 118; ++x) BS_CHECK(at(oddOn, x, y) == at(oddOff, x, y));  // o HUD (na reducao, sem a borda)
+        }
+        d->set_ambient_occlusion(false);
+        BS_CHECK(d->submit(cl).ok() && d->read_frame(back, w, h).ok() && back == oddOff && d->stats().ao_image_bytes == 0);
+    }
+    BS_CHECK(nr::vulkan_live_objects() == 0);
+}

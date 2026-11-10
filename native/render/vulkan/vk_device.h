@@ -32,6 +32,11 @@ struct VulkanStats {
     uint64_t    tri_reallocs = 0, frame_set_writes = 0;
     // N8.7: quadros com volumes modificadores aplicados (volumes.comp) e os triangulos deles; volumes da lista 3 ignorados
     uint64_t    volume_frames = 0, volume_triangles = 0, translucent_volumes_ignored = 0;
+    uint64_t    ao_frames = 0;  // N9.6 fase 1: renders com a oclusao ambiente aplicada
+    uint64_t    ao_half_frames = 0;  // N9.6 fase 1: deles, os em meia resolucao (qualidades media e baixa)
+    // as imagens do AO vivas agora (pixels x bytes do formato; 0 = nenhuma): rgba8 no alvo na alta, rgba32f em meia
+    // resolucao (arredondada para cima) na media e na baixa; o AO desligado devolve a memoria no proximo submit
+    uint64_t    ao_image_bytes = 0;
     uint64_t    negative_depth_frames = 0;  // quadros com 1/w negativo (profundidade deslocada, ver frame_prep)
     // garantias do modo fiel (igualdade bit a bit com o software): ambiente FP do software nos shaders
     // (VK_KHR_shader_float_controls) e profundidade crua (VK_EXT_depth_range_unrestricted)
@@ -65,6 +70,9 @@ struct PostPass {
 };
 
 // Passes internos (secao 21), na interface dos de mods. Os ainda nao implementados devolvem -1 em post_builtin.
+// N9.6 fase 1: a qualidade da oclusao ambiente (VulkanDevice::set_ambient_occlusion_quality)
+enum class AoQuality : uint8_t { Low, Medium, High };
+
 enum class PostBuiltin : uint8_t { Color, Tonemap, Sharpen, BloomBlurH, BloomBlurV, Crt, Count };
 
 // a diferenca entre dois timestamps com `bits` validos (o contador volta a zero em 2^bits)
@@ -123,6 +131,12 @@ public:
     // N9.5 fase 1: o slot tambem na escala 1 (o quadro largo da Remastered: a apresentacao desenha o slot, e read_frame
     // devolve o quadro inteiro, do qual a CPU tira o recorte do jogo). Desligado = so com escala, como no N7c.
     virtual void     set_always_slot(bool on) = 0;
+    // N9.6 fase 1: oclusao ambiente no proximo submit (so a Remastered liga; desligada = a imagem de antes do N9.6). So
+    // age no render do framebuffer (altura 480, largura >= 640) e nos pixels da cena 3D.
+    virtual void     set_ambient_occlusion(bool on) = 0;
+    // N9.6 fase 1: a qualidade do AO (alta: o alvo inteiro, 8 direcoes x 4 passos, a primeira versao e o padrao do
+    // dispositivo; media: meia resolucao com a reconstrucao pela profundidade, 8 x 4; baixa: meia resolucao, 4 x 3)
+    virtual void     set_ambient_occlusion_quality(AoQuality q) = 0;
     virtual uint64_t last_slot(uint32_t& width, uint32_t& height) const = 0;  // 0 = o ultimo submit nao tem slot
     // Le de volta as linhas [y0, y0 + rows) de um slot (capturas e testes; nao no caminho normal). false = o slot ja foi
     // reaproveitado.

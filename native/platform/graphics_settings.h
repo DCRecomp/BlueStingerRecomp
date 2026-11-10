@@ -34,6 +34,9 @@ enum class WindowMode : uint8_t { Windowed, Fullscreen, Borderless };
 enum class Aspect : uint8_t { Original4x3, Wide16x9, Auto };
 enum class Filter : uint8_t { Original, Bilinear, Anisotropic };
 enum class Shadows : uint8_t { Original, Enhanced };
+// N9.6 fase 1: a qualidade do SSAO (baixa: meia resolucao, 4 direcoes x 3 passos; media: meia resolucao, 8 x 4; alta: o
+// alvo inteiro, 8 x 4). O mesmo numero de native::render::AoQuality
+enum class SsaoQuality : uint8_t { Low, Medium, High };
 
 struct GraphicsSettings {
     // do preset
@@ -48,6 +51,7 @@ struct GraphicsSettings {
     std::string shader;              // shader de pos-processamento de mod (mods\shaders\<nome>); "" = nenhum
     std::map<std::string, float> shader_params;  // os parametros dele (os ausentes ficam com o padrao do manifesto)
     bool       bloom = false, ssao = false, tonemap = false, crt = false;
+    SsaoQuality ssao_quality = SsaoQuality::Medium;  // N9.6 fase 1 (so vale com `ssao`, que fica desligado por padrao)
     float      sharpen = 0, gamma = 1.0f, saturation = 1.0f;
     // N7c (secao 21): correcao de cor (passe interno de pos-processamento); desligada = a imagem como o jogo a desenha
     bool       color = false;
@@ -76,9 +80,10 @@ struct Features {
     bool sharpen = false;  // N7c: nitidez
     bool bloom = false;    // N7c: bloom
     bool crt = false;      // N7c: filtro CRT (so com resolucao interna >= kCrtMinHeight)
+    bool ssao = false;     // N9.6 fase 1: oclusao ambiente (Remastered com o Vulkan e a apresentacao direta)
     static Features all() {
         Features f{true, true, true, true, true, true, true, true, true, true, true};
-        f.color = f.tonemap = f.sharpen = f.bloom = f.crt = true;
+        f.color = f.tonemap = f.sharpen = f.bloom = f.crt = f.ssao = true;
         return f;
     }
 };

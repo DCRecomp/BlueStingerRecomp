@@ -119,6 +119,8 @@ struct Stats {
     uint64_t    vk_recoveries = 0;                                 // dispositivo recriado depois de uma perda
     double      vk_gpu_ms_total = 0, vk_gpu_ms_max = 0;           // tempo de GPU por quadro (total e o pior)
     uint64_t    vk_max_layers = 0;                                 // maior numero de camadas translucidas num pixel
+    uint64_t    vk_ao_frames  = 0;                                 // N9.6 fase 1: renders com a oclusao ambiente
+    uint64_t    vk_ao_half_frames = 0;                             // deles, em meia resolucao
     uint64_t    cmp_frames = 0, cmp_pixels = 0, cmp_diff = 0, cmp_diff8 = 0, cmp_worst_render = 0;
     uint32_t    cmp_max = 0;
     double      cmp_worst_fraction = 0;
@@ -162,6 +164,14 @@ float scale();
 // 0 = desligado (o padrao; a Original nunca liga). O software (recuo) continua em 4:3. Thread do jogo.
 void     set_wide(uint32_t width);
 uint32_t wide();
+// N9.6 fase 1 (docs/N9-6-AUDITORIA.md): a oclusao ambiente da Remastered, so no Mode::Native com o Vulkan e no render do
+// framebuffer 640x480 (ou do quadro largo). Desligada (o padrao; a Original nunca liga) = a imagem de antes. Thread do jogo.
+void set_ambient_occlusion(bool on);
+bool ambient_occlusion();
+// a qualidade: 0 baixa (meia resolucao, 4 direcoes x 3 passos), 1 media (meia resolucao, 8 x 4; o padrao), 2 alta (o alvo
+// inteiro, 8 x 4: a primeira versao, para a comparacao A/B). native::render::AoQuality. Thread do jogo.
+void     set_ambient_occlusion_quality(uint32_t q);
+uint32_t ambient_occlusion_quality();
 // N9.5 fase 4: o pilar dinamico de cada faixa no ultimo render largo (diagnostico das capturas, tools/dev/n95_headless.py H6)
 struct PillarSides {
     bool left = false, right = false;

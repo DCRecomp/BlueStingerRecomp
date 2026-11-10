@@ -51,6 +51,41 @@ BS_TEST(graphics_clamp_to_capabilities) {
     BS_CHECK(r.aspect == st::Aspect::Original4x3 && notes.size() >= 3);
 }
 
+// N9.6 fase 1: a oclusao ambiente tem recurso proprio (Remastered com o Vulkan e a apresentacao direta): sem ele (a
+// Original, o software, o recuo para o SDL) o SSAO do arquivo volta a desligado com o motivo; com ele, fica
+BS_TEST(graphics_ssao_needs_its_feature) {
+    st::GraphicsSettings s = st::from_toml("[efeitos]\nssao = true\n");
+    BS_CHECK(s.ssao);
+    st::Capabilities gpu;
+    gpu.vulkan = true, gpu.max_height = 2160, gpu.features.post = true;  // o `post` generico nao basta mais
+    std::vector<std::string> notes;
+    BS_CHECK(!st::clamp_to(s, gpu, &notes).ssao && !notes.empty());
+    gpu.features.ssao = true;
+    BS_CHECK(st::clamp_to(s, gpu).ssao);
+    BS_CHECK(st::from_toml(st::to_toml(s)).ssao);  // o arquivo guarda a escolha
+}
+
+// N9.6 fase 1: a qualidade do SSAO (baixa, media, alta) no [efeitos]; o padrao e a media e o SSAO continua desligado em
+// todos os presets; um valor desconhecido fica no padrao com o aviso
+BS_TEST(graphics_ssao_quality) {
+    BS_CHECK(st::GraphicsSettings{}.ssao_quality == st::SsaoQuality::Medium && !st::GraphicsSettings{}.ssao);
+    for (st::Preset p : {st::Preset::Original, st::Preset::Balanced, st::Preset::High}) BS_CHECK(!st::preset(p).ssao);
+    for (auto [txt, q] : {std::pair{"baixa", st::SsaoQuality::Low}, std::pair{"media", st::SsaoQuality::Medium},
+                          std::pair{"alta", st::SsaoQuality::High}}) {
+        const st::GraphicsSettings s = st::from_toml(std::string("[efeitos]\nssao = true\nssao_qualidade = \"") + txt + "\"\n");
+        BS_CHECK(s.ssao && s.ssao_quality == q);
+        BS_CHECK(st::from_toml(st::to_toml(s)).ssao_quality == q);  // o arquivo guarda a escolha
+    }
+    std::string warning;
+    BS_CHECK(st::from_toml("[efeitos]\nssao_qualidade = \"ultra\"\n", &warning).ssao_quality == st::SsaoQuality::Medium);
+    BS_CHECK(!warning.empty());
+    st::GraphicsSettings a, b;
+    b.ssao_quality = st::SsaoQuality::High;
+    BS_CHECK(st::classify(a) == st::Preset::Original && st::classify(b) == st::Preset::Original);  // desligado, nao conta
+    a.ssao = b.ssao = true;
+    BS_CHECK(st::classify(a) == st::Preset::Custom && !(a == b));  // ligado: o SSAO ja e uma escolha do jogador
+}
+
 // O que o renderizador ainda nao implementa volta ao original (o menu o mostra indisponivel), com o motivo
 BS_TEST(graphics_unimplemented_features_fall_back) {
     st::GraphicsSettings s = st::preset(st::Preset::High);

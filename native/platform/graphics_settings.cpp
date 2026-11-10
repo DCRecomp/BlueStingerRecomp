@@ -30,6 +30,9 @@ template <> struct Names<Filter> {
 template <> struct Names<Shadows> {
     static constexpr const char* v[] = {"original", "aprimoradas"};
 };
+template <> struct Names<SsaoQuality> {
+    static constexpr const char* v[] = {"baixa", "media", "alta"};
+};
 
 template <class E> const char* name(E e) { return Names<E>::v[size_t(e)]; }
 template <class E> bool parse(const std::string& s, E& out) {
@@ -46,7 +49,7 @@ bool same_quality(const GraphicsSettings& a, const GraphicsSettings& b) {
     return a.resolution == b.resolution && a.scale_pct == b.scale_pct && a.filter == b.filter &&
            (a.filter != Filter::Anisotropic || a.anisotropy == b.anisotropy) && a.msaa == b.msaa &&
            a.hd_textures == b.hd_textures && a.lighting == b.lighting && a.shadows == b.shadows && a.shader == b.shader &&
-           a.bloom == b.bloom && a.ssao == b.ssao && a.tonemap == b.tonemap && a.crt == b.crt && a.sharpen == b.sharpen &&
+           a.bloom == b.bloom && a.ssao == b.ssao && (!a.ssao || a.ssao_quality == b.ssao_quality) && a.tonemap == b.tonemap && a.crt == b.crt && a.sharpen == b.sharpen &&
            a.gamma == b.gamma && a.saturation == b.saturation && a.color == b.color && a.brightness == b.brightness &&
            a.contrast == b.contrast && a.shader_params == b.shader_params && a.exposure == b.exposure &&
            a.highlights == b.highlights && a.tone_shadows == b.tone_shadows && a.bloom_threshold == b.bloom_threshold &&
@@ -157,7 +160,7 @@ GraphicsSettings clamp_to(const GraphicsSettings& in, const Capabilities& caps, 
     off(f.bloom, s.bloom || s.bloom_threshold != 0.7f || s.bloom_radius != 0.02f || s.bloom_strength != 0.6f,
         [&] { s.bloom = false, s.bloom_threshold = 0.7f, s.bloom_radius = 0.02f, s.bloom_strength = 0.6f; }, "bloom");
     off(f.crt, s.crt, [&] { s.crt = false; }, "filtro CRT");
-    off(f.post, s.ssao, [&] { s.ssao = false; }, "SSAO");
+    off(f.ssao, s.ssao, [&] { s.ssao = false; }, "SSAO");  // N9.6 fase 1: recurso proprio (era o `post` generico)
     if (!f.shaders) s.shader_params.clear();
     while (internal_height(s) > caps.max_height && (s.resolution != Resolution::Original || s.scale_pct > 100)) {
         if (s.scale_pct > 100) s.scale_pct = 100;
@@ -245,6 +248,7 @@ std::string to_toml(const GraphicsSettings& s) {
       << "shader = \"" << s.shader << "\"\n\n[efeitos]\n"
       << "bloom = " << (s.bloom ? "true" : "false") << "\n"
       << "ssao = " << (s.ssao ? "true" : "false") << "\n"
+      << "ssao_qualidade = \"" << name(s.ssao_quality) << "\"\n"
       << "tonemap = " << (s.tonemap ? "true" : "false") << "\n"
       << "crt = " << (s.crt ? "true" : "false") << "\n"
       << "nitidez = " << s.sharpen << "\n"
@@ -309,6 +313,7 @@ GraphicsSettings from_toml(const std::string& text, std::string* warning) {
     bln("imagem", "iluminacao", s.lighting), str("imagem", "sombras", s.shadows);
     if (auto v = doc["imagem"]["shader"].value<std::string>()) s.shader = *v;
     bln("efeitos", "bloom", s.bloom), bln("efeitos", "ssao", s.ssao), bln("efeitos", "tonemap", s.tonemap);
+    str("efeitos", "ssao_qualidade", s.ssao_quality);
     bln("efeitos", "crt", s.crt), flt("efeitos", "nitidez", s.sharpen), flt("efeitos", "gamma", s.gamma);
     flt("efeitos", "saturacao", s.saturation), bln("efeitos", "cor", s.color), flt("efeitos", "brilho", s.brightness);
     flt("efeitos", "contraste", s.contrast), flt("efeitos", "exposicao", s.exposure);

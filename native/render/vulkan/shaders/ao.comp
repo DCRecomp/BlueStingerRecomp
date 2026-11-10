@@ -1,0 +1,188 @@
+#version 450
+// N9.6 fase 1 (docs/N9-6-AUDITORIA.md, D6-1 C, D6-2 i): oclusao ambiente em espaco de tela, so na Remastered com o Vulkan,
+// entre o passe A (opacas e punch-through) e os volumes. Quatro passes deste fonte:
+//   AO (sem BLUR nem HALF; qualidade alta): para cada pixel da cena 3D (bit 1 do anexo de sombra), a posicao na camera sai
+//     da profundidade pela projecao do Ninja (x = (sx - cx) z / dist, y = (sy - cy) z / dist, z = 1 / (1/w); fase 0, secao
+//     2.2); a normal, dos vizinhos de profundidade mais proxima (sem atravessar bordas); `dirs` direcoes giradas por pixel x
+//     `steps` passos dentro de um raio na camera; a oclusao e a media de max(0, n.v/|v| - vies) com queda pela distancia. So
+//     pixels da cena ocluem.
+//   BLUR (-DBLUR): media 4 x 4 com peso pela profundidade e multiplica a cor (a luz original fica: D6-2 i). Com o
+//     diagnostico (debug), a cor vira o proprio AO.
+//   HALF (-DHALF; qualidades media e baixa): o mesmo calculo num pixel de cada bloco 2 x 2 do alvo (o representante: o de
+//     1/w maior nas casas pares do xadrez e o de 1/w menor nas impares, para a frente e o fundo de uma borda aparecerem
+//     os dois). Guarda o AO e o 1/w do representante (rgba32f): as amostras continuam na profundidade inteira.
+//   HALF + BLUR: a reconstrucao no alvo inteiro: 4 x 4 representantes em volta, com o peso pela profundidade; sem nenhum
+//     representante de profundidade parecida (uma silhueta fina), o pixel fica sem AO (nunca o AO de outra superficie).
+// Os pixels fora da cena (HUD, telas 2D, fundo de limpeza) nao mudam.
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(set = 0, binding = 0) uniform sampler2D depthTex;     // o aspecto de profundidade (1/w cru ou deslocado/escalado)
+layout(set = 0, binding = 1) uniform usampler2D stencilTex;  // bit 0 sombra, bit 1 cena 3D
+layout(set = 0, binding = 2, rgba8) uniform image2D color;
+#ifndef HALF
+layout(set = 0, binding = 3, rgba8) uniform image2D aoImg;   // .r = AO (1 = sem oclusao)
+#else
+layout(set = 0, binding = 4, rgba32f) uniform image2D aoHalf;  // .r = AO, .g = 1/w do representante (0 = fora da cena)
+#endif
+
+layout(push_constant) uniform P {
+    uvec2 size;       // o alvo
+    float invScale;   // pixel do alvo -> coordenadas do jogo
+    float cx, cy;     // centro da projecao (coordenadas do jogo)
+    float dist;       // distancia da projecao (coordenadas do jogo)
+    uint  rawDepth;   // 1: a profundidade guarda o proprio 1/w; 0: (1/w - bias) x escala
+    float depthBias;
+    float depthScale;
+    float radius;     // raio na camera
+    float strength;   // 0 = sem efeito, 1 = o AO inteiro
+    uint  debug;      // so o diagnostico de validacao: 1 a cor vira o AO; 2 preta e 3 branca (as mascaras da cena)
+    uint  dirs;       // direcoes por pixel (8 na alta e na media, 4 na baixa)
+    uint  steps;      // passos por direcao (4 na alta e na media, 3 na baixa)
+    float angleStep;  // 2 pi / dirs (do lado da CPU: a alta repete a conta da primeira versao)
+} pc;
+
+bool scene(ivec2 q) { return (texelFetch(stencilTex, q, 0).r & 2u) != 0u; }
+
+float invw(ivec2 q) {
+    const float d = texelFetch(depthTex, q, 0).r;
+    return pc.rawDepth != 0u ? d : d / pc.depthScale + pc.depthBias;
+}
+
+// posicao na camera do centro do pixel q (z <= 0: sem profundidade valida)
+vec3 viewPos(ivec2 q) {
+    const float iw = invw(q);
+    if (!(iw > 0.0)) return vec3(0.0);
+    const float z = 1.0 / iw;
+    const vec2  g = (vec2(q) + 0.5) * pc.invScale;
+    return vec3((g.x - pc.cx) * z / pc.dist, (g.y - pc.cy) * z / pc.dist, z);
+}
+
+#ifndef BLUR
+// o AO do pixel p do alvo (1 = sem oclusao); p ja e um pixel da cena
+float occlusion(ivec2 p) {
+    float ao = 1.0;
+    const vec3 P = viewPos(p);
+    if (P.z > 1.5) {  // z = 1: vertice no plano proximo (fase 0, 2.3), sem posicao confiavel
+        const ivec2 mx = ivec2(int(pc.size.x) - 1, int(pc.size.y) - 1);
+        const vec3  l = viewPos(clamp(p - ivec2(1, 0), ivec2(0), mx)), r = viewPos(clamp(p + ivec2(1, 0), ivec2(0), mx));
+        const vec3  u = viewPos(clamp(p - ivec2(0, 1), ivec2(0), mx)), d = viewPos(clamp(p + ivec2(0, 1), ivec2(0), mx));
+        const vec3  dx = abs(r.z - P.z) < abs(P.z - l.z) ? r - P : P - l;
+        const vec3  dy = abs(d.z - P.z) < abs(P.z - u.z) ? d - P : P - u;
+        vec3        n  = cross(dx, dy);
+        const float ln = length(n);
+        if (ln > 0.0) {
+            n /= ln;
+            if (dot(n, P) > 0.0) n = -n;  // para a camera (a origem)
+            // o raio na tela (pixels do alvo) e o giro por pixel (ruido de gradiente intercalado)
+            const float rpx = clamp(pc.radius * pc.dist / P.z / pc.invScale, 2.0, 64.0 / pc.invScale);
+            const float rot = fract(52.9829189 * fract(0.06711056 * float(p.x) + 0.00583715 * float(p.y))) * 6.2831853;
+            const float ns  = float(pc.steps);
+            float       occ = 0.0, cnt = 0.0;
+            for (uint i = 0u; i < pc.dirs; ++i) {
+                const float a   = rot + float(i) * pc.angleStep;
+                const vec2  dir = vec2(cos(a), sin(a));
+                for (uint s = 1u; s <= pc.steps; ++s) {
+                    const float t = (float(s) - 0.5 + 0.5 * fract(rot * 3.7 + float(s))) / ns;
+                    const ivec2 q = p + ivec2(round(dir * t * rpx));
+                    if (q.x < 0 || q.y < 0 || q.x > mx.x || q.y > mx.y) continue;
+                    cnt += 1.0;
+                    if (!scene(q)) continue;
+                    const vec3  Q = viewPos(q);
+                    if (Q.z <= 1.5) continue;
+                    // espessura: um oclusor muito a frente (um personagem diante de uma parede longe) nao toca o
+                    // ponto e nao conta (o halo classico do AO de tela); 2 raios guardam a quina rasante
+                    if (P.z - Q.z > 2.0 * pc.radius) continue;
+                    const vec3  v = Q - P;
+                    const float lv = length(v);
+                    if (lv <= 1e-4) continue;
+                    const float fall = clamp(1.0 - lv / (3.0 * pc.radius), 0.0, 1.0);  // rasante: o vizinho na tela fica longe na camera
+                    occ += max(0.0, dot(n, v) / lv - 0.1) * fall;
+                }
+            }
+            if (cnt > 0.0) ao = clamp(1.0 - 2.0 * occ / cnt, 0.0, 1.0);
+        }
+    }
+    return ao;
+}
+#endif
+
+// a cor final do pixel p com o AO `ao` (e os diagnosticos de validacao)
+void apply(ivec2 p, float ao) {
+    const float k = mix(1.0, ao, pc.strength);
+    vec4        c = imageLoad(color, p);
+    if (pc.debug == 2u) c.rgb = vec3(0.0);       // mascara: a cena preta
+    else if (pc.debug == 3u) c.rgb = vec3(1.0);  // mascara: a cena branca
+    else if (pc.debug != 0u) c.rgb = vec3(ao);
+    else c.rgb *= k;
+    imageStore(color, p, c);
+}
+
+#if !defined(BLUR) && !defined(HALF)
+void main() {
+    const ivec2 p = ivec2(gl_GlobalInvocationID.xy);
+    if (p.x >= int(pc.size.x) || p.y >= int(pc.size.y)) return;
+    imageStore(aoImg, p, vec4(scene(p) ? occlusion(p) : 1.0, 0.0, 0.0, 1.0));
+}
+#elif defined(BLUR) && !defined(HALF)
+void main() {
+    const ivec2 p = ivec2(gl_GlobalInvocationID.xy);
+    if (p.x >= int(pc.size.x) || p.y >= int(pc.size.y)) return;
+    if (!scene(p)) return;  // fora da cena: a cor do jogo fica
+    const float z0 = invw(p);
+    if (!(z0 > 0.0)) return;
+    const ivec2 mx = ivec2(int(pc.size.x) - 1, int(pc.size.y) - 1);
+    float       sum = 0.0, wsum = 0.0;
+    for (int y = -2; y < 2; ++y)
+        for (int x = -2; x < 2; ++x) {
+            const ivec2 q = clamp(p + ivec2(x, y), ivec2(0), mx);
+            if (!scene(q)) continue;
+            const float z = invw(q);
+            const float w = exp(-abs(z - z0) / (0.03 * z0));  // pela diferenca relativa de 1/w (a mesma em z)
+            sum += imageLoad(aoImg, q).r * w, wsum += w;
+        }
+    apply(p, wsum > 0.0 ? sum / wsum : 1.0);
+}
+#elif !defined(BLUR) && defined(HALF)
+void main() {
+    const ivec2 h  = ivec2(gl_GlobalInvocationID.xy);
+    const ivec2 hs = ivec2((int(pc.size.x) + 1) / 2, (int(pc.size.y) + 1) / 2);
+    if (h.x >= hs.x || h.y >= hs.y) return;
+    const ivec2 mx    = ivec2(int(pc.size.x) - 1, int(pc.size.y) - 1);
+    const bool  front = ((h.x + h.y) & 1) == 0;  // xadrez: o mais proximo nas pares, o mais longe nas impares
+    ivec2       pick   = ivec2(-1);
+    float       best  = 0.0;
+    for (int k = 0; k < 4; ++k) {
+        const ivec2 q = min(h * 2 + ivec2(k & 1, k >> 1), mx);
+        if (!scene(q)) continue;
+        const float iw = invw(q);
+        if (!(iw > 0.0)) continue;
+        if (pick.x < 0 || (front ? iw > best : iw < best)) pick = q, best = iw;
+    }
+    if (pick.x < 0) {
+        imageStore(aoHalf, h, vec4(1.0, 0.0, 0.0, 0.0));  // nenhum pixel da cena no bloco
+        return;
+    }
+    imageStore(aoHalf, h, vec4(occlusion(pick), best, 0.0, 0.0));
+}
+#else
+void main() {
+    const ivec2 p = ivec2(gl_GlobalInvocationID.xy);
+    if (p.x >= int(pc.size.x) || p.y >= int(pc.size.y)) return;
+    if (!scene(p)) return;  // fora da cena: a cor do jogo fica
+    const float z0 = invw(p);
+    if (!(z0 > 0.0)) return;
+    const ivec2 hs = ivec2((int(pc.size.x) + 1) / 2, (int(pc.size.y) + 1) / 2);
+    const ivec2 hb = (p >> 1) - ivec2(1);  // os 4 x 4 representantes em volta (8 x 8 pixels do alvo)
+    float       sum = 0.0, wsum = 0.0, wmax = 0.0;
+    for (int y = 0; y < 4; ++y)
+        for (int x = 0; x < 4; ++x) {
+            const ivec2 q = clamp(hb + ivec2(x, y), ivec2(0), hs - ivec2(1));
+            const vec4  s = imageLoad(aoHalf, q);
+            if (!(s.g > 0.0)) continue;
+            const float w = exp(-abs(s.g - z0) / (0.03 * z0));
+            sum += s.r * w, wsum += w, wmax = max(wmax, w);
+        }
+    // exp(-3): nenhum representante a menos de ~9 % de diferenca de profundidade = outra superficie: sem AO
+    apply(p, wmax > 0.0498 ? sum / wsum : 1.0);
+}
+#endif

@@ -18,6 +18,8 @@ cada caso (telemetria.csv, saida.txt).
 
   python tools/dev/n95_desempenho.py --exe build/msvc-release/app/bluestinger.exe --data <data> --cartao <cartao>
          --saida tmp/<pasta> [--janela] [--trechos corredor,cais,exterior] [--configs 4:3@480,16:9@2160] [--gpu <nome>]
+N9.6 fase 1: uma configuracao com o sufixo +ao (ex.: 16:9@1080+ao) liga a oclusao ambiente na qualidade media (meia
+resolucao); +ao-alta (o alvo inteiro, a primeira versao), +ao-media e +ao-baixa escolhem a qualidade.
 """
 import argparse
 import csv
@@ -111,10 +113,16 @@ def resumir(linhas, de, ate, inicio):
 
 
 def rodar(a, cfg, rota, de):
-    prop, alt = cfg.split("@")
+    # N9.6 fase 1: o sufixo "+ao[-qualidade]" liga a oclusao ambiente (graficos.toml na janela, --ssao ligado sem janela)
+    base, _, suf = cfg.partition("+")
+    ao = suf == "ao" or suf.startswith("ao-")
+    qual = suf[3:] if suf.startswith("ao-") else "media"
+    if suf and (not ao or qual not in ("baixa", "media", "alta")):
+        raise SystemExit("configuracao invalida: %s" % cfg)
+    prop, alt = base.split("@")
     alt = int(alt)
     roteiro, cartao, vblanks = ROTAS[rota]
-    nome = "%s_%s_%d" % (rota, prop.replace(":", "x"), alt)
+    nome = "%s_%s_%d%s" % (rota, prop.replace(":", "x"), alt, "_ao_" + qual if ao else "")
     d = os.path.join(a.saida, nome)
     if os.path.isdir(d):
         shutil.rmtree(d)
@@ -122,7 +130,9 @@ def rodar(a, cfg, rota, de):
     exe = os.path.join(d, os.path.basename(a.exe))
     shutil.copy2(a.exe, exe)
     open(os.path.join(d, "instalacao.toml"), "w").write('[edicao]\nperfil = "remastered"\n')
-    open(os.path.join(d, "graficos.toml"), "w").write(GRAFICOS.format(res=RES[alt], prop=prop))
+    open(os.path.join(d, "graficos.toml"), "w").write(GRAFICOS.format(res=RES[alt], prop=prop) +
+                                                     ("[efeitos]\nssao = true\nssao_qualidade = \"%s\"\n" % qual
+                                                      if ao else ""))
     saves = os.path.join(d, "saves")
     if cartao:
         shutil.copytree(a.cartao, saves)
@@ -141,6 +151,8 @@ def rodar(a, cfg, rota, de):
         cmd += ["--render", "nativo", "--proporcao", prop, "--headless", str(vblanks)]
         if alt != 480:
             cmd += ["--resolucao-interna", str(alt)]
+        if ao:
+            cmd += ["--ssao", "ligado", "--ssao-qualidade", qual]
     t0 = time.time()
     with open(os.path.join(d, "saida.txt"), "w", encoding="utf-8") as out:
         p = subprocess.Popen(cmd, stdout=out, stderr=subprocess.STDOUT, env=env, cwd=d)

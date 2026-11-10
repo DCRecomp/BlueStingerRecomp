@@ -50,6 +50,7 @@ const uint F_FLIP_V = 32768u, F_TEXEL_HALF = 65536u, F_ATTR_PLUS = 524288u, F_AT
 const uint F_EXACT = 2097152u, F_SAMPLE_CORNER = 4194304u, F_ATTR_CORNER = 8388608u, F_RAW_DEPTH = 16777216u;
 const uint F_FOG = 33554432u;  // N8.7: fog por tabela (TSP bits 23-22 = 0)
 const uint F_SHADOW = 67108864u;  // N8.7: PCW bit 7 (o passe das opacas grava o bit de sombra do pixel)
+const uint F_SCENE  = 134217728u; // N9.6 fase 1: desenho da cena 3D (bit 1 do anexo de sombra; o AO so age nele)
 
 #include "exact.glsl"
 
@@ -255,6 +256,6 @@ void main() {
     gl_FragDepth = (pc.flags & F_RAW_DEPTH) != 0u ? z
                  : ((pc.flags & F_EXACT) != 0u ? clamp((z - pc.depthBias) * pc.depthScale, 0.0, 1.0) : gl_FragCoord.z);
     outColor     = mode == 2u ? o : quant(o);
-    outShadow    = (pc.flags & F_SHADOW) != 0u ? 1u : 0u;
+    outShadow    = ((pc.flags & F_SHADOW) != 0u ? 1u : 0u) | ((pc.flags & F_SCENE) != 0u ? 2u : 0u);
 #endif
 }

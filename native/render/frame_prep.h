@@ -35,7 +35,14 @@ struct Batch {
     DrawState state;
     uint32_t  first = 0, count = 0;  // vertices (3 por triangulo; 6 no modo fiel, o retangulo)
     bool      scissor = false;       // recorte "dentro": so o retangulo do estado
+    // N9.6 fase 1: desenho da cena 3D (1/w varia no desenho: projetado; o criterio da fase 2 do N9.5), so nas opacas e no
+    // punch-through. O passe A grava o bit 1 do anexo de sombra com ele; o AO so age nesses pixels (o HUD e as telas 2D,
+    // de 1/w constante, ficam fora). Faz parte da chave do lote: a imagem nao muda.
+    bool      scene3d = false;
 };
+
+// N9.6 fase 1: o desenho e da cena 3D (todo 1/w finito e positivo, com 1/w variando entre os vertices)
+bool is_scene3d(const CommandList& cl, const Draw& d);
 
 struct PreparedFrame {
     std::vector<GpuVertex> vertices;

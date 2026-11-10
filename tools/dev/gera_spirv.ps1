@@ -33,6 +33,12 @@ $jobs = @(
     @("volumes_comp.h", "volumes.comp", "kVolumesComp", @()),
     @("volumes_comp_fc.h", "volumes.comp", "kVolumesCompFc", @("-DFLOAT_CONTROLS")),
     @("volumes_comp_fcd.h", "volumes.comp", "kVolumesCompFcd", @("-DFLOAT_CONTROLS", "-DDENORM_PRESERVE")),
+    # N9.6 fase 1: oclusao ambiente (o calculo e a media com a multiplicacao da cor)
+    @("ao_comp.h", "ao.comp", "kAoComp", @()),
+    @("ao_blur_comp.h", "ao.comp", "kAoBlurComp", @("-DBLUR")),
+    # meia resolucao (qualidades media e baixa): o calculo num representante por bloco 2 x 2 e a reconstrucao
+    @("ao_half_comp.h", "ao.comp", "kAoHalfComp", @("-DHALF")),
+    @("ao_up_comp.h", "ao.comp", "kAoUpComp", @("-DHALF", "-DBLUR")),
     # N7c: apresentacao direta e reducao da resolucao interna
     @("present_vert.h", "present.vert", "kPresentVert", @()),
     @("present_frag.h", "present.frag", "kPresentFrag", @()),

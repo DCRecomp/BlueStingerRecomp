@@ -135,3 +135,124 @@ age dentro do render, com a geometria.
 - O HUD e as telas 2D ficam fora: o critério de 1/w constante (N9.5 fase 2) e a marca leve do HUD (3B) já separam.
 - A luz original não é recuperável pela IR (2.4): uma iluminação que dependa dela pede a opção B.
 - C8 continua bloqueado; o resto do jogo fora das salas medidas não foi visto.
+
+## 7. Fase 1: oclusão ambiente (2026-11-10)
+
+Autorizada pelo mantenedor com a fase 0; a segunda parte (correções da revisão, meia resolução e qualidades) em
+2026-11-10, depois da bateria da primeira versão. Só a Remastered com o Vulkan; o SSAO continua **desligado por padrão em
+todos os presets** (decisão do mantenedor, D6 desempenho).
+
+### 7.1 Método
+
+- **Marca da cena** (`frame_prep`, `Batch::scene3d`): opacos e punch-through cujo 1/w é finito, positivo e varia no
+  desenho (o critério da fase 2 do N9.5). O passe A grava o bit 1 do anexo de sombra (`F_SCENE` no `pvr.frag`); o AO só
+  lê e só escreve esses pixels. O HUD, as telas 2D e o fundo de limpeza ficam fora.
+- **AO** (`native/render/vulkan/shaders/ao.comp`, entre o passe A e os volumes): a posição na câmera sai da profundidade
+  pela projeção do Ninja (cx, cy no centro do quadro do jogo, dist 500); a normal pelos vizinhos de profundidade mais
+  próxima; raio 60 na câmera, queda `1 - |v| / 3R`, espessura `2R` (sem o halo de um objeto muito à frente), z ≤ 1,5
+  ignorado. A cor da cena é multiplicada por `mix(1, ao, 0,8)`: a luz original fica (D6-2 i).
+- **Qualidades** (`[efeitos] ssao_qualidade` no `graficos.toml`, `--ssao-qualidade` só na execução; a média é o padrão
+  quando o SSAO é ligado):
+
+  | Qualidade | Resolução do cálculo | Amostras | Imagem auxiliar |
+  |---|---|---|---|
+  | alta | o alvo inteiro (a primeira versão) | 8 direções × 4 passos | rgba8 no alvo: 4 B/px |
+  | média | meia resolução | 8 × 4 | rgba32f em ⌈w/2⌉ × ⌈h/2⌉: 4 B/px do alvo |
+  | baixa | meia resolução | 4 × 3 | idem |
+
+- **Meia resolução:** um representante por bloco 2 × 2, em xadrez (o de 1/w maior nas casas pares, o de 1/w menor nas
+  ímpares, para a frente e o fundo de uma borda aparecerem os dois); as amostras continuam na profundidade inteira; a imagem
+  guarda o AO e o 1/w do representante. A reconstrução no alvo inteiro usa os 4 × 4 representantes em volta, com o peso
+  `exp(-|Δ(1/w)| / 0,03·(1/w))`; sem nenhum representante a menos de ~9 % de diferença de profundidade (peso `exp(-3)`), o
+  pixel fica sem AO, nunca com o de outra superfície.
+- **Recursos sob demanda:** os pipelines nascem na primeira vez que o AO liga; só a imagem da qualidade escolhida existe;
+  a outra sai na troca e as duas saem no primeiro submit com o AO desligado (`VulkanStats::ao_image_bytes`). Uma falha
+  de criação desliga só o AO (o log diz uma vez). A estimativa do limite da resolução interna passou de 96 para 96 + 4
+  B/px (a correção da constante continua no N9.12).
+- **Ajuste automático:** não foi feito. A qualidade é escolha explícita do jogador; nenhuma troca por quadro. Um orçamento
+  de GPU por perfil fica para a fase 5 (menu), com as medições abaixo.
+
+### 7.2 Revisões Codex
+
+- `reviews/codex-20261110-113738.md` (primeira versão): **MÉDIA**, superfícies 3D de frente exata para a câmera (1/w
+  constante) ficam fora da cena, como o HUD: aceita e **transferida à fase 2** (marca de cena pela proveniência,
+  arquitetura aprovada pelo mantenedor em 2026-11-10); o lado seguro está fixado em teste (a parede frontal não muda).
+  **BAIXA**, objetos do AO criados sempre: corrigido (criação sob demanda). **BAIXA**, a matriz padrão sem `+ao`: aceita em
+  parte (as baterias passam os pares explícitos).
+- `reviews/codex-20261110-161728.md` (meia resolução): **BAIXA**, faltava um alvo de lados ímpares e a prova da liberação
+  das imagens: corrigido (`ao_image_bytes`; teste com 641 × 481 e a cada troca e desligamento). **BAIXA**, sem oráculo de
+  que a alta repete a primeira versão: aceita; um hash no teste dependeria do driver, então o oráculo foram as capturas reais
+  (7.3: 28 de 28 iguais bit a bit ao binário da primeira versão).
+
+### 7.3 Resultados dos testes
+
+Duas baterias, separadas: **(A) binários de 14:31**, a primeira versão com as correções da revisão 113738 (só a qualidade
+alta existia); **(B) binários de 16:16**, com a meia resolução e as qualidades; os de 19:43 só somam a estatística e os
+testes da revisão 161728 (unitários, render, ctest e L1–L4 na média repetidos neles). A bateria anterior a essas correções
+(13:19–14:14) fica só como histórico.
+
+| Teste | (A) | (B) |
+|---|---|---|
+| `bs_unit_tests` / `bs_render_tests` | 374/0, 93/0 | 375/0, 94/0 (19:43) |
+| ctest debug / release | 30/30; release 22/23: `n0_native_limpo` pegou o cabeçalho SPIR-V novo criado durante a execução (a palavra `0x00706572`, o nome `rep` na depuração do SPIR-V); a variável foi renomeada, a catraca não mudou | 30/30, 23/23 (5 pulados sem o disco, não contados) |
+| `n96_luz` L1–L4 | 34 ok, 0 falhas | 0 falhas na alta, na média e na baixa |
+| H1–H7 (`n95_headless`) | 0 falhas | 0 falhas |
+| R1–R4 (`test_remaster`) | 4/0 | 4/0 |
+| Original × `referencias_n87` (10 casos históricos) | 10 iguais | 10 iguais |
+
+- **A alta é a primeira versão:** as 28 capturas da L (4:3, 16:9, 1080, diagnóstico, produto) da bateria (B) na alta são
+  iguais bit a bit às da (A). No teste sintético, a quina dá 0,786 na parede e 0,781 no chão, os números de antes.
+- **Média e baixa contra a alta, nas capturas reais (RCG02, VBlanks 3800 e 4640):** o escurecimento médio fica a até 0,1
+  ponto percentual da alta (3800: alta 3,98 %, média 3,94 %, baixa 4,08 %); no 1080, a média difere da alta em 8 % dos
+  pixels, com mediana 1,2 nível e p99 4; a baixa em 11 %, p99 12. Áreas com AO só numa das duas: 0,2–0,9 % da imagem.
+- **Vazamento:** no teste sintético (parede estreita a z 600 na frente de um plano a z 3000), o fundo junto à borda fica em
+  1,000 nas três qualidades; o HUD bit a bit; o AO só escurece.
+
+### 7.4 Custos (binários de 16:16, telemetria do produto, `n95_desempenho.py`)
+
+GPU por quadro (ms, média do trecho; sem janela, o render inteiro na GPU sem apresentação). NVIDIA RTX 5080:
+
+| Configuração | Corredor | Cais | Exterior |
+|---|---|---|---|
+| 16:9@1080 desligado | 1,69 | 1,51 | 2,62 |
+| alta / média / baixa | 2,77 / 2,02 / 1,82 | 3,25 / 2,51 / 2,27 | 2,80 / 2,47 / 2,46 |
+| 16:9@2160 desligado | 1,99 | 4,53 | 4,28 |
+| alta / média / baixa | 7,42 / 3,38 / 2,55 | 6,59 / 5,03 / 4,63 | 6,45 / 4,65 / 4,43 |
+
+AMD Radeon integrada (corredor): 4:3@480 desligado 5,54; alta 11,36, média 7,80, baixa 6,66. 16:9@1080 desligado 26,0;
+alta 124,3, média 55,4, baixa 39,7.
+
+Na janela (1280 × 720, V-Sync, modo espectador, corredor):
+
+| Configuração | fps | frametime p50 / p99 pico (ms) | quadros > 16,7 ms | GPU (ms) |
+|---|---|---|---|---|
+| AMD 16:9@1080 desligado | 59,4 | 15,4 / 53,4 | 33 % | 26,3 |
+| alta / média / baixa | 29,4 / 53,0 / 57,3 | 14,7 / 163 · 13,5 / 87 · 15,8 / 68 | 37 / 36 / 42 % | 123,5 / 55,6 / 40,1 |
+| NVIDIA 16:9@2160 desligado | 59,8 | 16,6 / 20,8 | 45 % | 3,18 |
+| alta / média / baixa | 60,0 / 60,0 / 59,8 | 16,2 / 20,8 · 16,6 / 21,0 · 16,6 / 21,2 | 34 / 36 / 44 % | 7,74 / 3,75 / 3,34 |
+
+Memória dos alvos (pico, MiB): 1080 610 → 619–620 com o AO; 2160 2 432 → 2 464–2 466; AMD 480 95,5 → 96,7 (≈ 4 B/px
+do alvo nas três qualidades). Os números da bateria antiga (13:19–14:14, binários anteriores às correções, só a alta)
+eram da mesma ordem (AMD 1080: 25,9 → 134,1; NVIDIA 2160 corredor: 2,00 → 7,42) e ficam só como histórico.
+
+**Leitura:** na RTX 5080 a média custa até +1,0 ms em 1080 e +0,4–1,4 ms em 4K (a alta, até +1,7 ms e +5,4 ms). Na AMD integrada o
+1080 já passa do quadro sem AO (26 ms) e mesmo a baixa soma ~14 ms: **o AO não é viável ali em 1080** e fica desligado;
+em 480, a média soma 2,3 ms e a baixa 1,1 ms. As diferenças menores que ~0,5 ms nos trechos curtos da NVIDIA estão no
+ruído (o exterior em 1080 desligado deu mais que ligado).
+
+### 7.5 Problemas visuais (nas imagens de prova do diagnóstico, sem a janela)
+
+- **Baixa:** manchas onduladas ao longo da quina vertical do corredor e em volta do personagem (4 direções); a média fica
+  quase igual à alta, com um pouco de granulação na quina. A baixa é só para GPU fraca.
+- O cabelo do personagem fica fora da cena (a cor do jogo) nas três; o piso de grade (translúcido) e a parede lateral de
+  frente para a câmera também (cobertura de 56 % no quarto do VBlank 4640).
+- A conferência visual na janela é do mantenedor.
+
+### 7.6 Pendências transferidas
+
+- **Fase 2:** a marca de cena pela proveniência (paredes e faces frontais; partículas, HUD, ambíguos e os modelos 3D dos
+  menus fora, decisão de 2026-11-10); o catálogo de materiais por `TextureId`.
+- **Fase 5 (menu):** a entrada SSAO do menu continua "em breve"; a qualidade e um orçamento de GPU por perfil, com as
+  medições de 7.4.
+- **N9.12:** a AMD integrada em 1080 sem AO viável; a cobertura da cena (frontais, translúcidas); dist fixa em 500 (o zoom
+  do jogo muda o raio em poucos por cento); a constante de VRAM (agora 96 + 4 B/px); os artefatos da baixa.

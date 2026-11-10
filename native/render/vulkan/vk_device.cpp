@@ -9,6 +9,10 @@
 #include "render/vulkan/spirv/pvr_frag_fcd.h"
 #include "render/soft/soft_raster.h"
 #include "render/vulkan/spirv/pvr_vert.h"
+#include "render/vulkan/spirv/ao_blur_comp.h"
+#include "render/vulkan/spirv/ao_comp.h"
+#include "render/vulkan/spirv/ao_half_comp.h"
+#include "render/vulkan/spirv/ao_up_comp.h"
 #include "render/vulkan/spirv/volumes_comp.h"
 #include "render/vulkan/spirv/volumes_comp_fc.h"
 #include "render/vulkan/spirv/volumes_comp_fcd.h"
@@ -62,7 +66,8 @@ constexpr uint32_t F_TEXTURED = 1, F_GOURAUD = 2, F_OFFSET = 4, F_USE_ALPHA = 8,
                    F_TEXEL_HALF = 65536, F_ATTR_PLUS = 1u << 19, F_ATTR_MINUS = 1u << 20, F_EXACT = 1u << 21,
                    F_SAMPLE_CORNER = 1u << 22, F_ATTR_CORNER = 1u << 23, F_RAW_DEPTH = 1u << 24,
                    F_FOG = 1u << 25,     // N8.7: fog por tabela
-                   F_SHADOW = 1u << 26;  // N8.7: PCW bit 7 (o passe das opacas grava o bit de sombra do pixel)
+                   F_SHADOW = 1u << 26,  // N8.7: PCW bit 7 (o passe das opacas grava o bit de sombra do pixel)
+                   F_SCENE  = 1u << 27;  // N9.6 fase 1: desenho da cena 3D (bit 1 do anexo de sombra; o AO so age nele)
 constexpr uint32_t kFragBytes = 32;  // struct Frag (std430)
 constexpr uint32_t kFrameDataBytes = 64 * 4 + 2 * 4;  // N8.7: FrameData de pvr.frag (fog)
 constexpr uint32_t kHeader    = 32;  // cabecalho das listas por pixel (Heads: 8 palavras)
@@ -299,6 +304,8 @@ public:
 
     void  set_scale(float s) override { scale_ = s > 0 ? s : 1.f; }
     void  set_always_slot(bool on) override { alwaysSlot_ = on; }
+    void  set_ambient_occlusion(bool on) override { aoOn_.store(on, std::memory_order_relaxed); }
+    void  set_ambient_occlusion_quality(AoQuality q) override { aoQuality_.store(uint8_t(q), std::memory_order_relaxed); }
     float scale() const override { return scale_; }
 
     bool remakeReady(int i) {
@@ -605,6 +612,19 @@ private:
     VkPipelineLayout      volPipeLayout_ = VK_NULL_HANDLE;
     VkShaderModule        volMod_  = VK_NULL_HANDLE;
     VkPipeline            volPipe_ = VK_NULL_HANDLE;
+    // N9.6 fase 1: oclusao ambiente (ao.comp): o AO do quadro (RGBA8, criado na primeira vez que liga), o conjunto e os
+    // dois computes (o calculo e a media com a multiplicacao da cor)
+    Image                 aoImg_, aoHalf_;  // a alta usa aoImg_ (rgba8 no alvo); a media e a baixa, aoHalf_ (rgba32f, 1/4)
+    VkDescriptorSetLayout aoLayout_ = VK_NULL_HANDLE;
+    VkDescriptorPool      aoPool_   = VK_NULL_HANDLE;
+    VkDescriptorSet       aoSet_    = VK_NULL_HANDLE;
+    VkPipelineLayout      aoPipeLayout_ = VK_NULL_HANDLE;
+    VkShaderModule        aoMod_ = VK_NULL_HANDLE, aoBlurMod_ = VK_NULL_HANDLE;
+    VkShaderModule        aoHalfMod_ = VK_NULL_HANDLE, aoUpMod_ = VK_NULL_HANDLE;
+    VkPipeline            aoPipe_ = VK_NULL_HANDLE, aoBlurPipe_ = VK_NULL_HANDLE, aoHalfPipe_ = VK_NULL_HANDLE, aoUpPipe_ = VK_NULL_HANDLE;
+    bool                  aoSetValid_ = false, aoFailed_ = false;
+    std::atomic<bool>     aoOn_{false};
+    std::atomic<uint8_t>  aoQuality_{uint8_t(AoQuality::High)};  // o padrao do dispositivo e o da primeira versao
     uint32_t        fragCapacity_ = 0;
     VkDescriptorSet fragSet_ = VK_NULL_HANDLE, resolveSet_ = VK_NULL_HANDLE;
 
@@ -696,7 +716,9 @@ private:
             VkDeviceSize heap = 0;
             for (uint32_t i = 0; i < mem_.memoryHeapCount; ++i)
                 if (mem_.memoryHeaps[i].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) heap = std::max(heap, mem_.memoryHeaps[i].size);
-            const double pixels = double(heap) / 4.0 / 96.0;                       // pixels do alvo que cabem
+            // N9.6 fase 1: + 4 B/px da imagem do AO (rgba8 no alvo na alta; rgba32f em 1/4 na media e na baixa). A constante
+            // de 96 B/px e a estimativa antiga (medidos ~268 B/px: a correcao fica no N9.12)
+            const double pixels = double(heap) / 4.0 / (96.0 + 4.0);               // pixels do alvo que cabem
             const double byMem  = std::sqrt(pixels * 3.0 / 4.0);                    // altura 4:3
             const double byDim  = double(p.limits.maxImageDimension2D) * 3.0 / 4.0;  // a largura e 4/3 da altura
             st_.max_internal_height = uint32_t(std::max(480.0, std::min(byMem, byDim)));
@@ -1071,6 +1093,161 @@ private:
         volSetValid_ = true;
     }
 
+    // N9.6 fase 1 (revisao Codex 20261110-113738): os objetos do AO nascem na primeira vez que ele liga; uma falha aqui
+    // desliga so o AO (o renderizador fiel continua) e fica no log uma vez. O que ja foi criado sai na destruicao.
+    bool aoObjects() {
+        if (aoPipe_ && aoBlurPipe_ && aoHalfPipe_ && aoUpPipe_) return true;
+        if (aoFailed_) return false;
+        std::string err;
+        auto fail_ao = [&](const std::string& why) {
+            aoFailed_ = true;
+            std::fprintf(stderr, "[render-vk] oclusao ambiente desligada: %s\n", why.c_str());
+            return false;
+        };
+        // 3: o AO no alvo (alta); 4: o AO em meia resolucao (media e baixa). Cada pipeline usa so a sua: a outra imagem pode
+        // nem existir (so a da qualidade escolhida e criada)
+        VkDescriptorSetLayoutBinding ab[5] = {
+            {0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+            {1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+            {2, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+            {3, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+            {4, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr}};
+        VkDescriptorSetLayoutCreateInfo ali{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
+        ali.bindingCount = 5, ali.pBindings = ab;
+        if (!ok(f_.vkCreateDescriptorSetLayout(dev_, &ali, nullptr, &aoLayout_), "layout do AO", &err)) return fail_ao(err);
+        ++g_live;
+        VkDescriptorPoolSize       aps[2] = {{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2}, {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 3}};
+        VkDescriptorPoolCreateInfo api{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
+        api.maxSets = 1, api.poolSizeCount = 2, api.pPoolSizes = aps;
+        if (!ok(f_.vkCreateDescriptorPool(dev_, &api, nullptr, &aoPool_), "pool do AO", &err)) return fail_ao(err);
+        ++g_live;
+        VkDescriptorSetAllocateInfo aai{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
+        aai.descriptorPool = aoPool_, aai.descriptorSetCount = 1, aai.pSetLayouts = &aoLayout_;
+        if (!ok(f_.vkAllocateDescriptorSets(dev_, &aai, &aoSet_), "conjunto do AO", &err)) return fail_ao(err);
+        VkPushConstantRange        apr{VK_SHADER_STAGE_COMPUTE_BIT, 0, 64};
+        VkPipelineLayoutCreateInfo al{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+        al.setLayoutCount = 1, al.pSetLayouts = &aoLayout_, al.pushConstantRangeCount = 1, al.pPushConstantRanges = &apr;
+        if (!ok(f_.vkCreatePipelineLayout(dev_, &al, nullptr, &aoPipeLayout_), "layout do AO", &err)) return fail_ao(err);
+        ++g_live;
+        aoMod_ = module(kAoComp, sizeof kAoComp), aoBlurMod_ = module(kAoBlurComp, sizeof kAoBlurComp);
+        aoHalfMod_ = module(kAoHalfComp, sizeof kAoHalfComp), aoUpMod_ = module(kAoUpComp, sizeof kAoUpComp);
+        if (!aoMod_ || !aoBlurMod_ || !aoHalfMod_ || !aoUpMod_) {
+            return fail_ao("shader do AO");
+        }
+        for (auto [mod, pipe] : {std::pair{aoMod_, &aoPipe_}, std::pair{aoBlurMod_, &aoBlurPipe_},
+                                 std::pair{aoHalfMod_, &aoHalfPipe_}, std::pair{aoUpMod_, &aoUpPipe_}}) {
+            VkComputePipelineCreateInfo ac{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
+            ac.stage  = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_COMPUTE_BIT, mod, "main", nullptr};
+            ac.layout = aoPipeLayout_;
+            if (!ok(f_.vkCreateComputePipelines(dev_, VK_NULL_HANDLE, 1, &ac, nullptr, pipe), "pipeline do AO", &err)) return fail_ao(err);
+            ++g_live;
+        }
+        return true;
+    }
+
+    void writeAoSet() {
+        VkDescriptorImageInfo di{sampler_, depth_.view, VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL};
+        VkDescriptorImageInfo si{sampler_, shadow_.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+        VkDescriptorImageInfo ci{VK_NULL_HANDLE, color_.view, VK_IMAGE_LAYOUT_GENERAL};
+        VkDescriptorImageInfo ai{VK_NULL_HANDLE, aoImg_.view, VK_IMAGE_LAYOUT_GENERAL};
+        VkDescriptorImageInfo hi{VK_NULL_HANDLE, aoHalf_.view, VK_IMAGE_LAYOUT_GENERAL};
+        VkWriteDescriptorSet  w[5] = {};
+        const VkDescriptorImageInfo* inf[5] = {&di, &si, &ci, &ai, &hi};
+        uint32_t                     n      = 0;
+        for (uint32_t i = 0; i < 5; ++i) {
+            if ((i == 3 && !aoImg_.img) || (i == 4 && !aoHalf_.img)) continue;  // so a imagem da qualidade escolhida
+            w[n].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, w[n].dstSet = aoSet_, w[n].dstBinding = i, w[n].descriptorCount = 1;
+            w[n].descriptorType = i < 2 ? VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER : VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+            w[n].pImageInfo     = inf[i];
+            ++n;
+        }
+        f_.vkUpdateDescriptorSets(dev_, n, w, 0, nullptr);
+        aoSetValid_ = true;
+    }
+
+    // N9.6 fase 1 (docs/N9-6-AUDITORIA.md): oclusao ambiente entre o passe A e os volumes, so quando ligada
+    // (set_ambient_occlusion: a Remastered com o Vulkan, no render do framebuffer 640x480 ou do quadro largo). A posicao na
+    // camera sai da profundidade pela projecao do Ninja: cx e cy no centro do quadro do jogo (o quadro largo desloca a IR e o
+    // centro junto: 427 em 854), dist 500 (o gameplay; o zoom do jogo muda a distancia em poucos por cento, o raio do AO
+    // muda junto). Desligada, nada muda: a imagem e a mesma de antes do N9.6.
+    bool ambientOcclusion(const CommandList& cl) {
+        const FrameParams& fr = cl.frame;
+        if (!aoOn_.load(std::memory_order_relaxed)) {  // desligado: a memoria do AO volta (o quadro anterior ja terminou)
+            if (aoImg_.img || aoHalf_.img) freeImage(aoImg_), freeImage(aoHalf_), aoSetValid_ = false;
+            st_.ao_image_bytes = 0;
+            return true;
+        }
+        if (fr.height != 480 || fr.width < 640) return true;
+        if (!aoObjects()) return true;  // sem os objetos: o quadro sai sem AO
+        // N9.6 fase 1: a qualidade (alta: o alvo inteiro, 8 x 4, a primeira versao; media: meia resolucao, 8 x 4; baixa:
+        // meia resolucao, 4 x 3). So a imagem da qualidade escolhida existe; a da outra sai ao trocar (o quadro anterior ja
+        // terminou: o submit espera a cerca)
+        const AoQuality q    = AoQuality(aoQuality_.load(std::memory_order_relaxed));
+        const bool      half = q != AoQuality::High;
+        Image&          mine = half ? aoHalf_ : aoImg_;
+        Image&          other = half ? aoImg_ : aoHalf_;
+        if (other.img) freeImage(other), aoSetValid_ = false;
+        if (mine.img == VK_NULL_HANDLE) {
+            MemScope mc(telemetry::Mem::Targets);
+            mine = half ? makeImage((w_ + 1) / 2, (h_ + 1) / 2, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT,
+                                    VK_IMAGE_ASPECT_COLOR_BIT)
+                        : makeImage(w_, h_, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_STORAGE_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
+            if (!mine.img) {  // sem memoria para a imagem do AO: o quadro sai sem ele, como o desligado
+                std::fprintf(stderr, "[render-vk] oclusao ambiente: sem a imagem do AO neste alvo\n");
+                return true;
+            }
+            aoSetValid_ = false;
+        }
+        // revisao Codex 20261110-161728: o tamanho das imagens do AO vivas (pixels x formato), para os testes e o diagnostico
+        st_.ao_image_bytes = (aoImg_.img ? uint64_t(w_) * h_ * 4 : 0) +
+                             (aoHalf_.img ? uint64_t((w_ + 1) / 2) * ((h_ + 1) / 2) * 16 : 0);
+        if (!aoSetValid_) writeAoSet();
+        imageBarrier(mine.img, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0,
+                     VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT);
+        // so o build de validacao: BS_AO_DIAGNOSTICO=1 a cor da cena vira o AO; =2 preta e =3 branca (as duas mascaras: o
+        // pixel igual nas duas nao depende da cena por baixo, pela monotonia da mistura e da quantizacao)
+        static const uint32_t debug = [] {
+#if BS_VALIDACAO
+            const char* v = std::getenv("BS_AO_DIAGNOSTICO");
+            return v && *v >= '1' && *v <= '3' ? uint32_t(*v - '0') : 0u;
+#else
+            return 0u;
+#endif
+        }();
+        const uint32_t dirs = q == AoQuality::Low ? 4u : 8u, steps = q == AoQuality::Low ? 3u : 4u;
+        struct {
+            uint32_t w, h;
+            float    invScale, cx, cy, dist;
+            uint32_t raw;
+            float    bias, depthScale, radius, strength;
+            uint32_t debug, dirs, steps;
+            float    angleStep;
+            uint32_t pad;
+        } pc{w_, h_, 1.f / scale_, float(fr.width) / 2.f, float(fr.height) / 2.f, 500.f, rawDepth_ ? 1u : 0u, prep_.depth_bias,
+             prep_.depth_scale, 60.f, 0.8f, debug, dirs, steps,
+             // 8 direcoes: a constante da primeira versao (0.78539816), para a alta repetir a conta
+             dirs == 8 ? 0.78539816f : 6.2831853f / float(dirs), 0};
+        static_assert(sizeof pc == 64);
+        f_.vkCmdBindDescriptorSets(cmd_, VK_PIPELINE_BIND_POINT_COMPUTE, aoPipeLayout_, 0, 1, &aoSet_, 0, nullptr);
+        f_.vkCmdPushConstants(cmd_, aoPipeLayout_, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof pc, &pc);
+        f_.vkCmdBindPipeline(cmd_, VK_PIPELINE_BIND_POINT_COMPUTE, half ? aoHalfPipe_ : aoPipe_);
+        if (half) f_.vkCmdDispatch(cmd_, ((w_ + 1) / 2 + 7) / 8, ((h_ + 1) / 2 + 7) / 8, 1);
+        else f_.vkCmdDispatch(cmd_, (w_ + 7) / 8, (h_ + 7) / 8, 1);
+        imageBarrier(mine.img, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                     VK_ACCESS_SHADER_WRITE_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_READ_BIT);
+        f_.vkCmdBindPipeline(cmd_, VK_PIPELINE_BIND_POINT_COMPUTE, half ? aoUpPipe_ : aoBlurPipe_);
+        f_.vkCmdDispatch(cmd_, (w_ + 7) / 8, (h_ + 7) / 8, 1);
+        // a cor escrita pelo compute: lida e escrita pelos volumes, pelo passe B e pelas copias
+        imageBarrier(color_.img, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                     VK_ACCESS_SHADER_WRITE_BIT,
+                     VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                     VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_TRANSFER_READ_BIT |
+                         VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT);
+        st_.ao_half_frames += half;
+        ++st_.ao_frames;
+        return true;
+    }
+
     uint32_t downW_ = 0, downH_ = 0;  // tamanho do jogo do alvo atual
     void freeTarget() {
         freeBuffer(down_);
@@ -1080,7 +1257,9 @@ private:
         if (pass_) f_.vkDestroyRenderPass(dev_, pass_, nullptr), --g_live, pass_ = VK_NULL_HANDLE;
         if (fbB_) f_.vkDestroyFramebuffer(dev_, fbB_, nullptr), --g_live, fbB_ = VK_NULL_HANDLE;
         if (passB_) f_.vkDestroyRenderPass(dev_, passB_, nullptr), --g_live, passB_ = VK_NULL_HANDLE;
-        freeImage(color_), freeImage(depth_), freeImage(shadow_);
+        freeImage(color_), freeImage(depth_), freeImage(shadow_), freeImage(aoImg_), freeImage(aoHalf_);
+        st_.ao_image_bytes = 0;
+        aoSetValid_ = false;
         freeBuffer(heads_), freeBuffer(frags_), freeBuffer(readback_), freeBuffer(headerRead_);
     }
 
@@ -1203,6 +1382,7 @@ private:
         fl |= F_EXACT;  // modo fiel: a cobertura do software
         if (s.fog == Fog::Table && !soft::fog_volumes_disabled()) fl |= F_FOG;  // N8.7
         if (s.shadow) fl |= F_SHADOW;
+        if (b.scene3d) fl |= F_SCENE;
         if (!fr.sample_center) fl |= F_SAMPLE_CORNER;
         if (!fr.attribute_center) fl |= F_ATTR_CORNER;
         if (rawDepth_) fl |= F_RAW_DEPTH;
@@ -1392,7 +1572,7 @@ private:
         // N8.7: o fim do passe A (opacas e punch-through), os volumes e o comeco do passe B (translucidas)
         auto toB = [&]() -> bool {
             f_.vkCmdEndRenderPass(cmd_);
-            if (!volumes(cl)) return false;
+            if (!ambientOcclusion(cl) || !volumes(cl)) return false;
             VkRenderPassBeginInfo rbB{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
             rbB.renderPass = passB_, rbB.framebuffer = fbB_, rbB.renderArea = {{0, 0}, {w_, h_}};
             f_.vkCmdBeginRenderPass(cmd_, &rbB, VK_SUBPASS_CONTENTS_INLINE);
@@ -1400,7 +1580,7 @@ private:
             return true;
         };
         for (const Batch& b : prep_.batches) {
-            if (!inB && b.mode != PassMode::Opaque && b.mode != PassMode::PunchThrough && !toB()) return fail("volumes");
+            if (!inB && b.mode != PassMode::Opaque && b.mode != PassMode::PunchThrough && !toB()) return fail("AO ou volumes");
             if (b.mode == PassMode::TranslucentAutosort && !second) {
                 f_.vkCmdNextSubpass(cmd_, VK_SUBPASS_CONTENTS_INLINE), second = true, bound = VK_NULL_HANDLE;
             }
@@ -1430,7 +1610,7 @@ private:
         }
         if (!inB) {  // sem translucidas: so o passe A (e os volumes)
             f_.vkCmdEndRenderPass(cmd_);
-            if (!volumes(cl)) return fail("volumes");
+            if (!ambientOcclusion(cl) || !volumes(cl)) return fail("AO ou volumes");
         } else {
             if (!second) f_.vkCmdNextSubpass(cmd_, VK_SUBPASS_CONTENTS_INLINE);
             f_.vkCmdEndRenderPass(cmd_);  // cor em GENERAL (dependencia externa: compute e transferencia)
@@ -1614,6 +1794,13 @@ private:
             if (volPool_) f_.vkDestroyDescriptorPool(dev_, volPool_, nullptr), --g_live, volPool_ = VK_NULL_HANDLE;
             if (volLayout_) f_.vkDestroyDescriptorSetLayout(dev_, volLayout_, nullptr), --g_live, volLayout_ = VK_NULL_HANDLE;
             if (volMod_) f_.vkDestroyShaderModule(dev_, volMod_, nullptr), --g_live, volMod_ = VK_NULL_HANDLE;
+            for (VkPipeline* p : {&aoPipe_, &aoBlurPipe_, &aoHalfPipe_, &aoUpPipe_})  // N9.6 fase 1
+                if (*p) f_.vkDestroyPipeline(dev_, *p, nullptr), --g_live, *p = VK_NULL_HANDLE;
+            if (aoPipeLayout_) f_.vkDestroyPipelineLayout(dev_, aoPipeLayout_, nullptr), --g_live, aoPipeLayout_ = VK_NULL_HANDLE;
+            if (aoPool_) f_.vkDestroyDescriptorPool(dev_, aoPool_, nullptr), --g_live, aoPool_ = VK_NULL_HANDLE;
+            if (aoLayout_) f_.vkDestroyDescriptorSetLayout(dev_, aoLayout_, nullptr), --g_live, aoLayout_ = VK_NULL_HANDLE;
+            for (VkShaderModule* m : {&aoMod_, &aoBlurMod_, &aoHalfMod_, &aoUpMod_})
+                if (*m) f_.vkDestroyShaderModule(dev_, *m, nullptr), --g_live, *m = VK_NULL_HANDLE;
             if (resolve_) f_.vkDestroyPipeline(dev_, resolve_, nullptr), --g_live;
             for (VkShaderModule m : {vert_, frag_, fragList_, comp_})
                 if (m) f_.vkDestroyShaderModule(dev_, m, nullptr), --g_live;

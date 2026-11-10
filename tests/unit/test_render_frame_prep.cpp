@@ -122,3 +122,21 @@ BS_TEST(frame_prep_depth_scale_clip_and_sample_offset) {
     nr::prepare_frame(cl, p);
     BS_CHECK(p.triangles == 0 && p.culled == 1);
 }
+
+// N9.6 fase 1: a marca da cena 3D por desenho (1/w variando, finito e positivo), so nas opacas e no punch-through, e
+// parte da chave do lote: um desenho 2D (1/w constante) e um 3D com o mesmo estado ficam em lotes separados
+BS_TEST(frame_prep_scene3d_mark) {
+    nr::CommandList cl;
+    add(cl, {}, {vtx(0, 0, 0.5f), vtx(10, 0, 0.5f), vtx(0, 10, 0.5f)});   // 2D (HUD)
+    add(cl, {}, {vtx(0, 0, 0.5f), vtx(10, 0, 0.25f), vtx(0, 10, 0.5f)});  // 3D
+    add(cl, {}, {vtx(0, 0, 0.5f), vtx(10, 0, -0.25f), vtx(0, 10, 0.5f)}); // 1/w negativo: fora da cena
+    nr::DrawState tr;
+    tr.list = nr::ListType::Translucent;
+    add(cl, tr, {vtx(0, 0, 0.5f), vtx(10, 0, 0.25f), vtx(0, 10, 0.5f)});  // translucida 3D: o passe A nao a ve
+    BS_CHECK(!nr::is_scene3d(cl, cl.draws[0]) && nr::is_scene3d(cl, cl.draws[1]) && !nr::is_scene3d(cl, cl.draws[2]));
+    nr::PreparedFrame p;
+    nr::prepare_frame(cl, p);
+    BS_CHECK(p.batches.size() == 4);
+    if (p.batches.size() != 4) return;
+    BS_CHECK(!p.batches[0].scene3d && p.batches[1].scene3d && !p.batches[2].scene3d && !p.batches[3].scene3d);
+}

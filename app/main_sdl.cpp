@@ -106,6 +106,8 @@ struct Args {
     bool renderExplicit = false;  // --render ou BS_RENDER dados (valem sobre o graficos.toml do menu)
     uint32_t internalHeight = 0;  // --resolucao-interna <altura> (N7c; 0 = a do graficos.toml)
     int      aspect = 0;          // --proporcao 4:3|16:9 (N9.5 fase 1; 0 = a do graficos.toml; 16:9 so na Remastered com o Vulkan)
+    int      ssao   = 0;          // --ssao ligado|desligado (N9.6 fase 1; 0 = o do graficos.toml; so na Remastered com o Vulkan)
+    int      ssaoQuality = -1;    // --ssao-qualidade baixa|media|alta (N9.6 fase 1; -1 = a do graficos.toml)
     int      cameraMode = -1;     // --camera original|livre (N7c; -1 = a do controles.toml, ou Original sem janela)
     int      present = -1;        // --apresentacao vulkan|sdl (N7c; -1 = Vulkan quando houver)
     bs::AudioEffectsProvider audioEffects = bs::AudioEffectsProvider::Legacy;  // --audio-efeitos nativo|legado (N6)
@@ -192,6 +194,17 @@ bool parseArgs(Args& a) {
         else if (s == L"--proporcao" && (v = next())) {
             if (*v == L"4:3") a.aspect = 1;
             else if (*v == L"16:9") a.aspect = 2;
+            else return false;
+        }
+        else if (s == L"--ssao" && (v = next())) {  // N9.6 fase 1: so nesta execucao
+            if (*v == L"desligado") a.ssao = 1;
+            else if (*v == L"ligado") a.ssao = 2;
+            else return false;
+        }
+        else if (s == L"--ssao-qualidade" && (v = next())) {  // N9.6 fase 1: so nesta execucao
+            if (*v == L"baixa") a.ssaoQuality = 0;
+            else if (*v == L"media") a.ssaoQuality = 1;
+            else if (*v == L"alta") a.ssaoQuality = 2;
             else return false;
         }
         else if (s == L"--resolucao-interna" && (v = next())) {
@@ -823,6 +836,8 @@ public:
     uint32_t wide_width() const { return wide_; }
     void     set_wide_frame(bool allowed) { wideAllowed_ = allowed; }
     void     set_aspect_override() { aspectOverride_ = true; }
+    void     set_ssao_override() { ssaoOverride_ = true; }  // N9.6 fase 1: --ssao nao vai para o graficos.toml
+    void     set_ssao_quality_override() { ssaoQualityOverride_ = true; }  // nem --ssao-qualidade
     // antes do apply(prefs, true): a --resolucao-interna e o limite 4:3 da GPU (VulkanStats::max_internal_height)
     void     set_internal_height_override(uint32_t h, uint32_t gpuMax) { heightOverride_ = h, gpuMax_ = (std::max)(480u, gpuMax); }
     // a apresentacao recuou para o SDL (sem slots): o quadro largo deixa de existir nesta execucao
@@ -913,6 +928,9 @@ public:
             if (w || !start) std::fprintf(stderr, "[menu] proporcao: %s\n", w ? "16:9 (quadro largo)" : "4:3");
         }
         if (heightChanged && !heightFirst) sendHeight();
+        // N9.6 fase 1: a oclusao ambiente (clamp_to ja a desliga sem o recurso: a Original e o recuo para o SDL)
+        if (start || g.ssao != old.graphics.ssao || g.ssao_quality != old.graphics.ssao_quality || g.vulkan != old.graphics.vulkan)
+            host_.setAmbientOcclusion(g.vulkan && g.ssao, uint32_t(g.ssao_quality));
         if ((start || g.vsync != old.graphics.vsync) && pres_.p) pres_.p->set_vsync(g.vsync);
         if (start || g.window != old.graphics.window || g.window_w != old.graphics.window_w || g.window_h != old.graphics.window_h) {
             if (!applyWindow(g)) {  // o SDL recusou: nunca fica sem imagem
@@ -950,6 +968,8 @@ public:
         d.graphics.window = confirmed_.window, d.graphics.window_w = confirmed_.window_w, d.graphics.window_h = confirmed_.window_h;
         d.graphics.resolution = confirmed_.resolution, d.graphics.scale_pct = confirmed_.scale_pct;
         if (renderOverride_) d.graphics.vulkan = persisted_.graphics.vulkan;
+        if (ssaoOverride_) d.graphics.ssao = persisted_.graphics.ssao;  // N9.6 fase 1
+        if (ssaoQualityOverride_) d.graphics.ssao_quality = persisted_.graphics.ssao_quality;
         // N9.5 fase 5A (D5-2, D5-4): a ultima proporcao aplicada de fato; a do arquivo na Original, com --proporcao ou
         // quando a escolha nao valeu (software, recuo para o SDL)
         d.graphics.aspect = st::aspect_for_file(applied_.graphics.aspect, wide_ ? st::Aspect::Wide16x9 : st::Aspect::Original4x3,
@@ -1000,7 +1020,8 @@ private:
     bool                              renderOverride_ = false, subtitleOverride_ = false, cameraOverride_ = false;
     // N9.5 fase 1: o quadro largo (16:9 hor+) pode existir (Remastered + Vulkan direta), o ativo (0 = 4:3) e se a
     // proporcao veio da linha de comando (so nesta execucao)
-    bool                              wideAllowed_ = false, aspectOverride_ = false;
+    bool                              wideAllowed_ = false, aspectOverride_ = false, ssaoOverride_ = false,
+                                      ssaoQualityOverride_ = false;
     uint32_t                          wide_ = 0;
     // N9.5 fase 5B: a --resolucao-interna (0 = a do graficos.toml; so nesta execucao) e a altura interna enviada ao jogo
     uint32_t                          heightOverride_ = 0, appliedHeight_ = 0, gpuMax_ = 480;
@@ -1916,6 +1937,10 @@ int mainHeadless(Args& a) {
         std::fprintf(stderr, "erro: --proporcao 16:9 so na edicao Remastered com --render nativo\n");
         return 2;
     }
+    if (a.ssao == 2 && (!editionProfile().lighting_effects || opt.render != bs::RenderProvider::Native)) {  // N9.6 fase 1
+        std::fprintf(stderr, "erro: --ssao ligado so na edicao Remastered com --render nativo\n");
+        return 2;
+    }
     opt.input           = input.get();
     if (assist) opt.vblankHook = [&assist](const bs::GameOptions::VblankView& v) { return assist->onVblank(v); };
     bs::GameHost host;
@@ -1939,6 +1964,8 @@ int mainHeadless(Args& a) {
         host.setRenderScale(float(h) / 480.f);
     }
     if (a.aspect == 2) host.setWideWidth(bs::native::render::kWideWidth);  // validado antes de comecar (headlessAspect)
+    if (a.ssao == 2)  // N9.6 fase 1 (validado acima); sem --ssao-qualidade, a media (o padrao do graficos.toml)
+        host.setAmbientOcclusion(true, a.ssaoQuality >= 0 ? uint32_t(a.ssaoQuality) : uint32_t(st::SsaoQuality::Medium));
 #if BS_VALIDACAO
     // N9.2: prova do reinicio (GameHost::restart, "Menu principal" da Remastered): BS_REINICIO_TESTE=<vblanks> reinicia a
     // sessao uma vez depois desses VBlanks; a sessao nova tem de dar o mesmo estado por passo de um processo novo
@@ -2175,11 +2202,14 @@ int mainWindow(Args& a) {
         caps.features.color = caps.features.shaders = true;  // N7c (secao 21): pos-processamento na apresentacao direta
         caps.features.tonemap = caps.features.sharpen = caps.features.bloom = caps.features.crt = true;
         caps.wide_frame = editionProfile().wide_frame;  // N9.5 fase 1: o quadro largo vai pelo slot da apresentacao direta
+        caps.features.ssao = editionProfile().lighting_effects;  // N9.6 fase 1: a oclusao ambiente da Remastered
     }
     // N9.5 fase 5A: a edicao tem a opcao 4:3/16:9 (com o Vulkan): a escolha 16:9 fica guardada mesmo quando o quadro largo
     // nao existe nesta execucao (caps.wide_frame; o recuo para o SDL), e so a imagem fica em 4:3 (effective_aspect)
     caps.features.aspect_wide = caps.vulkan && editionProfile().wide_frame;
     if (a.aspect) prefs.graphics.aspect = a.aspect == 2 ? st::Aspect::Wide16x9 : st::Aspect::Original4x3;  // so nesta execucao
+    if (a.ssao) prefs.graphics.ssao = a.ssao == 2;  // N9.6 fase 1: so nesta execucao (clamp_to desliga sem o recurso)
+    if (a.ssaoQuality >= 0) prefs.graphics.ssao_quality = st::SsaoQuality(a.ssaoQuality);
     // N9.5 (revisao Codex 20261105-180747; fase 5B): o limite da GPU (max_internal_height) e calculado para um alvo 4:3; o
     // quadro largo tem 854/640 da largura e o seu limite e outro (graphics_settings: max_internal_height). Antes da fase 5B
     // ele so valia com o 16:9 ja no inicio; agora vale na proporcao em uso, inclusive depois de uma troca pelo menu, e a
@@ -2234,6 +2264,8 @@ int mainWindow(Args& a) {
         menu.set_shaders(std::move(postShaders));
         menu.set_wide_frame(caps.wide_frame);
         if (a.aspect) menu.set_aspect_override();
+        if (a.ssao) menu.set_ssao_override();
+        if (a.ssaoQuality >= 0) menu.set_ssao_quality_override();
         menu.set_speakers_available(speakers);
         menu.set_internal_height_override(a.internalHeight, gpuMaxHeight);  // so nesta execucao (com o limite da proporcao em uso)
         menu.apply(prefs, true);

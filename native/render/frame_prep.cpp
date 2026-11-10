@@ -19,6 +19,18 @@ PassMode mode_of(ListType l, bool autosort) {
 
 } // namespace
 
+bool is_scene3d(const CommandList& cl, const Draw& d) {
+    if (d.vertex_count < 3 || d.first_vertex > cl.vertices.size() || d.vertex_count > cl.vertices.size() - d.first_vertex)
+        return false;
+    float lo = INFINITY, hi = -INFINITY;
+    for (uint32_t k = 0; k < d.vertex_count; ++k) {
+        const float z = cl.vertices[d.first_vertex + k].inv_w;
+        if (!std::isfinite(z) || z <= 0) return false;
+        lo = std::fmin(lo, z), hi = std::fmax(hi, z);
+    }
+    return hi > lo;
+}
+
 void prepare_frame(const CommandList& cl, PreparedFrame& out, bool exact, float scale) {
     out = {};
     const FrameParams& f = cl.frame;
@@ -32,6 +44,7 @@ void prepare_frame(const CommandList& cl, PreparedFrame& out, bool exact, float 
         const PassMode mode = mode_of(list, f.translucent_autosort);
         for (const Draw& d : cl.draws) {
             if (d.state.list != list) continue;
+            const bool scene3d = list != ListType::Translucent && is_scene3d(cl, d);  // N9.6 fase 1
             for (uint32_t k = 0; k + 3 <= d.vertex_count; ++k) {
                 ++seq;  // o software conta cada triangulo que tenta desenhar
                 const Vertex* v[3] = {&cl.vertices[d.first_vertex + k], &cl.vertices[d.first_vertex + k + 1],
@@ -72,9 +85,11 @@ void prepare_frame(const CommandList& cl, PreparedFrame& out, bool exact, float 
                         continue;
                     }
                 }
-                if (out.batches.empty() || out.batches.back().mode != mode || !(out.batches.back().state == d.state)) {
+                if (out.batches.empty() || out.batches.back().mode != mode || !(out.batches.back().state == d.state) ||
+                    out.batches.back().scene3d != scene3d) {
                     Batch bt;
                     bt.mode = mode, bt.state = d.state, bt.first = uint32_t(out.vertices.size()), bt.scissor = scissor;
+                    bt.scene3d = scene3d;
                     out.batches.push_back(bt);
                 }
                 for (int i = 0; i < 3; ++i) maxz = std::fmax(maxz, v[i]->inv_w), minz = std::fmin(minz, v[i]->inv_w);
