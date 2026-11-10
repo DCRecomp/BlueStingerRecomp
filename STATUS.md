@@ -4326,6 +4326,20 @@ não por uma única bateria contínua** (decisão do mantenedor, 2026-11-02).
 - **Pendências:** H9; D-N8-4 no gate pós-N9; ressalva do 7.1 e D-K1(a); limite de 3 h de `n6_h` no executor, defeito a
   corrigir antes de uma futura integral, sem enfraquecer os testes. N9 e N10 não iniciados.
 
+### N9.5 fase 5A: a proporção no menu e no arquivo (2026-11-10, commit local)
+
+Detalhes em `docs/N9-5-AUDITORIA.md`, seções 16.0 e 16.1. Autorizada pelo mantenedor com as decisões D5-1 a D5-4.
+- **Antes:** o protótipo de água isolado na branch local `n9-7-agua-prototipo` (`8cf3971`, worktree `tmp/wt-n97-agua`; 32
+  arquivos iguais aos da árvore de trabalho, bundle em `tmp/`; arquivos particulares fora; árvore principal intacta).
+- **Produto:** a linha "Proporção" da Remastered com Vulkan alterna 4:3/16:9 na hora (D5-2), sem o automático (D5-1; arquivo
+  antigo `"auto"`/`"automatico"` vale 4:3 com aviso); a Original mostra "4:3 (original)" fixo e não reescreve a proporção do
+  arquivo (D5-4); com o software, "4:3 (16:9 só com Vulkan)". O arquivo guarda só a proporção aplicada de fato
+  (`aspect_for_file`). Só validação: `BS_APRESENTACAO_FALHAR=<n>`.
+- **Resultados:** `bs_unit_tests` 370/0, `bs_render_tests` 91/0, ctest 30/30 e 23/23; P1–P5 (`tools/dev/n95_persistencia.py`,
+  novo) 0 falhas; `n7_menu_pausa` 6/0; J3 e J4 sem falhas. P3 com o critério do corte do log corrigido (16.1).
+- **Revisão Codex `codex-20261110-004711`:** médio (o limite da resolução na troca para 16:9) aceito para a 5B; baixo (testes
+  do `--proporcao` e do recuo para o SDL) aceito: P4 e P5.
+
 ### N9.5 fase 4: o pilar dinâmico nas bordas do widescreen (2026-11-09, commit local)
 
 Detalhes em `docs/N9-5-AUDITORIA.md`, seção 15. Autorizada com a publicação da fase 3; o tratamento (pilar dinâmico)

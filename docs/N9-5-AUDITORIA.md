@@ -1059,3 +1059,69 @@ são os do build, conferidos pela hora). Logs em `tmp/sessao-20261109/logs` (for
 - **Sprites descartados além do 4:3** (a nota do B2 da fase 1): o jogo não envia algumas sprites que ficariam nas faixas;
   com o pilar ou sem ele, elas não aparecem. Não tratado.
 - **Fase 5:** espera autorização (menu 4:3/16:9, 21:9, desempenho, o risco residual da marca do HUD da seção 14.10).
+
+## 16. Fase 5: configurações, transições e desempenho (2026-11-10)
+
+Autorizada pelo mantenedor em 2026-11-10, com as decisões D5-1 a D5-4. A fase 4 fica no commit local `17963bb`, sem
+publicação separada. Antes da fase 5, o protótipo de água do Codex (N9.7) foi isolado numa branch local (16.0).
+
+### 16.0 O protótipo de água isolado (antes da fase 5)
+
+- **Branch local `n9-7-agua-prototipo`** (commit `8cf3971` sobre o `17963bb`), na worktree `tmp/wt-n97-agua`. Leva os 32
+  arquivos da água: os 28 rastreados alterados (shaders, os 7 SPIR-V, `vk_device`, `render_core`, `render_capture.h`,
+  `graphics_settings`, `settings_menu`, `main_sdl`, `game_host`, `edition`, os testes, o `bs-ir-tela`, os dois
+  `CMakeLists.txt` e o bloco N9.7 do `STATUS.md`) e os 4 novos (`water.{h,cpp}`, `test_water.cpp`, `docs/N9-7-AGUA.md`).
+- **Fora dela:** os arquivos particulares (`known_versions.h`, `DISTRIBUICAO-COMPILADOR.md`, hashes conferidos sem mudança),
+  o `_bs-extract.exe` e o `tools/extractor/build/`.
+- **Conferência:** os 32 arquivos da branch iguais aos da árvore de trabalho (dois só no fim de linha, CRLF). Cópia
+  independente em `tmp/sessao-20261110/agua/` (bundle verificado, patch e o diff de origem); o backup de 2026-11-08 ficou
+  intacto. A árvore principal não foi limpa. O N9.7 continua não iniciado; a branch não foi testada nem integrada.
+
+### 16.1 Fase 5A: o menu e o arquivo
+
+**Como era (confirmado no código antes da mudança):** a linha "Proporção" existia, mas dependia de
+`Features::aspect_wide`, que nenhum caminho ligava, e aparecia "em breve"; ela percorria três valores (com o automático);
+a proporção pedia a confirmação de 15 s, mas o arquivo gravava a escolha antes dela; com o software escolhido, o menu e o
+arquivo diziam 16:9 com a imagem em 4:3.
+
+**Decisões do mantenedor (2026-11-10):**
+
+| | Decisão | Implementação |
+|---|---|---|
+| D5-1 | sem o automático no menu; arquivo antigo vale 4:3 | `from_toml` lê `"auto"` (o nome gravado até a fase 4) e `"automatico"` como 4:3, com o aviso no log; `clamp_to` leva `Aspect::Auto` a 4:3; a próxima gravação escreve `"4:3"` |
+| D5-2 | a troca vale na hora; o arquivo guarda a proporção aplicada de fato | `requires_confirmation` sem a proporção (`apply_kind` continua `Recreate`); `aspect_for_file` grava a escolha só quando ela vale na imagem |
+| D5-3 | telemetria no produto, desligada por padrão | fase 5C |
+| D5-4 | a Original fica em 4:3 fixo | a linha mostra "4:3 (original)" sem mudança; a Original nunca reescreve a proporção do arquivo |
+
+**As regras (funções puras em `native/platform/graphics_settings`):**
+- `aspect_choice`: `Fixed` (a edição sem o quadro largo), `Unavailable` (a Remastered sem a apresentação Vulkan direta,
+  inclusive depois do recuo para o SDL), `NeedsVulkan` (o software escolhido) e `Free`.
+- `effective_aspect`: 16:9 só com `Free` e o 16:9 escolhido.
+- `aspect_for_file`: a proporção do arquivo quando a escolha não é `Free`, quando veio do `--proporcao` ou quando não valeu;
+  senão, a escolhida. A escolha 16:9 fica guardada com o software, sem Vulkan e depois do recuo para o SDL: só a imagem fica
+  em 4:3.
+
+**O menu (`app/settings_menu`):** só 4:3 e 16:9; o valor é a proporção em uso; "4:3 (16:9 só com Vulkan)" com o software
+e "4:3 (16:9 indisponível)" sem o quadro largo, as duas sem mudança. **`main_sdl`:** `apply` usa `effective_aspect`; o
+`persist` usa `aspect_for_file`; o `drop_wide` avisa o menu; uma mudança da proporção no menu tira o `--proporcao`.
+
+**Testes:**
+
+| Teste | Resultado |
+|---|---|
+| `graphics_aspect_rules_fase5`, `settings_menu_aspect_fase5` (novos) e os existentes | `bs_unit_tests` 370/0 |
+| `bs_render_tests` | 91/0 |
+| ctest `msvc-debug` / `msvc-release` | 30/30, 23/23 (no `release`, os 3 testes que pedem a imagem do disco ficam pulados, como antes) |
+| **P1–P5** (`tools/dev/n95_persistencia.py`, novo, janela com o controle virtual) | 0 falhas: P1 16:9 na hora, sem confirmação, gravado e lido na execução seguinte; P2 arquivo com `"automatico"` vale 4:3 com aviso e some na troca; P3 software (linha indisponível, 16:9 guardado, de volta ao Vulkan o 16:9 vale) e Original (4:3 com 16:9 no arquivo, a proporção do arquivo intacta); P4 `--proporcao` nos dois sentidos e mudado no menu; P5 o recuo real para o SDL |
+| `n7_menu_pausa` (o menu pausa e retoma) | 6/0 |
+| J3, J4 (Original e 4:3 na janela) | 0 falhas |
+
+- **P3, critério corrigido:** a primeira execução cortava o log na troca do renderizador; a thread do jogo registra o quadro
+  largo antes dela, no mesmo pedido (o software nunca desenha o largo: `render_core` só alarga no modo nativo). O corte
+  passou a ser a linha do menu que aplica o 16:9, mais um critério novo: a Direita na linha indisponível não gera troca.
+- **Só validação, novo:** `BS_APRESENTACAO_FALHAR=<n>` dá a apresentação Vulkan como falha a partir do n-ésimo quadro (o
+  caminho real do recuo para o SDL), para o P5.
+
+**Revisão Codex `codex-20261110-004711`:**
+- **Média — o limite da resolução não acompanha a troca para 16:9:** aceita; é a lacuna da fase 5B (16.2).
+- **Baixa — faltavam o `--proporcao` e o recuo para o SDL nos testes integrados:** aceita; P4 e P5.

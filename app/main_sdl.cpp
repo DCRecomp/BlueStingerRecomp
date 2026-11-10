@@ -825,6 +825,7 @@ public:
     void drop_wide() {
         if (!wideAllowed_) return;
         wideAllowed_ = false, wide_ = 0;
+        menu_.set_wide_frame_available(false);  // N9.5 fase 5: o menu mostra 4:3 (16:9 indisponivel)
         host_.setWideWidth(0);
         std::fprintf(stderr, "[menu] proporcao: 4:3 (a apresentacao SDL nao desenha o quadro largo)\n");
     }
@@ -871,7 +872,10 @@ public:
             }
         }
         // N9.5 fase 1: o quadro largo (so a Remastered com o Vulkan; o software e a Original ficam em 4:3)
-        if (const uint32_t w = wideAllowed_ && g.vulkan && g.aspect == st::Aspect::Wide16x9 ? bs::native::render::kWideWidth : 0;
+        // N9.5 fase 5A: a proporcao em uso pela regra pura (graphics_settings: effective_aspect); a troca vale na hora (D5-2)
+        if (const uint32_t w = st::effective_aspect(g, menu_.capabilities(), editionProfile().wide_frame) == st::Aspect::Wide16x9
+                                   ? bs::native::render::kWideWidth
+                                   : 0;
             start || w != wide_) {
             wide_ = w;
             host_.setWideWidth(w);
@@ -900,6 +904,7 @@ public:
         if (start) return;
         // um item da linha de comando mudado no menu deixa de ser so desta execucao
         if (g.vulkan != old.graphics.vulkan) renderOverride_ = false;
+        if (g.aspect != old.graphics.aspect) aspectOverride_ = false;  // N9.5 fase 5A: escolhida no menu, deixa de ser da linha de comando
         if (p.camera.mode != old.camera.mode) cameraOverride_ = false;
         if (p.subtitles.enabled != old.subtitles.enabled || p.subtitles.language != old.subtitles.language) subtitleOverride_ = false;
         persist();
@@ -916,7 +921,12 @@ public:
         d.graphics.window = confirmed_.window, d.graphics.window_w = confirmed_.window_w, d.graphics.window_h = confirmed_.window_h;
         d.graphics.resolution = confirmed_.resolution, d.graphics.scale_pct = confirmed_.scale_pct;
         if (renderOverride_) d.graphics.vulkan = persisted_.graphics.vulkan;
-        if (aspectOverride_) d.graphics.aspect = persisted_.graphics.aspect;
+        // N9.5 fase 5A (D5-2, D5-4): a ultima proporcao aplicada de fato; a do arquivo na Original, com --proporcao ou
+        // quando a escolha nao valeu (software, recuo para o SDL)
+        d.graphics.aspect = st::aspect_for_file(applied_.graphics.aspect, wide_ ? st::Aspect::Wide16x9 : st::Aspect::Original4x3,
+                                                persisted_.graphics.aspect,
+                                                st::aspect_choice(applied_.graphics, menu_.capabilities(), editionProfile().wide_frame),
+                                                aspectOverride_);
         d.subtitles = applied_.subtitles;
         if (subtitleOverride_) d.subtitles.enabled = persisted_.subtitles.enabled, d.subtitles.language = persisted_.subtitles.language;
         d.camera = bs::native::edition::for_file(applied_.camera, persisted_.camera, editionProfile());
@@ -1428,6 +1438,16 @@ int runWindow(bs::GameHost& host, ni::InputSystem& input, const Args& a, SDL_Win
             std::snprintf(name, sizeof name, "janela_v%06llu_%dx%d.bmp", (unsigned long long)frame.vblank, ow, oh);
             writeBmp(fs::path(winDir) / name, f);
         }
+#if BS_VALIDACAO
+        // N9.5 fase 5 (so validacao, revisao Codex 20261110-004711): BS_APRESENTACAO_FALHAR=<n> da a apresentacao Vulkan como
+        // falha a partir do n-esimo quadro apresentado: o caminho real do recuo para o SDL (fallbackToSdl, drop_wide)
+        static const uint64_t failFrom = [] {
+            const char* v = std::getenv("BS_APRESENTACAO_FALHAR");
+            return v && *v ? std::strtoull(v, nullptr, 10) : 0ull;
+        }();
+        static uint64_t presented = 0;
+        if (failFrom && ++presented >= failFrom && std::strcmp(pres.p->name(), "Vulkan") == 0) ok = false;
+#endif
         gfxFailures = ok ? 0 : gfxFailures + 1;
         if (gfxFailures >= 120 && std::strcmp(pres.p->name(), "Vulkan") == 0 && fallbackToSdl(window, pres, renderer)) {
             gfxFailures = 0;
@@ -2079,6 +2099,9 @@ int mainWindow(Args& a) {
         caps.features.tonemap = caps.features.sharpen = caps.features.bloom = caps.features.crt = true;
         caps.wide_frame = editionProfile().wide_frame;  // N9.5 fase 1: o quadro largo vai pelo slot da apresentacao direta
     }
+    // N9.5 fase 5A: a edicao tem a opcao 4:3/16:9 (com o Vulkan): a escolha 16:9 fica guardada mesmo quando o quadro largo
+    // nao existe nesta execucao (caps.wide_frame; o recuo para o SDL), e so a imagem fica em 4:3 (effective_aspect)
+    caps.features.aspect_wide = caps.vulkan && editionProfile().wide_frame;
     if (a.aspect) prefs.graphics.aspect = a.aspect == 2 ? st::Aspect::Wide16x9 : st::Aspect::Original4x3;  // so nesta execucao
     // N9.5 (revisao Codex 20261105-180747): o limite da GPU (max_internal_height) e calculado para um alvo 4:3; o quadro
     // largo tem 854/640 da largura. Com ele pedido, o limite cai pelo fator da largura ((480/854) / (3/4), o mais

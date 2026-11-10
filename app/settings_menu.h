@@ -85,6 +85,10 @@ public:
     void set_shaders(std::vector<ShaderChoice> s) { shaders_ = std::move(s); }
     // algum pacote de legendas instalado diz quem fala (campo "personagem"): a opcao de identificacao fica disponivel
     void set_speakers_available(bool on) { speakers_ = on; }
+    // N9.5 fase 5: o quadro largo deixou de existir nesta execucao (a apresentacao recuou para o SDL): a proporcao em
+    // uso passa a 4:3 e a opcao fica indisponivel
+    void set_wide_frame_available(bool on) { caps_.wide_frame = on; }
+    const native::settings::Capabilities& capabilities() const { return caps_; }
     // N9.2: o rotulo do ultimo item da pagina principal ("Voltar ao jogo" por padrao; a Remastered usa "Voltar" quando o
     // menu foi aberto do menu inicial, sem partida). Vazio = o padrao.
     void set_return_label(std::string pt, std::string en) { returnPt_ = std::move(pt), returnEn_ = std::move(en); }

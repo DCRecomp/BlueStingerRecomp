@@ -142,8 +142,9 @@ GraphicsSettings clamp_to(const GraphicsSettings& in, const Capabilities& caps, 
     off(f.filtering, s.filter != o.filter, [&] { s.filter = o.filter; }, "filtragem");
     off(f.window_modes, s.window != WindowMode::Windowed, [&] { s.window = WindowMode::Windowed; }, "modo de tela");
     off(f.vsync, !s.vsync, [&] { s.vsync = true; }, "V-Sync");
+    // N9.5 fase 5 (D5-1): o automatico saiu; vale 4:3
+    if (s.aspect == Aspect::Auto) s.aspect = Aspect::Original4x3, note("proporcao automatica removida (N9.5 fase 5): 4:3");
     off(f.aspect_wide || caps.wide_frame, s.aspect != Aspect::Original4x3, [&] { s.aspect = Aspect::Original4x3; }, "16:9");
-    if (!f.aspect_wide && s.aspect == Aspect::Auto) s.aspect = Aspect::Original4x3, note("proporcao automatica: 4:3 ate o HUD em 16:9");
     off(f.hd_textures, s.hd_textures, [&] { s.hd_textures = false; }, "texturas HD");
     off(f.lighting, s.lighting, [&] { s.lighting = false; }, "iluminacao");
     off(f.shadows, s.shadows != Shadows::Original, [&] { s.shadows = Shadows::Original; }, "sombras");
@@ -175,13 +176,30 @@ GraphicsSettings clamp_to(const GraphicsSettings& in, const Capabilities& caps, 
 }
 
 bool requires_confirmation(const GraphicsSettings& a, const GraphicsSettings& b) {
-    return a.resolution != b.resolution || a.scale_pct != b.scale_pct || a.window != b.window || a.aspect != b.aspect ||
-           a.window_w != b.window_w || a.window_h != b.window_h;
+    return a.resolution != b.resolution || a.scale_pct != b.scale_pct || a.window != b.window || a.window_w != b.window_w ||
+           a.window_h != b.window_h;
+}
+
+AspectChoice aspect_choice(const GraphicsSettings& s, const Capabilities& caps, bool edition_wide) {
+    if (!edition_wide) return AspectChoice::Fixed;
+    if (!caps.wide_frame) return AspectChoice::Unavailable;
+    if (!s.vulkan) return AspectChoice::NeedsVulkan;
+    return AspectChoice::Free;
+}
+
+Aspect effective_aspect(const GraphicsSettings& s, const Capabilities& caps, bool edition_wide) {
+    return aspect_choice(s, caps, edition_wide) == AspectChoice::Free && s.aspect == Aspect::Wide16x9 ? Aspect::Wide16x9
+                                                                                                      : Aspect::Original4x3;
+}
+
+Aspect aspect_for_file(Aspect selected, Aspect effective, Aspect on_file, AspectChoice choice, bool from_command_line) {
+    if (choice != AspectChoice::Free || from_command_line || selected != effective) return on_file;
+    return selected;
 }
 
 Apply apply_kind(const GraphicsSettings& a, const GraphicsSettings& b) {
     if (a == b) return Apply::None;
-    if (requires_confirmation(a, b) || a.msaa != b.msaa || a.vsync != b.vsync) return Apply::Recreate;
+    if (requires_confirmation(a, b) || a.aspect != b.aspect || a.msaa != b.msaa || a.vsync != b.vsync) return Apply::Recreate;
     return Apply::Immediate;
 }
 
@@ -279,7 +297,12 @@ GraphicsSettings from_toml(const std::string& text, std::string* warning) {
     if (const auto* t = doc["shader_parametros"].as_table())
         for (const auto& [k, v] : *t)
             if (auto d = v.value<double>(); d && std::isfinite(*d)) s.shader_params[std::string(k.str())] = float(*d);
-    str("tela", "modo", s.window), str("tela", "proporcao", s.aspect), bln("tela", "vsync", s.vsync);
+    str("tela", "modo", s.window), bln("tela", "vsync", s.vsync);
+    // N9.5 fase 5 (D5-1): "auto" (o nome gravado ate a fase 4) e "automatico" valem 4:3, com aviso; a proxima gravacao
+    // escreve "4:3"
+    std::string oldAspect;
+    if (auto v = doc["tela"]["proporcao"].value<std::string>(); v && (*v == "automatico" || *v == "auto")) oldAspect = *v;
+    else str("tela", "proporcao", s.aspect);
     num("tela", "largura", s.window_w), num("tela", "altura", s.window_h);
     if (auto v = doc["tela"]["renderizador"].value<std::string>()) {
         if (*v == "vulkan") s.vulkan = true;
@@ -287,6 +310,12 @@ GraphicsSettings from_toml(const std::string& text, std::string* warning) {
         else bad += std::string(bad.empty() ? "" : ", ") + "tela.renderizador";
     }
     if (!bad.empty() && warning) *warning = "graficos.toml: valor desconhecido em " + bad + " (padrao nesses campos)";
+    if (!oldAspect.empty()) {
+        s.aspect = Aspect::Original4x3;
+        if (warning)
+            *warning += std::string(warning->empty() ? "" : "; ") + "graficos.toml: tela.proporcao = \"" + oldAspect +
+                        "\" vale 4:3 (proporcao automatica removida temporariamente, N9.5 fase 5)";
+    }
     // faixas: o que estiver fora volta para a faixa (a GPU decide o resto em clamp_to)
     Capabilities all;
     all.vulkan = true, all.max_msaa = 8, all.max_anisotropy = 16, all.max_height = 1u << 30, all.wide_hud = true;

@@ -78,12 +78,57 @@ BS_TEST(graphics_confirmation_rule) {
     BS_CHECK(st::apply_kind(a, b) == st::Apply::Recreate && !st::requires_confirmation(a, b));
     b = a, b.window_w = 1920, b.window_h = 1080;
     BS_CHECK(st::apply_kind(a, b) == st::Apply::Recreate && st::requires_confirmation(a, b));
+    // N9.5 fase 5 (D5-2): a proporcao recria os alvos, mas vale na hora (sem a confirmacao de 15 s)
+    b = a, b.aspect = st::Aspect::Wide16x9;
+    BS_CHECK(st::apply_kind(a, b) == st::Apply::Recreate && !st::requires_confirmation(a, b));
+}
+
+// N9.5 fase 5A (D5-1, D5-2, D5-4): disponibilidade, proporcao em uso, arquivo antigo com "automatico" e a regra do arquivo
+BS_TEST(graphics_aspect_rules_fase5) {
+    using st::Aspect;
+    using st::AspectChoice;
+    st::Capabilities wide;
+    wide.vulkan = true, wide.wide_frame = true, wide.features.aspect_wide = true;
+    st::GraphicsSettings s;
+    s.aspect = Aspect::Wide16x9;
+    // a Original: 4:3 fixo, mesmo com o quadro largo existindo
+    BS_CHECK(st::aspect_choice(s, wide, false) == AspectChoice::Fixed && st::effective_aspect(s, wide, false) == Aspect::Original4x3);
+    BS_CHECK(st::aspect_choice(s, wide, true) == AspectChoice::Free && st::effective_aspect(s, wide, true) == Aspect::Wide16x9);
+    st::Capabilities sdl = wide;
+    sdl.wide_frame = false;  // a apresentacao recuou para o SDL
+    BS_CHECK(st::aspect_choice(s, sdl, true) == AspectChoice::Unavailable && st::effective_aspect(s, sdl, true) == Aspect::Original4x3);
+    st::GraphicsSettings soft = s;
+    soft.vulkan = false;  // software escolhido no menu
+    BS_CHECK(st::aspect_choice(soft, wide, true) == AspectChoice::NeedsVulkan &&
+             st::effective_aspect(soft, wide, true) == Aspect::Original4x3);
+    // a escolha 16:9 fica guardada com o software ou sem o quadro largo; so a imagem fica em 4:3
+    BS_CHECK(st::clamp_to(soft, wide).aspect == Aspect::Wide16x9);
+    // o automatico: arquivo antigo ("auto" ate a fase 4, "automatico") vale 4:3, com aviso; clamp_to tambem o leva a 4:3
+    for (const char* v : {"auto", "automatico"}) {
+        std::string warn;
+        const st::GraphicsSettings r = st::from_toml(std::string("[tela]\nproporcao = \"") + v + "\"\n", &warn);
+        BS_CHECK(r.aspect == Aspect::Original4x3 && warn.find("4:3") != std::string::npos);
+    }
+    st::GraphicsSettings a = s;
+    a.aspect = Aspect::Auto;
+    std::vector<std::string> notes;
+    BS_CHECK(st::clamp_to(a, wide, &notes).aspect == Aspect::Original4x3 && !notes.empty());
+    BS_CHECK(st::to_toml(st::from_toml("[tela]\nproporcao = \"automatico\"\n")).find("proporcao = \"4:3\"") != std::string::npos);
+    // o arquivo: so a proporcao escolhida e aplicada de fato
+    BS_CHECK(st::aspect_for_file(Aspect::Wide16x9, Aspect::Wide16x9, Aspect::Original4x3, AspectChoice::Free, false) == Aspect::Wide16x9);
+    BS_CHECK(st::aspect_for_file(Aspect::Original4x3, Aspect::Original4x3, Aspect::Wide16x9, AspectChoice::Free, false) == Aspect::Original4x3);
+    // nao chegou a valer (o quadro largo nao ligou): fica a do arquivo
+    BS_CHECK(st::aspect_for_file(Aspect::Wide16x9, Aspect::Original4x3, Aspect::Original4x3, AspectChoice::Free, false) == Aspect::Original4x3);
+    // --proporcao (so nesta execucao), a Original, o software e sem o quadro largo: a do arquivo
+    BS_CHECK(st::aspect_for_file(Aspect::Wide16x9, Aspect::Wide16x9, Aspect::Original4x3, AspectChoice::Free, true) == Aspect::Original4x3);
+    for (AspectChoice c : {AspectChoice::Fixed, AspectChoice::Unavailable, AspectChoice::NeedsVulkan})
+        BS_CHECK(st::aspect_for_file(Aspect::Original4x3, Aspect::Original4x3, Aspect::Wide16x9, c, false) == Aspect::Wide16x9);
 }
 
 BS_TEST(graphics_toml_round_trip_and_invalid_values) {
     st::GraphicsSettings s = st::preset(st::Preset::High);
     s.window = st::WindowMode::Borderless, s.vsync = false, s.gamma = 1.25f, s.shader = "teste";
-    s.aspect = st::Aspect::Auto, s.window_w = 1280, s.window_h = 960, s.vulkan = true;
+    s.aspect = st::Aspect::Wide16x9, s.window_w = 1280, s.window_h = 960, s.vulkan = true;
     std::string warn;
     BS_CHECK(st::from_toml(st::to_toml(s), &warn) == s && warn.empty());
     // valor desconhecido: o padrao no campo, com aviso; fora da faixa: para a faixa

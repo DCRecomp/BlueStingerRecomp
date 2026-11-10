@@ -86,7 +86,6 @@ std::vector<SettingsMenu::Entry> SettingsMenu::entries() const {
     case Page::Graphics: {
         const auto& g   = prefs_.graphics;
         const char* res[] = {"original (640x480)", "720p", "1080p", "1440p", "4K"};
-        const char* asp[] = {L("4:3 (original)", "4:3 (original)"), "16:9", L("automático", "automatic")};
         const char* win[] = {L("janela", "windowed"), L("tela cheia", "fullscreen"), L("sem bordas", "borderless")};
         const char* flt[] = {"original", "bilinear", L("anisotrópica", "anisotropic")};
         e.push_back({L("Renderizador", "Renderer"), g.vulkan ? "Vulkan" : L("software (original)", "software (original)"), caps_.vulkan,
@@ -105,8 +104,18 @@ std::vector<SettingsMenu::Entry> SettingsMenu::entries() const {
                      }});
         e.push_back({L("Escala de renderização", "Render scale"), soon(f.scaling, pct(g.scale_pct)), scaling,
                      [](Preferences& p, int d) { p.graphics.scale_pct = step(p.graphics.scale_pct, d, 50, 200, 25); }});
-        e.push_back({L("Proporção", "Aspect ratio"), soon(f.aspect_wide, asp[size_t(g.aspect)]), f.aspect_wide,
-                     [](Preferences& p, int d) { p.graphics.aspect = cycle(p.graphics.aspect, d, 3); }});
+        {  // N9.5 fase 5A (D5-1, D5-4): so 4:3 e 16:9; o valor e a proporcao em uso (aspect_choice/effective_aspect)
+            const st::AspectChoice ac  = st::aspect_choice(g, caps_, profile_.wide_frame);
+            const st::Aspect       eff = st::effective_aspect(g, caps_, profile_.wide_frame);
+            std::string            v   = ac == st::AspectChoice::Fixed ? std::string(L("4:3 (original)", "4:3 (original)"))
+                                         : eff == st::Aspect::Wide16x9 ? std::string("16:9")
+                                                                       : std::string("4:3");
+            if (ac == st::AspectChoice::NeedsVulkan) v += L(" (16:9 só com Vulkan)", " (16:9 Vulkan only)");
+            if (ac == st::AspectChoice::Unavailable) v += L(" (16:9 indisponível)", " (16:9 unavailable)");
+            e.push_back({L("Proporção", "Aspect ratio"), v, ac == st::AspectChoice::Free, [](Preferences& p, int) {
+                             p.graphics.aspect = p.graphics.aspect == st::Aspect::Wide16x9 ? st::Aspect::Original4x3 : st::Aspect::Wide16x9;
+                         }});
+        }
         e.push_back({L("Modo de tela", "Display mode"), soon(f.window_modes, win[size_t(g.window)]), f.window_modes,
                      [](Preferences& p, int d) { p.graphics.window = cycle(p.graphics.window, d, 3); }});
         {

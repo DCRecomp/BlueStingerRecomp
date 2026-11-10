@@ -30,7 +30,8 @@ inline constexpr uint32_t       kCrtMinHeight   = 1080;
 enum class Preset : uint8_t { Original, Balanced, High, Custom };
 enum class Resolution : uint8_t { Original, P720, P1080, P1440, P2160 };  // altura interna 480/720/1080/1440/2160
 enum class WindowMode : uint8_t { Windowed, Fullscreen, Borderless };
-enum class Aspect : uint8_t { Original4x3, Wide16x9, Auto };  // Auto: 16:9 so se a janela for larga e o HUD corrigido
+// Auto: removido temporariamente (N9.5 fase 5, D5-1); fica no enum para ler arquivos antigos, e clamp_to o leva a 4:3
+enum class Aspect : uint8_t { Original4x3, Wide16x9, Auto };
 enum class Filter : uint8_t { Original, Bilinear, Anisotropic };
 enum class Shadows : uint8_t { Original, Enhanced };
 
@@ -90,8 +91,8 @@ struct Capabilities {
     uint32_t max_height     = 480;  // maior altura interna que cabe na memoria/limites da GPU
     bool     wide_hud       = false;  // correcao do HUD em 16:9 disponivel
     // N9.5 fase 1: o quadro largo (hor+) existe nesta edicao e neste renderizador (Remastered + Vulkan com apresentacao
-    // direta). Libera Aspect::Wide16x9 no graficos.toml mesmo sem a opcao no menu (features.aspect_wide, fase 5); o HUD
-    // fica centrado num 4:3 virtual ate as fases 2 e 3, e Aspect::Auto continua 4:3 enquanto o HUD nao for corrigido.
+    // direta). Libera Aspect::Wide16x9 no graficos.toml e, desde a fase 5, a opcao 4:3/16:9 no menu (aspect_choice);
+    // Aspect::Auto vale 4:3 (D5-1).
     bool     wide_frame     = false;
 };
 
@@ -102,8 +103,30 @@ uint32_t         internal_height(const GraphicsSettings& s);  // altura interna 
 // O que o renderizador consegue: cada opcao sem suporte volta ao valor seguro, com o motivo em *notes.
 GraphicsSettings clamp_to(const GraphicsSettings& s, const Capabilities& caps, std::vector<std::string>* notes = nullptr);
 
-// Mudanca que pede confirmacao com reversao automatica (resolucao, escala, modo de tela, proporcao).
+// Mudanca que pede confirmacao com reversao automatica (resolucao, escala, modo de tela, tamanho da janela). A proporcao
+// nao pede (N9.5 fase 5, D5-2): ela nao muda o tamanho da janela e vale na hora.
 bool requires_confirmation(const GraphicsSettings& from, const GraphicsSettings& to);
+
+// N9.5 fase 5A (decisoes D5-1, D5-2 e D5-4 do mantenedor, 2026-11-10): a proporcao.
+// - D5-1: o "automatico" saiu do menu; um graficos.toml antigo com "auto"/"automatico" vale 4:3 (aviso na leitura).
+// - D5-2: a troca 4:3 <-> 16:9 vale na hora, sem a confirmacao de 15 s; o arquivo guarda a ultima proporcao aplicada de
+//   fato (aspect_for_file), nunca uma escolha que nao chegou a valer.
+// - D5-4: na edicao Original a proporcao e 4:3 fixa; o menu mostra "4:3 (original)" sem permitir mudanca, e o arquivo
+//   (que a outra edicao pode ler) nao e reescrito por ela.
+enum class AspectChoice : uint8_t {
+    Fixed,        // a edicao nao tem o quadro largo (Original): 4:3 fixo
+    Unavailable,  // a Remastered sem a apresentacao Vulkan direta (o SDL nao desenha o quadro largo): 4:3
+    NeedsVulkan,  // a Remastered com o renderizador em software escolhido: 4:3 ate voltar ao Vulkan
+    Free,         // 4:3 ou 16:9
+};
+// `edition_wide` = EditionProfile::wide_frame; `caps.wide_frame` = o quadro largo existe nesta execucao.
+AspectChoice aspect_choice(const GraphicsSettings& s, const Capabilities& caps, bool edition_wide);
+// A proporcao que vale na imagem: 16:9 so com a escolha Free e o 16:9 escolhido.
+Aspect effective_aspect(const GraphicsSettings& s, const Capabilities& caps, bool edition_wide);
+// A proporcao que vai para o graficos.toml: a do arquivo quando o jogador nao pode escolher (`choice` != Free: a Original,
+// sem o quadro largo nesta execucao, com o software), quando ela veio da linha de comando (`--proporcao`, so nesta
+// execucao) ou quando a escolha nao chegou a valer (`effective` diferente); senao, a escolhida (que e a aplicada).
+Aspect aspect_for_file(Aspect selected, Aspect effective, Aspect on_file, AspectChoice choice, bool from_command_line);
 
 enum class Apply : uint8_t { None, Immediate, Recreate };  // nada mudou / no proximo quadro / recriar alvos e swapchain
 Apply apply_kind(const GraphicsSettings& from, const GraphicsSettings& to);

@@ -140,6 +140,59 @@ BS_TEST(settings_menu_display_confirmation_and_revert) {
     BS_CHECK(m.prefs().graphics.window == st::WindowMode::Fullscreen);
 }
 
+// N9.5 fase 5A (D5-1, D5-2, D5-4): a proporcao no menu. Remastered com o quadro largo: so 4:3 e 16:9, na hora (sem a
+// confirmacao); software: 4:3 em uso e o 16:9 guardado; sem o quadro largo (recuo para o SDL): indisponivel; Original: fixa.
+BS_TEST(settings_menu_aspect_fase5) {
+    namespace ed = bs::native::edition;
+    st::Capabilities caps;
+    caps.vulkan = true, caps.max_height = 2160, caps.wide_frame = true, caps.features.aspect_wide = true;
+    auto value = [](const bs::SettingsMenu& m, bool* enabled = nullptr) {
+        const auto v = m.view();
+        const int  i = find(v, "Propor\u00e7\u00e3o");
+        if (i < 0) return std::string("?");
+        if (enabled) *enabled = v.items[size_t(i)].enabled;
+        return v.items[size_t(i)].value;
+    };
+    bs::SettingsMenu m(pt(), caps, {"en-US"}, ed::profile_for(ed::Edition::Remastered));
+    m.open();
+    go(m, "Gr\u00e1ficos");
+    m.input(MenuAction::Confirm, 0);
+    bool on = false;
+    BS_CHECK(value(m, &on) == "4:3" && on);
+    go(m, "Propor\u00e7\u00e3o");
+    m.input(MenuAction::Right, 1.0);
+    BS_CHECK(m.prefs().graphics.aspect == st::Aspect::Wide16x9 && value(m) == "16:9" && m.view().prompt.empty() && !m.display_pending());
+    bs::Preferences out;
+    BS_CHECK(m.take_changes(out) && out.graphics.aspect == st::Aspect::Wide16x9);
+    m.input(MenuAction::Right, 2.0);  // so dois valores: volta ao 4:3 (o automatico saiu)
+    BS_CHECK(m.prefs().graphics.aspect == st::Aspect::Original4x3);
+    m.input(MenuAction::Left, 3.0);
+    BS_CHECK(m.prefs().graphics.aspect == st::Aspect::Wide16x9);
+    m.tick(3.0 + st::kConfirmSeconds + 1);  // nada a reverter
+    BS_CHECK(m.prefs().graphics.aspect == st::Aspect::Wide16x9);
+    // software: a imagem em 4:3, o 16:9 guardado, a linha indisponivel
+    go(m, "Renderizador");
+    m.input(MenuAction::Right, 20.0);
+    BS_CHECK(!m.prefs().graphics.vulkan && m.prefs().graphics.aspect == st::Aspect::Wide16x9);
+    BS_CHECK(value(m, &on) == "4:3 (16:9 s\u00f3 com Vulkan)" && !on);
+    m.input(MenuAction::Right, 21.0);  // de volta ao Vulkan: o 16:9 volta
+    BS_CHECK(value(m) == "16:9");
+    // a apresentacao recuou para o SDL
+    m.set_wide_frame_available(false);
+    BS_CHECK(value(m, &on) == "4:3 (16:9 indispon\u00edvel)" && !on && m.prefs().graphics.aspect == st::Aspect::Wide16x9);
+    // a Original: 4:3 fixo, sem mudanca
+    bs::Preferences p = pt();
+    p.graphics.aspect = st::Aspect::Wide16x9;
+    bs::SettingsMenu o(p, caps, {"en-US"}, ed::profile_for(ed::Edition::Original));
+    o.open();
+    go(o, "Gr\u00e1ficos");
+    o.input(MenuAction::Confirm, 0);
+    BS_CHECK(value(o, &on) == "4:3 (original)" && !on);
+    go(o, "Propor\u00e7\u00e3o");
+    o.input(MenuAction::Right, 1.0);
+    BS_CHECK(!o.take_changes(out));
+}
+
 // Fechamento do N7: o Vulkan e o padrao do menu. Simplificacao (2026-10-23): sem "Predefinicao"; "Efeitos de imagem" e
 // um submenu (sem valor de opcao), como as paginas da principal e a Camera; as opcoes individuais continuam.
 BS_TEST(settings_menu_renderer_default_and_submenus) {
