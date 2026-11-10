@@ -1312,3 +1312,32 @@ heliporto (256 s), +22 a +56 MiB, também sem relação com a altura, e a curva 
   quadros apresentados em 1100 VBlanks, a soma das linhas igual ao resumo, nenhum quadro acima de 25 ms. A bateria da
   matriz acima foi feita antes desta revisão: a contagem `quadros` tinha um a menos no total (o primeiro quadro); a janela não foi minimizada, então frametimes, GPU,
   memória e CPU valem como estão.
+
+### 16.4 Fase 5D: o 21:9 (avaliação, não habilitado)
+
+O 21:9 **não foi habilitado no produto**. A avaliação usa o exe de validação com `BS_PROPORCAO_TROCA=1:1120` (o quadro
+de 1120 colunas para a altura 480, faixas de 240 colunas de cada lado) e o levantamento da fase 4 (`n95_bordas.py
+--largura 1120`), nas mesmas rotas e capturas da seção 15.1, agora com o pilar dinâmico ligado.
+
+- **Campo de visão horizontal:** 4:3 65,2°, 16:9 81,0°, 21:9 96,5° (`2·atan(560/500)`), pelo mesmo hor+ da fase 1.
+- **As bordas** (capturas com cena no centro; fração de vazio em cada faixa):
+
+| Sala | Capturas | 16:9 (fase 4, sem pilar): faixa ≥ 80 % / 20–80 % vazia | 21:9 (com o pilar): ≥ 80 % / 20–80 % | Vazio médio 21:9 (esq. / dir.) |
+|---|---|---|---|---|
+| RCG00 (o cais) | 12 | 0 / 0 | 0 / 0 | 0,00 / 0,01 |
+| RCG00A | 55 | 0 / 0 | 0 / **20** | 0,21 / 0,21 |
+| RCG02 (o corredor) | 11 | 2 / 3 | 2 / 2 | 0,27 / 0,07 |
+| RCG03 (o exterior) | 58 | 0 / 1 | 0 / **18** | 0,20 / 0,19 |
+
+  O pilar liga onde ligava (o fim do corredor, v004680 e v042840, e as telas escuras do título e do GAME OVER), e só ali.
+  **A diferença do 21:9:** em RCG00A e RCG03, que no 16:9 têm cena nas faixas, as faixas de 240 colunas passam do fim da
+  geometria em 18–20 capturas de cada sala, com 20–80 % de vazio: abaixo do limiar do pilar (80 %), o vazio fica à mostra.
+  O 21:9 pediria outro tratamento das bordas (o pilar parcial por coluna, ou um limiar próprio), e a cobertura continua
+  nas cinco salas do começo do jogo.
+- **Memória:** extrapolada dos alvos medidos no 16:9 (16.3) pela largura (1120/854 = 1,31×): ~800 MiB em 1080, ~1,4 GiB em
+  1440 e ~3,2 GiB em 2160. **Estimativa**, não medida. (A estimativa anterior, de 96 B por pixel, dava 261/464/1045 MB e
+  estava baixa pelo mesmo erro da constante do limite, 16.3.)
+- **O HUD:** não conferido no 21:9 (o levantamento mede as faixas sem o HUD ancorado). Os elementos ainda não identificados
+  (arma, munição, mira, GAME OVER) continuam no 4:3 em qualquer largura.
+- **Recomendação:** não habilitar o 21:9 no N9.5. Se o mantenedor quiser, ele entra depois do N9.6 com o tratamento das
+  bordas largas, a constante do limite corrigida e a conferência visual.

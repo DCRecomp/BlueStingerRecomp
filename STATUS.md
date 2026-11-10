@@ -4326,6 +4326,16 @@ não por uma única bateria contínua** (decisão do mantenedor, 2026-11-02).
 - **Pendências:** H9; D-N8-4 no gate pós-N9; ressalva do 7.1 e D-K1(a); limite de 3 h de `n6_h` no executor, defeito a
   corrigir antes de uma futura integral, sem enfraquecer os testes. N9 e N10 não iniciados.
 
+### N9.5 fase 5D: o 21:9 avaliado, não habilitado (2026-11-10, commit local)
+
+Detalhes em `docs/N9-5-AUDITORIA.md`, seção 16.4.
+- **Método:** exe de validação com `BS_PROPORCAO_TROCA=1:1120` e `tools/dev/n95_bordas.py --largura 1120` (novo; o estado do
+  pilar por captura), rotas `passo_heliporto` e `passo_load_slot1`, 181 capturas largas, comparadas às do 16:9 da fase 4.
+- **Resultado:** campo de visão 96,5° (16:9 81,0°); o pilar liga onde ligava; em RCG00A e RCG03 as faixas de 240 colunas
+  passam da geometria em 18–20 capturas com 20–80 % de vazio, abaixo do limiar do pilar. Memória extrapolada dos alvos
+  medidos: ~800 MiB (1080), ~1,4 GiB (1440), ~3,2 GiB (2160), estimativa. A estimativa anterior (96 B/px) estava baixa.
+- **Recomendação:** não habilitar no N9.5; o produto continua só com 4:3 e 16:9.
+
 ### N9.5 fase 5C: a telemetria e a matriz de desempenho (2026-11-10, commit local)
 
 Detalhes em `docs/N9-5-AUDITORIA.md`, seção 16.3, e `docs/TELEMETRIA.md`.

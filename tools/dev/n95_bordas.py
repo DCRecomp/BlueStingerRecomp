@@ -8,6 +8,10 @@ larga (a do slot, 854 colunas) a cada --cada VBlanks. A sala de cada captura vem
 ultimo R*.BIN lido antes do VBlank). Em cada captura, a fracao de vazio (pixels pretos, o mesmo criterio do n95_headless:
 o fundo de limpeza fora de uma sala e preto) nas faixas novas (x < 107 e x >= 747) e no centro (o 4:3).
 
+N9.5 fase 5D (avaliacao do 21:9, so validacao): --largura 1120 pede o quadro largo de 1120 colunas pelo
+BS_PROPORCAO_TROCA (no VBlank 1), que so o exe de validacao atende; as faixas passam a (largura - 640) / 2 colunas. Desde a
+fase 4 o pilar dinamico age nas faixas: o estado dele em cada captura (o log "[captura] ... pilar") vai para o TSV.
+
 Saida em <saida>/: capturas.tsv (uma linha por captura), salas.tsv (por sala: capturas, vazio medio e maximo de cada faixa e
 do centro, a captura com mais vazio) e miniaturas/ (a pior captura de cada sala, reduzida, para a revisao).
 """
@@ -15,6 +19,7 @@ import argparse
 import collections
 import csv
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -32,7 +37,7 @@ ROTAS = {
     "load": ("passo_load_slot1.txt", 4700, True),
     "combate": ("passo_combate.txt", 52000, False),
 }
-FAIXA = 107  # as colunas novas de cada lado no quadro de 854
+FAIXA = 107  # as colunas novas de cada lado no quadro de 854 (--largura muda)
 
 
 def vazio(img):
@@ -79,6 +84,8 @@ def rodar(a, rota):
     for k in ("BS_INPUT_SCRIPT", "BS_GRAVAR", "BS_ASSISTIDO", "BS_RENDER", "BS_TELA_TESTE"):
         env.pop(k, None)
     vbs = list(range(a.cada, vblanks, a.cada))
+    if a.largura != 854:
+        env["BS_PROPORCAO_TROCA"] = "1:%d" % a.largura  # so o exe de validacao atende (N9.5 fase 5D)
     env.update({"BS_RELOGIO_FIXO": "1700000000", "BS_INPUT_SCRIPT": os.path.join(ROT, roteiro),
                 "BS_FILE_LOG": os.path.join(d, "arquivos.tsv"),
                 "BS_CAPTURA_VBLANKS": ",".join("%d-%d" % (v, v) for v in vbs)})
@@ -91,6 +98,8 @@ def rodar(a, rota):
         rc = subprocess.run(cmd, stdout=out, stderr=subprocess.STDOUT, env=env, cwd=d, timeout=7200).returncode
     print("[%s] rc=%d" % (rota, rc), flush=True)
     trocas = salas_por_vblank(os.path.join(d, "arquivos.tsv"))
+    saida = open(os.path.join(d, "saida.txt"), encoding="utf-8", errors="replace").read()
+    pilar = {int(v): (int(e), int(r)) for v, e, r in re.findall(r"\[captura\] v(\d+) pilar esquerda=(\d) direita=(\d)", saida)}
     linhas = []
     for v in vbs:
         p = os.path.join(cap, "v%06d_hd.bmp" % v)
@@ -98,10 +107,12 @@ def rodar(a, rota):
             continue
         img = np.asarray(Image.open(p).convert("RGB"), dtype=np.uint8)
         w = img.shape[1]
-        if w != 854:
+        if w != a.largura:
             continue  # sem quadro largo neste VBlank (filme, render de outro tamanho)
-        linhas.append(dict(rota=rota, vblank=v, sala=sala_em(trocas, v), esq=vazio(img[:, :FAIXA]),
-                           dir=vazio(img[:, w - FAIXA:]), centro=vazio(img[:, FAIXA:w - FAIXA]), arquivo=p))
+        fx = (a.largura - 640) // 2
+        pe, pd = pilar.get(v, (-1, -1))
+        linhas.append(dict(rota=rota, vblank=v, sala=sala_em(trocas, v), esq=vazio(img[:, :fx]),
+                           dir=vazio(img[:, w - fx:]), centro=vazio(img[:, fx:w - fx]), arquivo=p, pe=pe, pd=pd))
     return rc, linhas
 
 
@@ -113,6 +124,7 @@ def main():
     ap.add_argument("--saida", required=True)
     ap.add_argument("--rotas", default="heliporto,load")
     ap.add_argument("--cada", type=int, default=180)
+    ap.add_argument("--largura", type=int, default=854, help="1120 = 21:9 (so com o exe de validacao, N9.5 fase 5D)")
     a = ap.parse_args()
     os.makedirs(a.saida, exist_ok=True)
     todas = []
@@ -123,9 +135,10 @@ def main():
         todas += l
     with open(os.path.join(a.saida, "capturas.tsv"), "w", encoding="utf-8", newline="") as f:
         w = csv.writer(f, delimiter="\t", lineterminator="\n")
-        w.writerow(["rota", "vblank", "sala", "vazio_esq", "vazio_dir", "vazio_centro", "arquivo"])
+        w.writerow(["rota", "vblank", "sala", "vazio_esq", "vazio_dir", "vazio_centro", "pilar_esq", "pilar_dir", "arquivo"])
         for x in todas:
-            w.writerow([x["rota"], x["vblank"], x["sala"], "%.3f" % x["esq"], "%.3f" % x["dir"], "%.3f" % x["centro"], x["arquivo"]])
+            w.writerow([x["rota"], x["vblank"], x["sala"], "%.3f" % x["esq"], "%.3f" % x["dir"], "%.3f" % x["centro"], x["pe"], x["pd"],
+                        x["arquivo"]])
     por = collections.defaultdict(list)
     for x in todas:
         por[x["sala"]].append(x)
@@ -133,7 +146,8 @@ def main():
     os.makedirs(mini, exist_ok=True)
     with open(os.path.join(a.saida, "salas.tsv"), "w", encoding="utf-8", newline="") as f:
         w = csv.writer(f, delimiter="\t", lineterminator="\n")
-        w.writerow(["sala", "capturas", "esq_medio", "esq_max", "dir_medio", "dir_max", "centro_medio", "pior_captura"])
+        w.writerow(["sala", "capturas", "esq_medio", "esq_max", "dir_medio", "dir_max", "centro_medio", "pilar_esq", "pilar_dir",
+                    "pior_captura"])
         for sala, xs in sorted(por.items()):
             pior = max(xs, key=lambda x: max(x["esq"], x["dir"]) - x["centro"])
             img = Image.open(pior["arquivo"]).convert("RGB")
@@ -141,10 +155,11 @@ def main():
             img.resize((img.width // 2, img.height // 2)).save(os.path.join(mini, nome))
             w.writerow([sala, len(xs), "%.3f" % np.mean([x["esq"] for x in xs]), "%.3f" % max(x["esq"] for x in xs),
                         "%.3f" % np.mean([x["dir"] for x in xs]), "%.3f" % max(x["dir"] for x in xs),
-                        "%.3f" % np.mean([x["centro"] for x in xs]), nome])
-            print("%-10s %3d capturas | esq medio %.2f max %.2f | dir medio %.2f max %.2f | centro %.2f | %s" % (
+                        "%.3f" % np.mean([x["centro"] for x in xs]), sum(x["pe"] == 1 for x in xs), sum(x["pd"] == 1 for x in xs), nome])
+            print("%-10s %3d capturas | esq medio %.2f max %.2f | dir medio %.2f max %.2f | centro %.2f | pilar %d/%d | %s" % (
                 sala, len(xs), np.mean([x["esq"] for x in xs]), max(x["esq"] for x in xs),
-                np.mean([x["dir"] for x in xs]), max(x["dir"] for x in xs), np.mean([x["centro"] for x in xs]), nome))
+                np.mean([x["dir"] for x in xs]), max(x["dir"] for x in xs), np.mean([x["centro"] for x in xs]),
+                sum(x["pe"] == 1 for x in xs), sum(x["pd"] == 1 for x in xs), nome))
 
 
 if __name__ == "__main__":
