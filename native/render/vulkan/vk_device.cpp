@@ -1978,6 +1978,13 @@ private:
         VkCommandBufferBeginInfo bi{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
         bi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
         f_.vkBeginCommandBuffer(cmd_, &bi);
+        // N9.6 fase 2b (achado na camada de validacao durante o N9.7, VUID-vkCmdDraw-None-09600): o binding 6 (a imagem do AO
+        // para o catalogo) esta no conjunto de todo desenho e o fragmento o declara; no primeiro quadro depois de criada, a
+        // imagem estava em UNDEFINED nos desenhos do passe A (o passe do AO so a escreve entre A e B). O conteudo dela so e
+        // lido com F_AO_SURF, depois de escrito, entao comecar o quadro em GENERAL sem preservar nada nao muda imagem nenhuma
+        if (aoSurf_.img)
+            imageBarrier(aoSurf_.img, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 0,
+                         VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_ACCESS_SHADER_READ_BIT);
         // N9.5 fase 5C (BS_TELEMETRIA): os tempos de GPU por etapa, lidos depois da cerca que o render ja espera
         const bool ts = timing();
         if (ts) f_.vkCmdResetQueryPool(cmd_, tsPool_, 0, 5), f_.vkCmdWriteTimestamp(cmd_, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, tsPool_, 0);
