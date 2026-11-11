@@ -20,7 +20,8 @@ cada caso (telemetria.csv, saida.txt).
          --saida tmp/<pasta> [--janela] [--trechos corredor,cais,exterior] [--configs 4:3@480,16:9@2160] [--gpu <nome>]
 N9.6 fase 1: uma configuracao com o sufixo +ao (ex.: 16:9@1080+ao) liga a oclusao ambiente na qualidade media (meia
 resolucao); +ao-alta (o alvo inteiro, a primeira versao), +ao-media e +ao-baixa escolhem a qualidade. Fase 3: +luz liga a
-luz das fontes do catalogo (combinavel: 16:9@1080+ao-media+luz). Fase 4: +sombras liga as sombras aprimoradas.
+luz das fontes do catalogo (combinavel: 16:9@1080+ao-media+luz). Fase 4: +sombras liga as sombras aprimoradas. N9.7:
++agua-aprimorada e +agua-alta ligam a agua; o trecho "mar" (rota passo_cgate, VBlanks 30500 a 34300) e o do mar do cais.
 """
 import argparse
 import csv
@@ -36,9 +37,10 @@ RAIZ = os.path.dirname(os.path.dirname(AQUI))
 ROT = os.path.join(RAIZ, "tools", "dist", "roteiros")
 # rota -> (roteiro, usa o cartao, VBlanks ate o fim do ultimo trecho); trecho -> (rota, de, ate)
 ROTAS = {"load": ("passo_load_slot1.txt", True, 4700), "heliporto": ("passo_heliporto.txt", False, 56000),
+         "cgate": ("passo_cgate.txt", False, 34300),  # N9.7: o mar do cais
          "combate": ("passo_combate.txt", False, 52000)}
 TRECHOS = {"corredor": ("load", 3600, 4700), "cais": ("heliporto", 29340, 31320), "exterior": ("heliporto", 43560, 55980),
-           "combate": ("combate", 46000, 52000)}
+           "combate": ("combate", 46000, 52000), "mar": ("cgate", 30500, 34300)}
 CONFIGS = ["4:3@480", "16:9@480", "4:3@1080", "16:9@1080", "4:3@1440", "16:9@1440", "4:3@2160", "16:9@2160"]
 RES = {480: "original", 1080: "1080p", 1440: "1440p", 2160: "2160p"}
 GRAFICOS = """preset = "personalizado"
@@ -118,6 +120,7 @@ def rodar(a, cfg, rota, de):
     # fase 3: "+luz" liga a luz das fontes do catalogo ([imagem] iluminacao, --iluminacao ligado); os dois se combinam
     base, *sufs = cfg.split("+")
     ao = luz = sombras = False
+    agua = None  # N9.7
     qual = "media"
     for suf in sufs:
         if suf == "ao" or suf.startswith("ao-"):
@@ -126,6 +129,8 @@ def rodar(a, cfg, rota, de):
             luz = True
         elif suf == "sombras":  # N9.6 fase 4
             sombras = True
+        elif suf in ("agua-aprimorada", "agua-alta"):  # N9.7
+            agua = suf[5:]
         else:
             raise SystemExit("configuracao invalida: %s" % cfg)
     if qual not in ("baixa", "media", "alta"):
@@ -134,7 +139,7 @@ def rodar(a, cfg, rota, de):
     alt = int(alt)
     roteiro, cartao, vblanks = ROTAS[rota]
     nome = "%s_%s_%d%s%s%s" % (rota, prop.replace(":", "x"), alt, "_ao_" + qual if ao else "", "_luz" if luz else "",
-                               "_sombras" if sombras else "")
+                               "_sombras" if sombras else "") + ("_agua_" + agua if agua else "")
     d = os.path.join(a.saida, nome)
     if os.path.isdir(d):
         shutil.rmtree(d)
@@ -147,6 +152,8 @@ def rodar(a, cfg, rota, de):
         graf = graf.replace("[imagem]\n", "[imagem]\niluminacao = true\n", 1)
     if sombras:
         graf = graf.replace("[imagem]\n", "[imagem]\nsombras = \"aprimoradas\"\n", 1)
+    if agua:  # N9.7
+        graf = graf.replace("[imagem]\n", "[imagem]\nagua = \"%s\"\n" % agua, 1)
     open(os.path.join(d, "graficos.toml"), "w").write(graf + ("[efeitos]\nssao = true\nssao_qualidade = \"%s\"\n" % qual
                                                               if ao else ""))
     saves = os.path.join(d, "saves")
@@ -173,6 +180,8 @@ def rodar(a, cfg, rota, de):
             cmd += ["--iluminacao", "ligado"]
         if sombras:
             cmd += ["--sombras", "aprimoradas"]
+        if agua:
+            cmd += ["--agua", agua]
     t0 = time.time()
     with open(os.path.join(d, "saida.txt"), "w", encoding="utf-8") as out:
         p = subprocess.Popen(cmd, stdout=out, stderr=subprocess.STDOUT, env=env, cwd=d)
