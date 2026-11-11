@@ -75,7 +75,14 @@ Legenda: **[P]** produto (`msvc-release`), **[V]** validação (`msvc-validacao`
 
 ### Fase 5 (menu, `graficos.toml`, matriz de desempenho)
 
-(preenchido ao implementar)
+| # | Teste | Critério |
+|---|---|---|
+| F5-1 | `n95_janela.py` J1–J7 com as entradas novas do menu [J] (R6) | 0 falhas |
+| F5-2 | `n95_persistencia.py` P1–P5 com `ssao`, `ssao_qualidade`, `iluminacao` e `sombras` no `graficos.toml` (R4) | 0 falhas; a Original volta tudo a desligado |
+| F5-3 | A matriz completa (C1) com os sufixos combinados | medida e registrada |
+| F5-4 | **Decisão do mantenedor:** o preset "Alto" com `sombras = "aprimoradas"` | decidido e registrado |
+| F5-5 | Revisão Codex da fase 5 (menu e ligações) | achados tratados |
+| F5-6 | Uma Preview nova pelo Builder (`tools/dist/make_preview.ps1 -Disc`, saída e cache em `tmp/`) e `test_edicao.ps1 -Preview` nela (R5) | rc 0; 0 falhas |
 
 ## 5. Depois da bateria
 

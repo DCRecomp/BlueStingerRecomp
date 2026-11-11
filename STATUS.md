@@ -4326,6 +4326,17 @@ não por uma única bateria contínua** (decisão do mantenedor, 2026-11-02).
 - **Pendências:** H9; D-N8-4 no gate pós-N9; ressalva do 7.1 e D-K1(a); limite de 3 h de `n6_h` no executor, defeito a
   corrigir antes de uma futura integral, sem enfraquecer os testes. N9 e N10 não iniciados.
 
+### N9.6 fase 5: o menu e a matriz (2026-11-11, commit local, só nível 1)
+
+Detalhes em `docs/N9-6-AUDITORIA.md`, seção 12.
+- **Método:** as entradas Sombras, Iluminação aprimorada, SSAO e Qualidade no menu, cada uma só com o seu recurso (a Remastered
+  com o Vulkan); a matriz com `+ao-<qualidade>`, `+luz` e `+sombras`. O SSAO e a luz desligados em todos os presets; o preset
+  "Alto" (N7c) já trazia as sombras aprimoradas: decisão pendente com o mantenedor.
+- **Nível 1:** os três presets; unitários 376/0; render 100/0; ui 25/0; remaster 5/0; ctest 30/30 e 23/23; SPIR-V 39/39.
+- **Processo:** no avanço do master da fase 4, o ref foi movido antes da mescla gravar (um script de resolução falhou e a cadeia
+  seguiu); conferido contra o backup, refeito pela base, status e numstat iguais, arquivos particulares intactos.
+- **A bateria final do N9.6 (a lista `docs/N9-6-TESTES-FINAIS.md`) começa em seguida.**
+
 ### N9.6 fase 4: as sombras aprimoradas (2026-11-11, commit local, só nível 1)
 
 Detalhes em `docs/N9-6-AUDITORIA.md`, seção 11. D6-4 a + b.

@@ -369,6 +369,42 @@ BS_TEST(settings_menu_effects_page) {
     BS_CHECK(m.page() == bs::SettingsMenu::Page::Graphics);
 }
 
+// N9.6 fase 5: as opcoes de iluminacao da Remastered no menu: Sombras e Iluminacao aprimorada (Graficos), SSAO e a qualidade
+// dele (Efeitos de imagem), cada uma so com o seu recurso; sem ele, "em breve" e indisponivel (a Original e o software)
+BS_TEST(settings_menu_lighting_options) {
+    for (const bool have : {false, true}) {
+        st::Capabilities caps;
+        caps.vulkan = true, caps.max_height = 2160;
+        caps.features.shadows = caps.features.lighting = caps.features.ssao = have;
+        bs::SettingsMenu m(pt(), caps, {"en-US"});
+        m.open();
+        go(m, "Gráficos"), m.input(MenuAction::Confirm, 0);
+        bs::MenuView v = m.view();
+        for (const char* l : {"Sombras", "Iluminação aprimorada"}) {
+            const int i = find(v, l);
+            BS_CHECK(i >= 0 && v.items[size_t(i)].enabled == have);
+            BS_CHECK((v.items[size_t(i)].value.find("em breve") != std::string::npos) == !have);
+        }
+        const int fx = find(v, "Efeitos de imagem");
+        BS_CHECK(fx >= 0 && v.items[size_t(fx)].enabled == have);  // so o SSAO entre os efeitos
+        if (!have) continue;
+        bs::Preferences p;
+        go(m, "Sombras"), m.input(MenuAction::Right, 0);
+        BS_CHECK(m.take_changes(p) && p.graphics.shadows == st::Shadows::Enhanced);
+        go(m, "Iluminação aprimorada"), m.input(MenuAction::Confirm, 0);
+        BS_CHECK(m.take_changes(p) && p.graphics.lighting);
+        go(m, "Efeitos de imagem"), m.input(MenuAction::Confirm, 0);
+        v = m.view();
+        BS_CHECK(!v.items[size_t(find(v, "  Qualidade"))].enabled);  // so com o SSAO ligado
+        go(m, "SSAO"), m.input(MenuAction::Confirm, 0);
+        BS_CHECK(m.take_changes(p) && p.graphics.ssao && p.graphics.ssao_quality == st::SsaoQuality::Medium);
+        v = m.view();
+        BS_CHECK(v.items[size_t(find(v, "  Qualidade"))].enabled && v.items[size_t(find(v, "  Qualidade"))].value == "média");
+        go(m, "  Qualidade"), m.input(MenuAction::Right, 0);
+        BS_CHECK(m.take_changes(p) && p.graphics.ssao_quality == st::SsaoQuality::High);
+    }
+}
+
 // N7c (secao 23): Configuracoes > Controles > Camera. Original deixa as opcoes inativas; Voltar volta a Controles.
 BS_TEST(settings_menu_camera_page) {
     bs::SettingsMenu m(pt(), {}, {"en-US"});

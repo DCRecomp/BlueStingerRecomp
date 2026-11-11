@@ -152,16 +152,16 @@ std::vector<SettingsMenu::Entry> SettingsMenu::entries() const {
                          int            i   = int(std::find(v, v + 4, p.graphics.msaa) - v);
                          p.graphics.msaa    = v[std::clamp(i + d, 0, 3)];
                      }});
-        // N9.6 fase 4: as sombras aprimoradas ja existem (graficos.toml, --sombras), mas a entrada do menu fica para a fase 5
-        e.push_back({L("Sombras", "Shadows"),
-                     soon(false, g.shadows == st::Shadows::Original ? "original" : L("aprimoradas", "enhanced")), false, nullptr});
-        // N9.6 fase 3: a luz das fontes do catalogo ja existe (graficos.toml, --iluminacao), mas a entrada do menu fica para a
-        // fase 5, como a do SSAO
-        e.push_back({L("Iluminação aprimorada", "Enhanced lighting"), soon(false, onoff(g.lighting)), false, nullptr});
+        // N9.6 fase 5: as sombras aprimoradas (fase 4: a borda suave dos volumes e as sombras de contato) e a luz das fontes
+        // (fase 3), so na Remastered com o Vulkan (Features::shadows e ::lighting); sem o recurso, "em breve"
+        e.push_back({L("Sombras", "Shadows"), soon(f.shadows, g.shadows == st::Shadows::Original ? "original" : L("aprimoradas", "enhanced")),
+                     f.shadows, [](Preferences& p, int d) { p.graphics.shadows = cycle(p.graphics.shadows, d, 2); }});
+        e.push_back({L("Iluminação aprimorada", "Enhanced lighting"), soon(f.lighting, onoff(g.lighting)), f.lighting,
+                     [](Preferences& p, int) { p.graphics.lighting = !p.graphics.lighting; }});
         e.push_back({L("Texturas HD", "HD textures"), soon(f.hd_textures, onoff(g.hd_textures)), f.hd_textures,
                      [](Preferences& p, int) { p.graphics.hd_textures = !p.graphics.hd_textures; }});
         {  // N7c (secao 21): os efeitos de imagem numa pagina propria (submenu: sem valor; "em breve" sem nenhum efeito)
-            const bool any = f.color || f.tonemap || f.sharpen || f.bloom || f.crt || f.post || f.shaders;
+            const bool any = f.color || f.tonemap || f.sharpen || f.bloom || f.crt || f.post || f.shaders || f.ssao;
             sub(L("Efeitos de imagem", "Image effects"), Page::Effects, any, any ? std::string() : soon(false, ""));
         }
         back(Page::Main);
@@ -209,7 +209,13 @@ std::vector<SettingsMenu::Entry> SettingsMenu::entries() const {
                      fstep([](Preferences& p) { return &p.graphics.bloom_radius; }, 0.005f, 0.005f, 0.05f)});
         e.push_back({L("  Intensidade", "  Strength"), num(g.bloom_strength, 2), bl,
                      fstep([](Preferences& p) { return &p.graphics.bloom_strength; }, 0.1f, 0.f, 2.f)});
-        e.push_back({"SSAO", soon(false, onoff(g.ssao)), false, nullptr});
+        // N9.6 fase 5: a oclusao ambiente (fase 1) e a qualidade dela, so na Remastered com o Vulkan (Features::ssao)
+        e.push_back({"SSAO", soon(f.ssao, onoff(g.ssao)), f.ssao, [](Preferences& p, int) { p.graphics.ssao = !p.graphics.ssao; }});
+        {
+            const char* q[] = {L("baixa", "low"), L("média", "medium"), L("alta", "high")};
+            e.push_back({L("  Qualidade", "  Quality"), q[size_t(g.ssao_quality)], f.ssao && g.ssao,
+                         [](Preferences& p, int d) { p.graphics.ssao_quality = cycle(p.graphics.ssao_quality, d, 3); }});
+        }
         {
             // as linhas do jogo precisam de espaco; a altura em uso (revisao Codex 20261110-011045)
             const bool tall = height_in_use(g, caps_, profile_.wide_frame) >= st::kCrtMinHeight;

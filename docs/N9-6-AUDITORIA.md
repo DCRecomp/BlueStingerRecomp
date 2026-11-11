@@ -452,3 +452,26 @@ D6-4 a + b. **Só nível 1**; a validação vai para a bateria final (`docs/N9-6
   fino à frente do caminho pode faltar ou sobrar.
 - A borda suave tem 2 pixels do jogo: é a conferir na janela; um volume pequeno (a sombra sob o personagem) pode ficar mais
   claro no centro se for menor que a penumbra.
+
+## 12. Fase 5: o menu, o `graficos.toml` e a matriz de desempenho (2026-11-11)
+
+**Só nível 1**; a bateria final do N9.6 roda em seguida, pela lista `docs/N9-6-TESTES-FINAIS.md`.
+
+- **Menu** (`app/settings_menu.cpp`): "Sombras" (original/aprimoradas) e "Iluminação aprimorada" na página Gráficos; "SSAO" e
+  "Qualidade" (baixa/média/alta, só com o SSAO ligado) na página Efeitos de imagem. Cada uma só com o seu recurso
+  (`Features::shadows`, `::lighting`, `::ssao`, que o `main_sdl` só liga na Remastered com o Vulkan); sem ele, "em breve" e
+  indisponível. A página Efeitos de imagem passa a abrir também só com o SSAO. As escolhas vão ao `graficos.toml` (`[imagem]
+  sombras`, `[imagem] iluminacao`, `[efeitos] ssao` e `ssao_qualidade`) e às mesmas ligações das fases 1–4 (`applyGraphics`).
+- **Padrões:** o SSAO e a luz das fontes desligados em todos os presets. **Decisão pendente com o mantenedor:** o preset
+  "Alto" (do N7c) já tinha `sombras = "aprimoradas"`; com a fase 4, quem escolher "Alto" passa a ter a borda suave e as sombras
+  de contato. Não foi mudado.
+- **Matriz:** `n95_desempenho.py` com os sufixos `+ao-<qualidade>`, `+luz` e `+sombras`, combináveis.
+- **Nível 1:** os três presets; `bs_unit_tests` 376/0 (`settings_menu_lighting_options`: as quatro entradas com e sem o
+  recurso, as trocas e a qualidade só com o SSAO); `bs_render_tests` 100/0; `bs_ui_tests` 25/0; `bs_remaster_tests` 5/0;
+  ctest 30/30 e 23/23; `gera_spirv.ps1 -Conferir` 39/39.
+- **Registro de processo (avanço do master da fase 4):** o script de resolução de um conflito falhou (erro de sintaxe) e a
+  mescla não gravou nada, mas a cadeia de comandos seguiu (o código de saída ficou com o `tail`) e moveu o ref do master e o
+  índice para `8cd14eb` com os arquivos ainda da fase 3 com a água. Os 39 arquivos sujos foram conferidos iguais ao backup
+  (`tmp/sessao-20261110/backup-main-antes-f4`); a mescla foi refeita medindo o sujo contra a base (`dc8aa61`) e o status e o
+  numstat ficaram iguais aos de antes; os arquivos particulares intactos. Desde então a gravação é conferida pelo log antes
+  de mover o ref.
