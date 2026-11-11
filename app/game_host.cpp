@@ -561,6 +561,23 @@ void GameHost::vblank() {
         }();
         for (const auto& [at, w] : kTrocas)
             if (at == n) std::fprintf(stderr, "[validacao] proporcao no VBlank %llu: %u\n", static_cast<unsigned long long>(n), w), setWideWidth(w);
+        // N9.7 (n97_agua.py), so validacao: BS_AGUA_TROCA=<vblank>:<qualidade 0..2>[,...] troca a agua nesse VBlank pelo
+        // mesmo caminho do menu (setWaterQuality)
+        static const std::vector<std::pair<uint64_t, uint32_t>> kAgua = [] {
+            std::vector<std::pair<uint64_t, uint32_t>> v;
+            if (const char* e = std::getenv("BS_AGUA_TROCA"))
+                for (const char* p = e; *p;) {
+                    unsigned long long at = 0;
+                    unsigned           q = 0;
+                    int                used = 0;
+                    if (std::sscanf(p, "%llu:%u%n", &at, &q, &used) != 2) break;
+                    v.push_back({at, q}), p += used;
+                    if (*p == ',') ++p;
+                }
+            return v;
+        }();
+        for (const auto& [at, q] : kAgua)
+            if (at == n) std::fprintf(stderr, "[validacao] agua no VBlank %llu: %u\n", static_cast<unsigned long long>(n), q), setWaterQuality(q);
         static const std::pair<uint64_t, bool> kFalha = [] {
             unsigned long long at = 0;
             const char*        e  = std::getenv("BS_VK_FALHAR");

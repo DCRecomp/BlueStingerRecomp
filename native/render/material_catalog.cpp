@@ -21,6 +21,10 @@ constexpr MaterialEntry kTable[] = {
     {{64, 16, 0x10b0adb7ecfefb45ull}, kMaterialEmissive, "corredor RCG02: a placa EXIT acesa (opaca)"},
     {{64, 32, 0x14cb38a2d38b4ed9ull}, kMaterialEmissive, "corredor RCG02: a placa HEIGHT LIMIT acesa (opaca)"},
     {{64, 64, 0xe6aa04e85bbde090ull}, kMaterialEmissive, "quarto RCG02: o brilho laranja da faixa de luz do chao (translucida One/Zero)"},
+    // N9.7 (do prototipo do Codex, 2026-11-08; docs/N9-7-AGUA.md): medido na IR do cais RCG00 do passo_cgate no passo 2800
+    // (comando `ir cais` do assistido, `bs-ir-tela materiais`): 46 desenhos translucidos ModulateAlpha, SrcAlpha/InvSrcAlpha,
+    // o mar junto ao cais e o horizonte; nenhuma outra textura daquela IR e agua
+    {{32, 32, 0x7458e3539d31cd8dull}, kMaterialWater, "cais RCG00: o mar (46 desenhos translucidos ModulateAlpha)"},
 };
 // clang-format on
 } // namespace

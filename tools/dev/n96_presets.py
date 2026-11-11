@@ -21,6 +21,17 @@ nem captura da area de trabalho). A janela abre por ~35-60 s em cada execucao.
      virtual: o Alto sem nenhum efeito no Vulkan (AO, luz e borda suave em 0 renders); o Alto com as tres escolhas no
      arquivo com as tres aplicadas (> 0); a Original com as tres no arquivo sem nenhuma e sem o catalogo.
 
+  N9.7 (a agua, D7-1):
+  Q8 Remastered com o Alto: no menu, Agua -> aprimorada: o render_capture recebe "agua: aprimorada"; o arquivo vira
+     "personalizado" com agua = "aprimorada"; na reabertura, a aprimorada ja no inicio; no menu de volta a original: o
+     render_capture recebe a original e o arquivo agua = "original".
+  Q9 Original com agua = "alta" no arquivo: nenhuma agua pedida ao render_capture; o arquivo nao e reescrito.
+  Q10 --agua alta (so nesta execucao) e, no menu, Sombras -> aprimoradas: a agua pedida, e o arquivo grava as sombras mas
+     guarda a agua do arquivo (original).
+  Q11 a rota passo_cgate no modo espectador ate o cais (o mar, ~34 000 VBlanks, ~10 min de janela): com agua = "alta" no
+     arquivo, o Vulkan aplica a agua (agua em N > 0 renders, a imagem da cena do tamanho do alvo); com a agua original, 0;
+     a Original com agua = "alta" no arquivo, 0.
+
   python tools/dev/n96_presets.py --exe build/msvc-release/app/bluestinger.exe --data <data> --cartao <saves> --saida tmp/<pasta>
 Saida 1 se algum criterio falhar.
 """
@@ -33,6 +44,7 @@ import sys
 
 RAIZ = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 SAIR_MS = 95000  # a rota passo_load_slot1 chega ao corredor (VBlank ~4700) em ~80 s de janela
+CAIS_MS = 600000  # N9.7: a rota passo_cgate passa pelo mar do cais (VBlanks ~30 700 a ~34 200) em ~9,5 min de janela
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from n95_persistencia import ATE_GRAFICOS, REM_INICIO, depois, preparar, rodar  # noqa: E402
 
@@ -41,10 +53,13 @@ LINHAS = {"sombras": "[render] sombras aprimoradas: ligadas", "luz": "[render] l
           "ssao": "[render] oclusao ambiente: ligada"}
 DESLIGADAS = {"sombras": "[render] sombras aprimoradas: desligadas", "luz": "[render] luz das fontes: desligada",
               "ssao": "[render] oclusao ambiente: desligada"}
-# Graficos: Renderizador 0 ... MSAA 8, Sombras 9, Iluminacao aprimorada 10, Texturas HD 11, Efeitos de imagem 12, Voltar 13.
-# Efeitos de imagem: Correcao de cor 0 ... Intensidade 13, SSAO 14 (o cursor nao pula linhas inativas).
-LIGAR = ATE_GRAFICOS + ["dpdown"] * 9 + ["dpright", "dpdown", "a", "dpdown", "dpdown", "a"] + ["dpdown"] * 14 + ["a", "b", "b", "b"]
-DESFAZER = ATE_GRAFICOS + ["dpdown"] * 9 + ["dpleft", "dpdown", "a", "dpdown", "dpdown", "a"] + ["dpdown"] * 14 + ["a", "b", "b", "b"]
+# Graficos: Renderizador 0 ... MSAA 8, Sombras 9, Iluminacao aprimorada 10, Agua 11 (N9.7), Texturas HD 12, Efeitos de
+# imagem 13, Voltar 14. Efeitos de imagem: Correcao de cor 0 ... Intensidade 13, SSAO 14 (o cursor nao pula linhas inativas).
+LIGAR = ATE_GRAFICOS + ["dpdown"] * 9 + ["dpright", "dpdown", "a"] + ["dpdown"] * 3 + ["a"] + ["dpdown"] * 14 + ["a", "b", "b", "b"]
+DESFAZER = ATE_GRAFICOS + ["dpdown"] * 9 + ["dpleft", "dpdown", "a"] + ["dpdown"] * 3 + ["a"] + ["dpdown"] * 14 + ["a", "b", "b", "b"]
+AGUA_MAIS = ATE_GRAFICOS + ["dpdown"] * 11 + ["dpright", "b", "b"]  # N9.7: Agua original -> aprimorada
+AGUA_MENOS = ATE_GRAFICOS + ["dpdown"] * 11 + ["dpleft", "b", "b"]  # aprimorada -> original
+SOMBRAS_MAIS = ATE_GRAFICOS + ["dpdown"] * 9 + ["dpright", "b", "b"]
 
 
 def chave(toml, k):
@@ -165,6 +180,67 @@ def main():
     rc, c = rota("Q7-original", "original", tudo)
     ok("Q7 Original com as tres no arquivo: o Vulkan sem nenhum efeito nem catalogo", rc == 0 and c is not None
        and c["quadros"] > 1000 and c["ao"] == 0 and c["luz"] == 0 and c["borda"] == 0 and c["catalogo"] == 0, "rc %d, %s" % (rc, c))
+
+    # N9.7: a agua (Q8-Q11)
+    def agua_pedida(t):
+        return [q for q in ("original", "aprimorada", "alta") if "[render] agua: %s" % q in t]
+
+    g = 'preset = "alta"\n' + TELA
+    d = preparar(a, "Q8", "remastered", g)
+    rc, t, toml = rodar(a, d, "8a", AGUA_MAIS, REM_INICIO)
+    pos = t.find("[remaster] menu inicial")
+    ok("Q8 antes do menu: nenhuma agua", pos >= 0 and not agua_pedida(t[:pos]), "marca %s" % (pos >= 0))
+    ok("Q8 o menu pede a aprimorada", rc == 0 and agua_pedida(t[pos:]) == ["aprimorada"], "rc %d, %s" % (rc, agua_pedida(t[pos:])))
+    ok("Q8 o arquivo: personalizado com a agua aprimorada", chave(toml, "preset") == "personalizado" and chave(toml, "agua") == "aprimorada",
+       "preset %s, agua %s" % (chave(toml, "preset"), chave(toml, "agua")))
+    antes = toml
+    rc, t, toml = rodar(a, d, "8b", [], REM_INICIO, fim_ms=REM_INICIO)
+    pos = t.find("[remaster] menu inicial")
+    ok("Q8 reabertura: a aprimorada ja no inicio", rc == 0 and pos >= 0 and agua_pedida(t[:pos]) == ["aprimorada"] and toml == antes,
+       "rc %d, %s" % (rc, agua_pedida(t[:pos]) if pos >= 0 else "-"))
+    rc, t, toml = rodar(a, d, "8c", AGUA_MENOS, REM_INICIO)
+    pos = t.find("[remaster] menu inicial")
+    ok("Q8 o menu volta a original", rc == 0 and pos >= 0 and "original" in agua_pedida(t[pos:]) and chave(toml, "agua") == "original",
+       "rc %d, %s, agua %s" % (rc, agua_pedida(t[pos:]) if pos >= 0 else "-", chave(toml, "agua")))
+    g = 'preset = "alta"\n[imagem]\nagua = "alta"\n' + TELA
+    d = preparar(a, "Q9", "original", g)
+    rc, t, toml = rodar(a, d, "9", [], REM_INICIO, fim_ms=REM_INICIO)
+    ok("Q9 Original com agua alta no arquivo: nenhuma agua pedida", rc == 0 and vulkan(t) and not [q for q in agua_pedida(t) if q != "original"],
+       "rc %d, %s" % (rc, agua_pedida(t)))
+    ok("Q9 Original: o arquivo fica", toml == g)
+    g = 'preset = "alta"\n' + TELA
+    d = preparar(a, "Q10", "remastered", g)
+    rc, t, toml = rodar(a, d, "10", SOMBRAS_MAIS, REM_INICIO, args=["--agua", "alta"])
+    ok("Q10 --agua alta pedida", rc == 0 and "alta" in agua_pedida(t), "rc %d, %s" % (rc, agua_pedida(t)))
+    ok("Q10 o arquivo grava as sombras e guarda a agua do arquivo", chave(toml, "sombras") == "aprimoradas" and chave(toml, "agua") == "original",
+       "sombras %s, agua %s" % (chave(toml, "sombras"), chave(toml, "agua")))
+
+    def rota_cais(nome, edicao, graf):
+        d = preparar(a, nome, edicao, graf)
+        pad = os.path.join(d, "pad.txt")
+        open(pad, "w").write("0 conectar\n%d sair\n" % CAIS_MS)
+        env = {k: v for k, v in os.environ.items() if not k.startswith("BS_")}
+        env.update({"BS_CONTROLE_VIRTUAL": pad, "BS_RELOGIO_FIXO": "1700000000",
+                    "BS_INPUT_SCRIPT": os.path.join(RAIZ, "tools", "dist", "roteiros", "passo_cgate.txt")})
+        with open(os.path.join(d, "jogo.txt"), "w", encoding="utf-8") as out:
+            p = subprocess.Popen([os.path.join(d, "bluestinger.exe"), "--data", a.data, "--saves-pasta", os.path.join(d, "saves"),
+                                  "--apresentacao", "vulkan"], stdout=out, stderr=subprocess.STDOUT, env=env, cwd=d)
+            try:
+                rc = p.wait(CAIS_MS / 1000 + 180)
+            except subprocess.TimeoutExpired:  # so o processo deste caso
+                p.kill()
+                rc = -1
+        t = open(os.path.join(d, "jogo.txt"), encoding="utf-8", errors="replace").read()
+        m = re.search(r"agua em (\d+) renders \((\d+) desenhos, imagem da cena ate (\d+) KiB\)", t)
+        return rc, (tuple(int(x) for x in m.groups()) if m else None)
+
+    rc, c = rota_cais("Q11-alta", "remastered", 'preset = "alta"\n[imagem]\nagua = "alta"\n' + TELA)
+    ok("Q11 Remastered agua alta no cais: o Vulkan aplica a agua", rc == 0 and c is not None and c[0] > 0 and c[1] > 0 and c[2] > 0,
+       "rc %d, %s" % (rc, c))
+    rc, c = rota_cais("Q11-original", "remastered", 'preset = "alta"\n' + TELA)
+    ok("Q11 Remastered agua original no cais: nenhuma", rc == 0 and c == (0, 0, 0), "rc %d, %s" % (rc, c))
+    rc, c = rota_cais("Q11-edicao-original", "original", 'preset = "alta"\n[imagem]\nagua = "alta"\n' + TELA)
+    ok("Q11 Original com agua alta no arquivo: nenhuma", rc == 0 and c == (0, 0, 0), "rc %d, %s" % (rc, c))
 
     print("%d falha(s) (%s)" % (len(falhas), a.saida))
     return 1 if falhas else 0

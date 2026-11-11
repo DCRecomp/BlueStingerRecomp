@@ -28,6 +28,14 @@ $jobs = @(
     @("resolve_comp_fc.h", "resolve.comp", "kResolveCompFc", @("-DFLOAT_CONTROLS")),
     @("pvr_frag_fcd.h", "pvr.frag", "kPvrFragFcd", @("-DFLOAT_CONTROLS", "-DDENORM_PRESERVE")),
     @("pvr_frag_autosort_fcd.h", "pvr.frag", "kPvrFragAutosortFcd", @("-DAUTOSORT", "-DFLOAT_CONTROLS", "-DDENORM_PRESERVE")),
+    # N9.7: a agua da Remastered (desenhos de agua do catalogo de materiais), nas mesmas seis variantes do fragmento fiel;
+    # o fiel (sem -DWATER) continua com o mesmo texto e o mesmo SPIR-V
+    @("pvr_frag_water.h", "pvr.frag", "kPvrFragWater", @("-DWATER")),
+    @("pvr_frag_autosort_water.h", "pvr.frag", "kPvrFragAutosortWater", @("-DAUTOSORT", "-DWATER")),
+    @("pvr_frag_fc_water.h", "pvr.frag", "kPvrFragFcWater", @("-DFLOAT_CONTROLS", "-DWATER")),
+    @("pvr_frag_autosort_fc_water.h", "pvr.frag", "kPvrFragAutosortFcWater", @("-DAUTOSORT", "-DFLOAT_CONTROLS", "-DWATER")),
+    @("pvr_frag_fcd_water.h", "pvr.frag", "kPvrFragFcdWater", @("-DFLOAT_CONTROLS", "-DDENORM_PRESERVE", "-DWATER")),
+    @("pvr_frag_autosort_fcd_water.h", "pvr.frag", "kPvrFragAutosortFcdWater", @("-DAUTOSORT", "-DFLOAT_CONTROLS", "-DDENORM_PRESERVE", "-DWATER")),
     @("resolve_comp_fcd.h", "resolve.comp", "kResolveCompFcd", @("-DFLOAT_CONTROLS", "-DDENORM_PRESERVE")),
     # N8.7: volumes modificadores (sombra por intensidade), com as tres variantes do ambiente FP
     @("volumes_comp.h", "volumes.comp", "kVolumesComp", @()),

@@ -382,7 +382,6 @@ void SettingsMenu::input(MenuAction a, double now) {
                 pending_ = Pending::None;
                 // Original Dreamcast, volumes 100, legendas ligadas; o idioma escolhido fica (ele e tambem o da interface)
                 Preferences def;
-                if (profile_.enhanced_water) def.graphics.water = st::Water::Enhanced;
                 def.subtitles.language = prefs_.subtitles.language;
                 commit(def, now);
                 if (pending_ == Pending::Display) pending_ = Pending::None;  // restaurar ja foi confirmado

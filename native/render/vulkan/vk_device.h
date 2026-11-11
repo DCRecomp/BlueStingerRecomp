@@ -15,6 +15,7 @@
 //     janela. O renderizador roda na thread do jogo e a apresentacao na da janela: a fila e compartilhada com trava.
 #include "render/post_shader.h"
 #include "render/render.h"
+#include "render/water.h"
 
 #include <cstdint>
 #include <memory>
@@ -41,6 +42,10 @@ struct VulkanStats {
     uint64_t    light_frames = 0;       // N9.6 fase 3: renders com a luz das fontes do catalogo aplicada
     uint32_t    lights_max = 0;         // o maior numero de luzes num render
     uint64_t    soft_shadow_frames = 0;  // N9.6 fase 4: renders com a borda suave dos volumes
+    // N9.7: renders com a agua aprimorada aplicada (a copia da cena feita e ao menos um desenho de agua pela variante
+    // -DWATER), os desenhos de agua desenhados por ela, e a imagem da cena para a agua viva agora (bytes; 0 = nenhuma)
+    uint64_t    water_frames = 0, water_draws = 0;
+    uint64_t    water_scene_bytes = 0;
     uint64_t    negative_depth_frames = 0;  // quadros com 1/w negativo (profundidade deslocada, ver frame_prep)
     // garantias do modo fiel (igualdade bit a bit com o software): ambiente FP do software nos shaders
     // (VK_KHR_shader_float_controls) e profundidade crua (VK_EXT_depth_range_unrestricted)
@@ -144,6 +149,10 @@ public:
     // N9.6 fase 4: as sombras aprimoradas no proximo submit: os volumes originais com a borda suave e as sombras de
     // contato da luz das fontes (so no render do framebuffer). Desligadas = a imagem de antes
     virtual void     set_shadows(bool on) = 0;
+    // N9.7: a agua aprimorada no proximo submit (Original = desligada, a imagem de antes) e a fase das ondas (o numero do
+    // render, water.h). So os desenhos translucidos com kMaterialWater no catalogo, so no render do framebuffer. A imagem
+    // da cena para a agua nasce no primeiro quadro que tiver um desses desenhos e sai com a agua desligada.
+    virtual void     set_water(WaterQuality q, uint64_t render) = 0;
     // N9.6 fase 1: a qualidade do AO (alta: o alvo inteiro, 8 direcoes x 4 passos, a primeira versao e o padrao do
     // dispositivo; media: meia resolucao com a reconstrucao pela profundidade, 8 x 4; baixa: meia resolucao, 4 x 3)
     virtual void     set_ambient_occlusion_quality(AoQuality q) = 0;

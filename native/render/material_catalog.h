@@ -22,6 +22,9 @@ enum MaterialFlag : uint32_t {
     // N9.6 fase 3: fonte de luz (uma lampada, uma placa acesa, um brilho): cada desenho dela no quadro vira uma luz pontual
     // no centro dele, na cor dos texels (emissive_color), somada a luz original da cena (D6-2 i)
     kMaterialEmissive = 1u << 1,
+    // N9.7: superficie de agua (o mar do cais): com a agua aprimorada ligada, os desenhos translucidos dela vao pela
+    // variante -DWATER do fragmento (movimento da textura, reflexo e refracao da cena opaca); com ela desligada, nada muda
+    kMaterialWater = 1u << 2,
 };
 
 struct MaterialEntry {

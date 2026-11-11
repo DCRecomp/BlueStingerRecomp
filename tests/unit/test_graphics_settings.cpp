@@ -32,7 +32,8 @@ BS_TEST(graphics_presets_and_classification) {
     BS_CHECK(!o.bloom && !o.ssao && !o.tonemap && !o.crt && o.sharpen == 0 && !o.lighting && o.msaa == 1 &&
              o.filter == st::Filter::Original && o.shadows == st::Shadows::Original && o.water == st::Water::Original &&
              o.shader.empty());
-    BS_CHECK(st::preset(st::Preset::Balanced).water == st::Water::Enhanced && st::preset(st::Preset::High).water == st::Water::High);
+    // N9.7 (D7-1): a agua original em todos os presets
+    BS_CHECK(st::preset(st::Preset::Balanced).water == st::Water::Original && st::preset(st::Preset::High).water == st::Water::Original);
 }
 
 BS_TEST(graphics_clamp_to_capabilities) {
@@ -95,7 +96,7 @@ BS_TEST(graphics_ssao_quality) {
 BS_TEST(graphics_presets_safe_defaults) {
     for (st::Preset p : {st::Preset::Original, st::Preset::Balanced, st::Preset::High}) {
         const st::GraphicsSettings s = st::preset(p);
-        BS_CHECK(s.shadows == st::Shadows::Original && !s.ssao && !s.lighting);
+        BS_CHECK(s.shadows == st::Shadows::Original && !s.ssao && !s.lighting && s.water == st::Water::Original);  // N9.7 D7-1
         BS_CHECK(st::from_toml(std::string("preset = \"") + st::preset_name(p) + "\"\n") == s);  // o nome no arquivo
     }
     const st::GraphicsSettings hi = st::preset(st::Preset::High);  // o resto do Alto nao mudou
@@ -106,11 +107,13 @@ BS_TEST(graphics_presets_safe_defaults) {
     const fs::path dir = fs::temp_directory_path() / "bs_graficos_presets";
     fs::remove_all(dir);
     fs::create_directories(dir);
-    for (int which = 0; which < 3; ++which) {  // sombras aprimoradas, luz, SSAO: cada uma sozinha sobre o Alto
+    for (int which = 0; which < 5; ++which) {  // sombras aprimoradas, luz, SSAO, agua aprimorada e alta: cada uma sozinha
         st::GraphicsSettings m = hi;
         if (which == 0) m.shadows = st::Shadows::Enhanced;
         if (which == 1) m.lighting = true;
         if (which == 2) m.ssao = true, m.ssao_quality = st::SsaoQuality::Low;
+        if (which == 3) m.water = st::Water::Enhanced;  // N9.7
+        if (which == 4) m.water = st::Water::High;
         BS_CHECK(st::classify(m) == st::Preset::Custom);
         BS_CHECK(st::to_toml(m).find("preset = \"personalizado\"") != std::string::npos);
         const st::GraphicsSettings kept = st::clamp_to(m, gpu);  // a Remastered com o Vulkan: a escolha fica
@@ -119,11 +122,12 @@ BS_TEST(graphics_presets_safe_defaults) {
         const st::GraphicsSettings back = st::read_graphics(dir);  // a reabertura
         BS_CHECK(back == m && st::classify(back) == st::Preset::Custom);
         st::Capabilities orig = gpu;  // a Original (main_sdl: os recursos so com editionProfile().lighting_effects)
-        orig.features.shadows = orig.features.lighting = orig.features.ssao = false;
+        orig.features.shadows = orig.features.lighting = orig.features.ssao = orig.features.water = false;
         const st::GraphicsSettings o = st::clamp_to(back, orig);
-        BS_CHECK(o.shadows == st::Shadows::Original && !o.lighting && !o.ssao && st::classify(o) == st::Preset::High);
+        BS_CHECK(o.shadows == st::Shadows::Original && !o.lighting && !o.ssao && o.water == st::Water::Original &&
+                 st::classify(o) == st::Preset::High);
         st::GraphicsSettings undo = back;  // desfeita a escolha: o Alto de novo
-        undo.shadows = st::Shadows::Original, undo.lighting = false, undo.ssao = false;
+        undo.shadows = st::Shadows::Original, undo.lighting = false, undo.ssao = false, undo.water = st::Water::Original;
         BS_CHECK(st::classify(undo) == st::Preset::High);
         BS_CHECK(st::write_graphics(dir, undo) && st::to_toml(st::read_graphics(dir)).find("preset = \"alta\"") != std::string::npos);
     }

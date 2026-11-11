@@ -42,7 +42,11 @@ layout(push_constant) uniform Batch {
     uint  clampMin, clampMax;
     float depthBias;   // subtraido de 1/w antes da escala (quadros com 1/w negativo)
     float invScale;    // 1 / escala da resolucao interna: pixel do alvo -> coordenadas do jogo (1 no modo fiel)
-    vec4  water;       // qualidade, tempo, horizonte e fundo em pixels do alvo (N9.7)
+#ifdef WATER
+    // N9.7 (so a variante -DWATER, desenhos de agua do catalogo): qualidade (1 aprimorada, 2 alta), a fase (o numero do
+    // render do Renderer, modulo 240000), o horizonte e o fundo da superficie em pixels do alvo
+    vec4  water;
+#endif
 } pc;
 
 const uint F_TEXTURED = 1u, F_GOURAUD = 2u, F_OFFSET = 4u, F_USE_ALPHA = 8u, F_IGNORE_TEX_ALPHA = 16u;
@@ -63,11 +67,13 @@ const uint kTriWords = 24u;
 
 // N8.7: os parametros do quadro (FOG_TABLE: 2 entradas de 16 bits por palavra; FOG_COL_RAM; FOG_DENSITY)
 layout(std430, set = 1, binding = 4) readonly buffer FrameData { uint fogTable[64]; uint fogColor; uint fogDensity; } fd;
-// N9.7: copia da cena opaca, feita entre os passes A e B. So desenhos de agua identificados a amostram.
-layout(set = 1, binding = 5) uniform sampler2D sceneColor;
 // N9.6 fase 2b: o fator do AO e o 1/w do opaco por pixel (ao.comp -DSURF); sem o AO no quadro, uma textura neutra
 // (a amostra so acontece com F_AO_SURF). O binding 5 fica para a agua do N9.7.
 layout(set = 1, binding = 6) uniform sampler2D aoSurfTex;
+#ifdef WATER
+// N9.7: a copia da cena opaca (depois do AO, da luz e dos volumes), feita entre os passes A e B nos quadros com agua
+layout(set = 1, binding = 5) uniform sampler2D sceneColor;
+#endif
 
 #ifdef AUTOSORT
 struct Frag {
@@ -181,15 +187,31 @@ float fogAlpha(float invW) {
     return r;
 }
 
-// N9.7: material da agua. Tres trens de onda geram a normal por pixel; a cena opaca e amostrada na posicao atual
-// (refracao) e espelhada em torno do horizonte da malha (reflexo em espaco de tela). O tom original continua como base.
+#ifdef WATER
+// N9.7: o movimento da textura do mar (o mesmo do prototipo do Codex, que o fazia nas UVs dos vertices na CPU): tres
+// ondas de direcoes, frequencias e velocidades diferentes sobre a UV ORIGINAL, aqui por pixel (no modo fiel a UV vem dos
+// dados do triangulo, entao o deslocamento so pode ser aplicado depois deles). A fase e o numero do render.
+vec2 waterUv(vec2 uv) {
+    const float high = step(1.5, pc.water.x);
+    const float strength = mix(0.009, 0.015, high);
+    const float phase = pc.water.y * mix(0.029, 0.037, high);
+    const float u = uv.x, v = uv.y;
+    return uv + vec2(sin(v * 0.73 + phase) * strength + sin((u + v) * 0.19 - phase * 0.61) * strength * 0.45 +
+                         sin(u * 0.31 - v * 0.47 + phase * 0.23) * strength * 0.25,
+                     sin(u * 0.57 - phase * 0.83) * strength * 0.72 + sin((u - v) * 0.23 + phase * 0.37) * strength * 0.32 +
+                         sin(u * 0.17 + v * 0.41 + phase * 0.19) * strength * 0.22);
+}
+
+// N9.7: o material da agua (do prototipo do Codex). Tres trens de onda dao a normal por pixel; a cena opaca e amostrada
+// na posicao atual (refracao) e espelhada em torno do horizonte da malha (reflexo em espaco de tela); fora da imagem, um
+// tom de ceu e maresia. O tom original continua como base.
 vec3 shadeWater(vec3 base, ivec2 pix) {
     const float high = step(1.5, pc.water.x);
     const vec2  suv = (vec2(pix) + 0.5) / pc.size;
     const float horizon = clamp(pc.water.z / pc.size.y, 0.0, 1.0);
     const float bottom = max(pc.water.w / pc.size.y, horizon + 1.0 / pc.size.y);
     const float depth = clamp((suv.y - horizon) / (bottom - horizon), 0.0, 1.0);
-    const float t = pc.water.y;
+    const float t = pc.water.y / 60.0;
     const vec2 q = vec2(suv.x * 31.0, depth * 13.0);
 
     const float a = q.x + q.y * 0.72 + t * 1.15;
@@ -209,11 +231,10 @@ vec3 shadeWater(vec3 base, ivec2 pix) {
     const vec3 reflectedOnScreen = texture(sceneColor, reflectUv).rgb;
     const float onScreen = step(0.0, rawReflectUv.x) * step(rawReflectUv.x, 1.0) *
                            step(0.0, rawReflectUv.y) * step(rawReflectUv.y, 1.0);
-    // O que o espelho pedir fora da imagem usa um ambiente de ceu/maresia em vez de esticar o texel da borda.
     const vec3 reflectedFallback = mix(vec3(0.16, 0.31, 0.43), vec3(0.43, 0.64, 0.78), 1.0 - depth);
     const vec3 reflected = mix(reflectedFallback, reflectedOnScreen, onScreen);
 
-    // Perto do horizonte a vista e rasante e o reflexo domina; perto da camera a refracao e o tom original dominam.
+    // perto do horizonte a vista e rasante e o reflexo domina; perto da camera, a refracao e o tom original
     const float fresnel = mix(0.14, 0.34, high) * (1.0 - smoothstep(0.0, 0.88, depth)) + mix(0.05, 0.08, high);
     vec3 color = mix(base, refracted, mix(0.08, 0.14, high));
     color = mix(color, reflected, clamp(fresnel, 0.0, 0.48));
@@ -226,6 +247,7 @@ vec3 shadeWater(vec3 base, ivec2 pix) {
     color += vec3(0.78, 0.91, 1.0) * (specular * mix(0.32, 0.55, high) + crest);
     return clamp(color, 0.0, 1.0);
 }
+#endif
 
 void main() {
     const ivec2 p = ivec2(gl_FragCoord.xy);
@@ -254,6 +276,9 @@ void main() {
         off = (pc.flags & F_GOURAUD) != 0u ? offz / zv : fOff;
         uv  = uvz / zv;
     }
+#ifdef WATER
+    if (pc.water.x < 4.5) uv = waterUv(uv);  // 5 e 6: as mascaras do diagnostico sem o movimento (a pegada original)
+#endif
     // recorte "fora": o pixel do jogo que contem o centro do pixel do alvo (o proprio pixel na resolucao original)
     const ivec2 g = pc.invScale == 1.0 ? p : ivec2(floor((vec2(p) + 0.5) * pc.invScale));
     if ((pc.flags & F_CLIP_OUTSIDE) != 0u && g.x >= pc.clip.x && g.x <= pc.clip.z && g.y >= pc.clip.y && g.y <= pc.clip.w)
@@ -280,7 +305,9 @@ void main() {
         else o = vec4(t.rgb * col.rgb, t.a * col.a);                               // modulate alpha
         if ((pc.flags & F_OFFSET) != 0u) o.rgb += off;
     }
-    if (pc.water.x > 0.5) o.rgb = shadeWater(o.rgb, p);
+#ifdef WATER
+    o.rgb = shadeWater(o.rgb, p);
+#endif
     if ((pc.flags & F_CLAMP) != 0u) o = min(max(o, argb(pc.clampMin)), argb(pc.clampMax));
     if ((pc.flags & F_FOG) != 0u) {  // N8.7: fog por tabela, sobre a cor final (o alfa nao muda)
         precise float f  = fogAlpha(z);
@@ -288,6 +315,12 @@ void main() {
         precise vec3  g  = o.rgb + (fc.rgb - o.rgb) * f;
         o.rgb            = g;
     }
+#ifdef WATER
+    // so o build de validacao (BS_AGUA_DIAGNOSTICO, vk_device): 3 e 5 = magenta, 4 e 6 = verde (5 e 6 sem o movimento da
+    // textura), DEPOIS da fog (com a fog cheia no horizonte as duas cores sairiam iguais); o pixel diferente entre magenta e
+    // verde e o dominio dos desenhos de agua (a mistura e monotona na cor de cima)
+    if (pc.water.x > 2.5) o.rgb = (int(pc.water.x + 0.5) & 1) == 0 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 1.0);
+#endif
     // N9.6 fase 2b: so a ate 1 % de 1/w do opaco por baixo (um decalque: os racks medidos ficam a 0,66 %); mais longe (uma
     // grade sobre um fosso, uma placa solta), a cor do jogo
     if ((pc.flags & F_AO_SURF) != 0u) {

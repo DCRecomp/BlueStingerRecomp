@@ -126,6 +126,8 @@ struct Stats {
     uint64_t    vk_light_frames = 0;                               // N9.6 fase 3: renders com a luz das fontes
     uint32_t    vk_lights_max = 0;                                 // o maior numero de luzes num render
     uint64_t    vk_soft_shadow_frames = 0;                         // N9.6 fase 4: renders com a borda suave dos volumes
+    uint64_t    vk_water_frames = 0, vk_water_draws = 0;           // N9.7: renders com a agua aprimorada e os desenhos dela
+    uint64_t    vk_water_scene_bytes_max = 0;                      // N9.7: o maior tamanho da imagem da cena para a agua
     uint64_t    cmp_frames = 0, cmp_pixels = 0, cmp_diff = 0, cmp_diff8 = 0, cmp_worst_render = 0;
     uint32_t    cmp_max = 0;
     double      cmp_worst_fraction = 0;

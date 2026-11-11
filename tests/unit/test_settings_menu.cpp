@@ -461,6 +461,40 @@ BS_TEST(settings_menu_high_preset_manual_effects) {
     }
 }
 
+// N9.7 (D7-1): a agua no menu. A Remastered com o recurso: a linha "Água" comeca original no Alto, vai a aprimorada e a
+// alta (personalizado, com o resto do Alto) e volta (o Alto). A Original (sem o recurso e com o perfil dela): a linha
+// inativa, nada muda, e mesmo uma preferencia com agua vinda de fora volta a original no commit do menu.
+BS_TEST(settings_menu_water_option) {
+    namespace ed = bs::native::edition;
+    for (const bool remaster : {true, false}) {
+        st::Capabilities caps;
+        caps.vulkan = true, caps.max_height = 2160, caps.max_msaa = 8, caps.max_anisotropy = 16;
+        caps.features = st::Features::all();
+        caps.features.water = remaster;
+        bs::Preferences start = pt();
+        start.graphics        = st::preset(st::Preset::High);
+        bs::SettingsMenu m(start, caps, {"en-US"}, ed::profile_for(remaster ? ed::Edition::Remastered : ed::Edition::Original));
+        m.open();
+        go(m, "Gráficos"), m.input(MenuAction::Confirm, 0);
+        bs::MenuView v = m.view();
+        const int    i = find(v, "Água");
+        BS_CHECK(i >= 0 && v.items[size_t(i)].enabled == remaster && v.items[size_t(i)].value.rfind("original", 0) == 0);
+        bs::Preferences p;
+        go(m, "Água"), m.input(MenuAction::Right, 0);
+        if (!remaster) {
+            BS_CHECK(!m.take_changes(p));
+            continue;
+        }
+        BS_CHECK(m.take_changes(p) && p.graphics.water == st::Water::Enhanced && st::classify(p.graphics) == st::Preset::Custom);
+        BS_CHECK(m.view().items[size_t(i)].value == "aprimorada");
+        m.input(MenuAction::Right, 0);
+        BS_CHECK(m.take_changes(p) && p.graphics.water == st::Water::High && p.graphics.resolution == st::Resolution::P1440);
+        BS_CHECK(m.view().items[size_t(i)].value == "alta");
+        m.input(MenuAction::Right, 0);  // de volta a original: o Alto
+        BS_CHECK(m.take_changes(p) && p.graphics.water == st::Water::Original && st::classify(p.graphics) == st::Preset::High);
+    }
+}
+
 // N7c (secao 23): Configuracoes > Controles > Camera. Original deixa as opcoes inativas; Voltar volta a Controles.
 BS_TEST(settings_menu_camera_page) {
     bs::SettingsMenu m(pt(), {}, {"en-US"});

@@ -49,7 +49,7 @@ struct GraphicsSettings {
     bool       hd_textures = false;  // substituicoes HD por conteudo, quando houver pacote (N9)
     bool       lighting    = false;  // iluminacao aprimorada (so com dados confiaveis)
     Shadows    shadows     = Shadows::Original;
-    Water      water       = Water::Original;  // N9.7: ondulacao so em superficies cadastradas por TextureId
+    Water      water       = Water::Original;  // N9.7: a agua aprimorada so nas superficies do catalogo (kMaterialWater)
     std::string shader;              // shader de pos-processamento de mod (mods\shaders\<nome>); "" = nenhum
     std::map<std::string, float> shader_params;  // os parametros dele (os ausentes ficam com o padrao do manifesto)
     bool       bloom = false, ssao = false, tonemap = false, crt = false;
@@ -82,7 +82,7 @@ struct Features {
     bool sharpen = false;  // N7c: nitidez
     bool bloom = false;    // N7c: bloom
     bool crt = false;      // N7c: filtro CRT (so com resolucao interna >= kCrtMinHeight)
-    bool water = false;    // N9.7: materiais de agua identificados e ondulacao da Remastered
+    bool water = false;    // N9.7: a agua aprimorada (Remastered com o Vulkan; a Original nunca)
     bool ssao = false;     // N9.6 fase 1: oclusao ambiente (Remastered com o Vulkan e a apresentacao direta)
     static Features all() {
         Features f{true, true, true, true, true, true, true, true, true, true, true};

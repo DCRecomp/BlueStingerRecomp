@@ -17,6 +17,7 @@
 #include "render/soft/soft_device.h"
 #include "render/texture_replacement.h"
 #include "render/vulkan/vk_device.h"
+#include "render/material_catalog.h"
 #include "render/water.h"
 #include "render_capture.h"
 
@@ -75,20 +76,16 @@ int draw(const Ir& in, const char* out, uint32_t width, nr::WaterQuality water =
         }
         nr::CommandList c = in.cl;
         if (width) c.frame.width = width;
-        if (water != nr::WaterQuality::Original) {
-            std::vector<uint8_t> tags(in.tex.size());
-            for (size_t i = 0; i < in.tex.size(); ++i)
-                tags[i] = uint8_t(nr::is_water_surface(nr::texture_id(in.tex[i].desc.width, in.tex[i].desc.height, in.tex[i].argb)));
-            const uint32_t changed = nr::animate_water(c, tags, frame, water);
-            std::printf("agua\tdesenhos\t%u\tqualidade\t%u\tquadro\t%llu\n", changed, unsigned(water),
-                        static_cast<unsigned long long>(frame));
-        }
         for (auto& d : c.draws)
-            if (d.state.texture) {
-                const nr::WaterQuality q = nr::marked_water_quality(d.state.texture);
-                const uint32_t         source = nr::unmark_water_texture(d.state.texture).value;
-                d.state.texture = nr::mark_water_texture(h[source - 1], q);
-            }
+            if (d.state.texture) d.state.texture = h[d.state.texture.value - 1];
+        // N9.7: no Vulkan, as texturas com o material do catalogo (a agua inclusive, kMaterialWater) e a qualidade e a fase
+        // da agua; o efeito e o do jogo (a variante -DWATER), nada muda na IR
+        if constexpr (requires { dev.set_water(water, frame); }) {
+            for (size_t i = 0; i < in.tex.size(); ++i)
+                dev.set_texture_material(h[i], nr::material_flags(nr::texture_id(in.tex[i].desc.width, in.tex[i].desc.height,
+                                                                                    in.tex[i].argb)));
+            dev.set_water(water, frame);
+        }
         if (!dev.submit(c)) return std::fprintf(stderr, "%s recusou a IR\n", backend), 1;
         std::vector<uint32_t> img;
         uint32_t              w = 0, hh = 0;
@@ -98,6 +95,10 @@ int draw(const Ir& in, const char* out, uint32_t width, nr::WaterQuality water =
         for (uint32_t p : img) hash = (hash ^ p) * 1099511628211ull;
         std::printf("backend\t%s\tquadro\t%ux%u\thash\t%016llx\n", backend, w, hh,
                     static_cast<unsigned long long>(hash));
+        if constexpr (requires { dev.set_water(water, frame); })
+            std::printf("agua\tdesenhos\t%llu\tqualidade\t%u\tquadro\t%llu\n",
+                        static_cast<unsigned long long>(dev.stats().water_draws), unsigned(water),
+                        static_cast<unsigned long long>(frame));
         return 0;
     };
     // O material completo da agua existe no Vulkan. O modo quadro/original continua no software como referencia fiel.

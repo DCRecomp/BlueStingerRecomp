@@ -1,106 +1,248 @@
+// N9.7 (docs/N9-7-PLANO.md): a agua aprimorada da Remastered. A identificacao e a do catalogo de materiais (kMaterialWater,
+// por TextureId); o efeito e so da variante -DWATER do fragmento no Vulkan. Sem a qualidade, sem o material ou num desenho
+// que nao e translucido, a imagem e a do modo fiel (bit a bit igual ao software na escala 1).
 #include "test.h"
 
-#include "render/water.h"
+#include "render/material_catalog.h"
+#include "render/soft/soft_device.h"
 #include "render/vulkan/vk_device.h"
+#include "render/water.h"
 
-#include <algorithm>
 #include <cstring>
 #include <string>
+#include <tuple>
 #include <vector>
 
 namespace nr = bs::native::render;
 
 namespace {
-template <class T> bool same_bytes(const T& a, const T& b) { return std::memcmp(&a, &b, sizeof(T)) == 0; }
-}
+constexpr nr::TextureId kSea{32, 32, 0x7458e3539d31cd8dull};  // o mar do cais RCG00 (o prototipo do Codex)
 
-BS_TEST(water_only_identified_surface_is_animated) {
-    BS_CHECK(nr::is_water_surface({32, 32, 0x7458e3539d31cd8dull}));
-    BS_CHECK(!nr::is_water_surface({32, 32, 0x7458e3539d31cd8cull}));
-    BS_CHECK(!nr::is_water_surface({64, 64, 0x7458e3539d31cd8dull}));
-
+// a cena de teste: o fundo opaco em gradiente (a "cena" que a agua reflete) e o mar translucido da linha 240 para baixo
+nr::CommandList water_scene(uint32_t w, nr::TextureHandle sea, bool autosort = false, bool opaque_sea = false) {
     nr::CommandList cl;
-    cl.vertices = {{0, 0, 1, 2, 3}, {1, 0, 1, 4, 5}, {0, 1, 1, 6, 7},
-                   {2, 0, 1, 8, 9}, {3, 0, 1, 10, 11}, {2, 1, 1, 12, 13}};
-    nr::Draw water, wall;
-    water.state.texture.value = 1, water.first_vertex = 0, water.vertex_count = 3;
-    wall.state.texture.value = 2, wall.first_vertex = 3, wall.vertex_count = 3;
-    cl.draws = {water, wall};
-    const auto original = cl;
-    const uint8_t tags[] = {1, 0};
-    BS_CHECK(nr::animate_water(cl, tags, 17, nr::WaterQuality::Enhanced) == 1);
-    for (size_t i = 0; i < 3; ++i) {
-        BS_CHECK(cl.vertices[i].x == original.vertices[i].x && cl.vertices[i].y == original.vertices[i].y &&
-                 cl.vertices[i].inv_w == original.vertices[i].inv_w);
-        BS_CHECK(cl.vertices[i].u != original.vertices[i].u || cl.vertices[i].v != original.vertices[i].v);
+    cl.frame.width = w, cl.frame.height = 480, cl.frame.clear_color = 0xFF000000u, cl.frame.translucent_autosort = autosort;
+    const float W = float(w);
+    nr::Draw bg;
+    bg.first_vertex = 0, bg.vertex_count = 4, bg.state.gouraud = true;
+    for (auto [x, y, c] : {std::tuple{0.f, 0.f, 0xFF203040u}, {W, 0.f, 0xFFC08040u}, {0.f, 480.f, 0xFF40A060u}, {W, 480.f, 0xFF8030C0u}})
+        cl.vertices.push_back({x, y, 0.5f, 0, 0, c, 0});
+    cl.draws.push_back(bg);
+    nr::Draw s;
+    s.first_vertex = 4, s.vertex_count = 4, s.state.texture = sea;
+    if (!opaque_sea) {
+        s.state.list = nr::ListType::Translucent;
+        s.state.src = nr::Blend::SrcAlpha, s.state.dst = nr::Blend::InvSrcAlpha, s.state.use_alpha = true;
+        s.state.env = nr::TexEnv::ModulateAlpha, s.state.depth_write = false;
     }
-    for (size_t i = 3; i < 6; ++i) BS_CHECK(same_bytes(cl.vertices[i], original.vertices[i]));
-    BS_CHECK(nr::marked_water_quality(cl.draws[0].state.texture) == nr::WaterQuality::Enhanced);
-    BS_CHECK(nr::unmark_water_texture(cl.draws[0].state.texture).value == 1);
-    BS_CHECK(same_bytes(cl.draws[1], original.draws[1]));
-    BS_CHECK(same_bytes(cl.frame, original.frame));
-
-    nr::CommandList off = original;
-    BS_CHECK(nr::animate_water(off, tags, 17, nr::WaterQuality::Original) == 0);
-    for (size_t i = 0; i < off.vertices.size(); ++i) BS_CHECK(same_bytes(off.vertices[i], original.vertices[i]));
+    s.state.depth = nr::DepthTest::Always;
+    for (auto [x, y, u, v] : {std::tuple{0.f, 240.f, 0.f, 0.f}, {W, 240.f, 6.f, 0.f}, {0.f, 480.f, 0.f, 4.f}, {W, 480.f, 6.f, 4.f}})
+        cl.vertices.push_back({x, y, 0.6f, u, v, 0xC0FFFFFFu, 0});
+    cl.draws.push_back(s);
+    return cl;
 }
 
-BS_TEST(water_rejects_bad_texture_and_vertex_ranges) {
+std::vector<uint32_t> sea_texels() {
+    std::vector<uint32_t> t(64);
+    for (uint32_t i = 0; i < 64; ++i) t[i] = 0xFF000000u | ((i * 3u) << 16) | ((80u + i) << 8) | (160u + i);
+    return t;
+}
+
+struct Shot {
+    std::vector<uint32_t> img;
+    bool                  ok = false;
+};
+Shot shoot(nr::VulkanDevice& d, const nr::CommandList& cl) {
+    Shot     s;
+    uint32_t w = 0, h = 0;
+    s.ok = d.submit(cl).ok() && d.read_frame(s.img, w, h).ok() && w == cl.frame.width && h == cl.frame.height;
+    return s;
+}
+// pixels diferentes acima e a partir da linha 240 (a superficie)
+std::pair<size_t, size_t> diff_rows(const std::vector<uint32_t>& a, const std::vector<uint32_t>& b, uint32_t w) {
+    size_t above = 0, water = 0;
+    for (size_t i = 0; i < a.size() && i < b.size(); ++i)
+        if (a[i] != b[i]) (i / w >= 240 ? water : above)++;
+    return {above, water};
+}
+
+struct Cfg {
+    uint32_t    w;
+    float       scale;
+    bool        autosort;
+    const char* name;
+};
+constexpr Cfg kCfgs[] = {{640, 1.f, false, "640 s1"}, {640, 1.f, true, "640 s1 autosort"}, {640, 2.f, false, "640 s2"},
+                         {854, 1.f, false, "854 s1"}};
+} // namespace
+
+// A1: so a textura medida do mar e agua no catalogo; vizinhos de hash e de forma nao; nenhuma linha mistura a agua com
+// outro material
+BS_TEST(water_catalog_identifies_only_the_measured_sea) {
+    BS_CHECK(nr::material_flags(kSea) == nr::kMaterialWater);
+    BS_CHECK(nr::material_flags({32, 32, 0x7458e3539d31cd8cull}) == 0);  // um bit do conteudo
+    BS_CHECK(nr::material_flags({64, 16, 0x7458e3539d31cd8dull}) == 0);  // outra forma, o mesmo hash
+    BS_CHECK(nr::material_flags({}) == 0);
+    size_t water = 0;
+    for (const nr::MaterialEntry& e : nr::material_table())
+        if (e.flags & nr::kMaterialWater) {
+            ++water;
+            BS_CHECK(e.flags == nr::kMaterialWater && e.id == kSea);
+        }
+    BS_CHECK(water == 1);
+}
+
+// O horizonte e o fundo so dos desenhos de agua; desenhos com vertices fora da lista ficam de fora; sem agua, false
+BS_TEST(water_extent_only_water_draws) {
     nr::CommandList cl;
-    cl.vertices.resize(3);
-    nr::Draw d;
-    d.state.texture.value = 2, d.first_vertex = 2, d.vertex_count = 2;
-    cl.draws.push_back(d);
-    const uint8_t tags[] = {1};
-    BS_CHECK(nr::animate_water(cl, tags, 1, nr::WaterQuality::High) == 0);
+    cl.vertices = {{0, 50, 1}, {9, 60, 1}, {0, 70, 1}, {0, 200, 1}, {9, 300, 1}, {0, 250, 1}};
+    nr::Draw a, b, bad;
+    a.first_vertex = 0, a.vertex_count = 3, a.state.texture.value = 1;
+    b.first_vertex = 3, b.vertex_count = 3, b.state.texture.value = 2;
+    bad.first_vertex = 5, bad.vertex_count = 4, bad.state.texture.value = 2;  // passa do fim da lista
+    cl.draws = {a, b, bad};
+    float top = 0, bottom = 0;
+    BS_CHECK(nr::water_extent(cl, [](const nr::Draw& d) { return d.state.texture.value == 2; }, top, bottom));
+    BS_CHECK(top == 200.f && bottom == 300.f);
+    BS_CHECK(!nr::water_extent(cl, [](const nr::Draw&) { return false; }, top, bottom));
+    BS_CHECK(nr::water_phase(nr::kWaterPhasePeriod + 7) == nr::water_phase(7) && nr::water_phase(7) == 7.f);
 }
 
-BS_TEST(water_vulkan_reflects_only_inside_the_marked_surface) {
-    std::string error;
+// A2/A4: a agua no Vulkan, nos arranjos do jogo (640 na escala 1, com e sem autosort; escala 2; o quadro largo de 854).
+// Desligada (qualidade original), sem o material, ou num desenho opaco: a imagem do modo fiel e nenhuma imagem da cena.
+// Ligada: so a superficie muda; aprimorada e alta diferem; a mesma fase repete o quadro, outra fase move as ondas; desligada
+// de novo, a imagem de antes e a memoria devolvida.
+BS_TEST(render_vulkan_water_material) {
+    const std::vector<uint32_t> tex = sea_texels();
+    nr::TextureDesc             td;
+    td.width = td.height = 8;
+    const auto bytes = std::as_bytes(std::span<const uint32_t>(tex));
+    for (const Cfg& cfg : kCfgs) {
+        std::string err;
+        {
+            auto d = nr::VulkanDevice::create(&err);
+            if (!d) BS_SKIP("dispositivo Vulkan");
+            d->set_scale(cfg.scale);
+            const nr::TextureHandle sea = d->create_texture(td, bytes).value();
+            const nr::CommandList   cl  = water_scene(cfg.w, sea, cfg.autosort);
+            const Shot              off = shoot(*d, cl);
+            BS_CHECK(off.ok);
+            // o modo fiel: igual ao software no autosort (o caminho do jogo). Na translucida por ordem o Vulkan ja diferia do
+            // software nesta cena antes do N9.7 (8000 pixels no master f690ecb, conferido em 2026-11-11; registrado para o
+            // N9.12): ali a prova e a do proprio Vulkan, a agua desligada igual a sem o material
+            if (cfg.scale == 1.f && cfg.autosort) {
+                nr::soft::SoftwareDevice sw;
+                const nr::TextureHandle  ss = sw.create_texture(td, bytes).value();
+                std::vector<uint32_t>    s;
+                uint32_t                 w = 0, h = 0;
+                BS_CHECK(sw.submit(water_scene(cfg.w, ss, cfg.autosort)).ok() && sw.read_frame(s, w, h).ok() && s == off.img);
+            }
+            d->set_water(nr::WaterQuality::High, 100);  // a qualidade sem o material: nada
+            BS_CHECK(shoot(*d, cl).img == off.img && d->stats().water_frames == 0 && d->stats().water_scene_bytes == 0);
+            d->set_texture_material(sea, nr::kMaterialWater);
+            d->set_water(nr::WaterQuality::Original, 100);  // o material com a agua original: nada
+            BS_CHECK(shoot(*d, cl).img == off.img && d->stats().water_frames == 0 && d->stats().water_scene_bytes == 0);
+            const Shot opq = shoot(*d, water_scene(cfg.w, sea, cfg.autosort, true));  // o mesmo material num desenho opaco
+            d->set_water(nr::WaterQuality::High, 100);
+            BS_CHECK(opq.ok && shoot(*d, water_scene(cfg.w, sea, cfg.autosort, true)).img == opq.img);  // nada
+            BS_CHECK(d->stats().water_frames == 0 && d->stats().water_draws == 0 && d->stats().water_scene_bytes == 0);
+
+            d->set_water(nr::WaterQuality::Enhanced, 100);
+            const Shot enh = shoot(*d, cl);
+            const uint64_t tw = uint64_t(cfg.w * cfg.scale + 0.5f), th = uint64_t(480 * cfg.scale + 0.5f);
+            BS_CHECK(enh.ok && d->stats().water_frames == 1 && d->stats().water_draws == 1);
+            BS_CHECK(d->stats().water_scene_bytes == tw * th * 4);  // a imagem da cena so agora, do tamanho do alvo
+            const auto [above, water] = diff_rows(off.img, enh.img, cfg.w);
+            std::fprintf(stderr, "  agua (%s): %zu pixels da superficie mudaram, %zu acima\n", cfg.name, water, above);
+            BS_CHECK(above == 0 && water > size_t(cfg.w) * 240 / 4);
+            BS_CHECK(shoot(*d, cl).img == enh.img);  // a mesma fase: o mesmo quadro
+            d->set_water(nr::WaterQuality::Enhanced, 160);
+            const Shot later = shoot(*d, cl);
+            BS_CHECK(later.img != enh.img && diff_rows(enh.img, later.img, cfg.w).first == 0);  // as ondas andam, so na agua
+            d->set_water(nr::WaterQuality::High, 100);
+            const Shot high = shoot(*d, cl);
+            BS_CHECK(high.img != enh.img && diff_rows(off.img, high.img, cfg.w).first == 0);
+            d->set_water(nr::WaterQuality::Original, 100);  // desligada de novo
+            BS_CHECK(shoot(*d, cl).img == off.img && d->stats().water_scene_bytes == 0);
+            d->set_texture_material(sea, 0);  // fora do catalogo: nada, mesmo com a alta
+            d->set_water(nr::WaterQuality::High, 100);
+            BS_CHECK(shoot(*d, cl).img == off.img && d->stats().water_scene_bytes == 0);
+            d->destroy_texture(sea);
+        }
+        BS_CHECK(nr::vulkan_live_objects() == 0);
+    }
+}
+
+// A2/A4: a troca de arranjo no MESMO dispositivo com a agua ligada (a imagem da cena recriada com o alvo) e a recriacao do
+// dispositivo (a recuperacao do Vulkan): com a mesma fase, o mesmo quadro de um dispositivo novo, sem salto nas ondas
+BS_TEST(render_vulkan_water_target_switch_and_recovery) {
+    const std::vector<uint32_t> tex = sea_texels();
+    nr::TextureDesc             td;
+    td.width = td.height = 8;
+    const auto bytes = std::as_bytes(std::span<const uint32_t>(tex));
+    auto       fresh = [&](const Cfg& cfg, uint64_t phase, std::vector<uint32_t>& out) {
+        std::string err;
+        auto        d = nr::VulkanDevice::create(&err);
+        if (!d) return false;
+        d->set_scale(cfg.scale);
+        const nr::TextureHandle sea = d->create_texture(td, bytes).value();
+        d->set_texture_material(sea, nr::kMaterialWater), d->set_water(nr::WaterQuality::High, phase);
+        out = shoot(*d, water_scene(cfg.w, sea, cfg.autosort)).img;
+        d->destroy_texture(sea);
+        return true;
+    };
+    const Cfg seq[] = {kCfgs[0], kCfgs[2], kCfgs[3], kCfgs[1], kCfgs[0]};
+    std::vector<std::vector<uint32_t>> ref;
+    for (size_t i = 0; i < std::size(seq); ++i) {
+        std::vector<uint32_t> r;
+        if (!fresh(seq[i], 500 + i, r)) BS_SKIP("dispositivo Vulkan");
+        ref.push_back(r);
+    }
+    BS_CHECK(nr::vulkan_live_objects() == 0);
     {
-        auto dev = nr::VulkanDevice::create(&error);
-        if (!dev) BS_SKIP("dispositivo Vulkan");
-        const uint32_t texel = 0xB0509CD0u;
-        nr::TextureDesc td;
-        td.width = td.height = 1;
-        auto texture = dev->create_texture(td, std::as_bytes(std::span<const uint32_t>(&texel, 1)));
-        BS_CHECK(texture.ok());
-        if (!texture) return;
+        std::string err;
+        auto        d = nr::VulkanDevice::create(&err);
+        if (!d) BS_SKIP("dispositivo Vulkan");
+        const nr::TextureHandle sea = d->create_texture(td, bytes).value();
+        d->set_texture_material(sea, nr::kMaterialWater);
+        for (size_t i = 0; i < std::size(seq); ++i) {
+            d->set_scale(seq[i].scale), d->set_water(nr::WaterQuality::High, 500 + i);
+            const uint64_t f0 = d->stats().water_frames;
+            const Shot     s  = shoot(*d, water_scene(seq[i].w, sea, seq[i].autosort));
+            const bool     same = s.img == ref[i];
+            std::fprintf(stderr, "  agua, troca de arranjo %zu (%s): %s ao dispositivo novo\n", i, seq[i].name, same ? "igual" : "DIFERENTE");
+            BS_CHECK(s.ok && same && d->stats().water_frames == f0 + 1);
+        }
+        d->destroy_texture(sea);
+    }
+    BS_CHECK(nr::vulkan_live_objects() == 0);
+}
 
-        nr::CommandList cl;
-        cl.frame.width = cl.frame.height = 32;
-        cl.frame.clear_color = 0xFF79A6C4u;
-        cl.frame.translucent_autosort = false;
-        cl.vertices = {
-            {0, 0, 1, 0, 0, 0xFF24313A}, {32, 0, 1, 1, 0, 0xFF8EAAA9},
-            {0, 12, 1, 0, 1, 0xFF354A52}, {32, 12, 1, 1, 1, 0xFFC4D0C7},
-            {0, 12, 1, 0, 0, 0xC0FFFFFF}, {32, 12, 1, 4, 0, 0xC0FFFFFF},
-            {0, 32, 1, 0, 4, 0xC0FFFFFF}, {32, 32, 1, 4, 4, 0xC0FFFFFF},
-        };
-        nr::Draw solid, water;
-        solid.first_vertex = 0, solid.vertex_count = 4;
-        solid.state.depth = nr::DepthTest::Always;
-        water.first_vertex = 4, water.vertex_count = 4;
-        water.state.list = nr::ListType::Translucent;
-        water.state.texture = texture.value();
-        water.state.src = nr::Blend::SrcAlpha, water.state.dst = nr::Blend::InvSrcAlpha;
-        water.state.depth = nr::DepthTest::Always, water.state.depth_write = false;
-        water.state.env = nr::TexEnv::ModulateAlpha, water.state.use_alpha = true;
-        cl.draws = {solid, water};
-
-        std::vector<uint32_t> original, enhanced;
-        uint32_t w = 0, h = 0;
-        BS_CHECK(dev->submit(cl).ok() && dev->read_frame(original, w, h).ok() && w == 32 && h == 32);
-        cl.draws[1].state.texture = nr::mark_water_texture(texture.value(), nr::WaterQuality::High);
-        BS_CHECK(dev->submit(cl).ok() && dev->read_frame(enhanced, w, h).ok());
-        size_t changedWater = 0, changedAbove = 0;
-        for (uint32_t y = 0; y < 32; ++y)
-            for (uint32_t x = 0; x < 32; ++x)
-                if (original[size_t(y) * 32 + x] != enhanced[size_t(y) * 32 + x])
-                    (y >= 12 ? changedWater : changedAbove)++;
-        BS_CHECK(changedWater > 200);
-        BS_CHECK(changedAbove == 0);
-        dev->destroy_texture(texture.value());
+// A2/A4: a agua junto com o AO, a luz e as sombras do N9.6: so a superficie muda em relacao aos tres sem a agua, e o quadro
+// se repete
+BS_TEST(render_vulkan_water_with_lighting_effects) {
+    const std::vector<uint32_t> tex = sea_texels();
+    nr::TextureDesc             td;
+    td.width = td.height = 8;
+    const auto  bytes = std::as_bytes(std::span<const uint32_t>(tex));
+    std::string err;
+    {
+        auto d = nr::VulkanDevice::create(&err);
+        if (!d) BS_SKIP("dispositivo Vulkan");
+        const nr::TextureHandle sea = d->create_texture(td, bytes).value();
+        d->set_texture_material(sea, nr::kMaterialWater);
+        const nr::CommandList cl = water_scene(640, sea);
+        d->set_ambient_occlusion(true), d->set_lighting(true), d->set_shadows(true);
+        const Shot fx = shoot(*d, cl);
+        d->set_water(nr::WaterQuality::High, 42);
+        const Shot all = shoot(*d, cl), again = shoot(*d, cl);
+        BS_CHECK(fx.ok && all.ok && all.img == again.img && d->stats().water_frames == 2);
+        const auto [above, water] = diff_rows(fx.img, all.img, 640);
+        BS_CHECK(above == 0 && water > 0);
+        d->set_ambient_occlusion(false), d->set_lighting(false), d->set_shadows(false);
+        d->set_water(nr::WaterQuality::Original, 42);
+        BS_CHECK(shoot(*d, cl).ok && d->stats().water_scene_bytes == 0);
+        d->destroy_texture(sea);
     }
     BS_CHECK(nr::vulkan_live_objects() == 0);
 }

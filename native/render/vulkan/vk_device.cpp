@@ -9,6 +9,12 @@
 #include "render/vulkan/spirv/pvr_frag_autosort_fcd.h"
 #include "render/vulkan/spirv/pvr_frag_fc.h"
 #include "render/vulkan/spirv/pvr_frag_fcd.h"
+#include "render/vulkan/spirv/pvr_frag_water.h"  // N9.7: as variantes -DWATER
+#include "render/vulkan/spirv/pvr_frag_autosort_water.h"
+#include "render/vulkan/spirv/pvr_frag_fc_water.h"
+#include "render/vulkan/spirv/pvr_frag_autosort_fc_water.h"
+#include "render/vulkan/spirv/pvr_frag_fcd_water.h"
+#include "render/vulkan/spirv/pvr_frag_autosort_fcd_water.h"
 #include "render/soft/soft_raster.h"
 #include "render/vulkan/spirv/pvr_vert.h"
 #include "render/vulkan/spirv/ao_blur_comp.h"
@@ -49,6 +55,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <cstddef>
 #include <cstring>
 #include <tuple>
 #include <map>
@@ -69,9 +76,10 @@ struct Push {
     uint32_t ptRef, blend, clampMin, clampMax;
     float    depthBias;  // subtraido de 1/w antes da escala (so com 1/w negativo no quadro)
     float    invScale;   // 1 / escala da resolucao interna (N7c)
-    float    water[4];   // qualidade, tempo, horizonte e fundo (N9.7)
+    // N9.7: so a variante -DWATER le (qualidade, fase, horizonte e fundo); o fiel recebe e le so os 64 bytes de antes
+    float    water[4];
 };
-static_assert(sizeof(Push) == 80);
+static_assert(sizeof(Push) == 80 && offsetof(Push, water) == 64);
 
 constexpr uint32_t F_TEXTURED = 1, F_GOURAUD = 2, F_OFFSET = 4, F_USE_ALPHA = 8, F_IGNORE_TEX_ALPHA = 16, F_CLAMP = 32,
                    F_CLIP_OUTSIDE = 64, F_CLAMP_U = 4096, F_CLAMP_V = 8192, F_FLIP_U = 16384, F_FLIP_V = 32768,
@@ -260,20 +268,13 @@ public:
     }
 
     Result<void> submitFrame(const CommandList& cl) {
-        waterTime_ = float(st_.frames % 240000) / 60.f;
-        waterHorizon_ = std::numeric_limits<float>::max();
-        waterBottom_ = std::numeric_limits<float>::lowest();
-        for (const Draw& d : cl.draws) {
-            if (marked_water_quality(d.state.texture) == WaterQuality::Original || d.first_vertex > cl.vertices.size() ||
-                d.vertex_count > cl.vertices.size() - d.first_vertex)
-                continue;
-            for (uint32_t k = 0; k < d.vertex_count; ++k) {
-                const float y = cl.vertices[d.first_vertex + k].y;
-                if (std::isfinite(y)) waterHorizon_ = std::min(waterHorizon_, y), waterBottom_ = std::max(waterBottom_, y);
-            }
-        }
-        if (!(waterHorizon_ <= waterBottom_)) waterHorizon_ = 0, waterBottom_ = 1;
-        else waterBottom_ = std::max(waterBottom_, waterHorizon_ + 1.f);
+        // N9.7: a agua aprimorada neste quadro: a qualidade ligada, o render do framebuffer e algum desenho translucido de
+        // uma textura do catalogo com kMaterialWater; o horizonte e o fundo vem dos y desses desenhos (water_extent)
+        waterQuality_ = WaterQuality(waterQ_.load(std::memory_order_relaxed));
+        waterWanted_  = false;
+        if (waterQuality_ != WaterQuality::Original && cl.frame.height == 480 && cl.frame.width >= 640 && !waterFailed_)
+            waterWanted_ = water_extent(cl, [&](const Draw& d) { return waterDraw(d.state); }, waterHorizon_, waterBottom_);
+        waterTime_ = water_phase(waterRender_.load(std::memory_order_relaxed));
         MemScope memScope(telemetry::Mem::FrameBuffers);  // N9.5 fase 5C: vertices, triangulos, envios (o alvo tem o seu)
         prepare_frame(cl, prep_, true, scale_);  // modo fiel: retangulos envolventes, a cobertura e a do shader
         if (!target(scaled_size(cl.frame.width, scale_), scaled_size(cl.frame.height, scale_), cl.frame.width, cl.frame.height))
@@ -337,6 +338,16 @@ public:
     void  set_ambient_occlusion_quality(AoQuality q) override { aoQuality_.store(uint8_t(q), std::memory_order_relaxed); }
     void  set_lighting(bool on) override { lightOn_.store(on, std::memory_order_relaxed); }  // N9.6 fase 3
     void  set_shadows(bool on) override { shadowsOn_.store(on, std::memory_order_relaxed); }  // N9.6 fase 4
+    void  set_water(WaterQuality q, uint64_t render) override {  // N9.7
+        waterQ_.store(uint8_t(q), std::memory_order_relaxed), waterRender_.store(render, std::memory_order_relaxed);
+    }
+    // N9.7: um desenho de agua: translucido, de uma textura do catalogo com kMaterialWater (o handle do dispositivo; nada
+    // no handle muda)
+    bool waterDraw(const DrawState& s) const {
+        if (s.list != ListType::Translucent || !s.texture) return false;
+        const auto it = texs_.find(s.texture.value);
+        return it != texs_.end() && (it->second.material & kMaterialWater);
+    }
     void  set_texture_light(TextureHandle t, uint32_t rgb) override {  // N9.6 fase 3
         if (auto it = texs_.find(t.value); it != texs_.end()) it->second.light = rgb;
     }
@@ -626,6 +637,7 @@ private:
     VkDescriptorPool      texPool_ = VK_NULL_HANDLE, framePool_ = VK_NULL_HANDLE;
     VkPipelineLayout      gfxLayout_ = VK_NULL_HANDLE, compLayout_ = VK_NULL_HANDLE;
     VkShaderModule        vert_ = VK_NULL_HANDLE, frag_ = VK_NULL_HANDLE, fragList_ = VK_NULL_HANDLE, comp_ = VK_NULL_HANDLE;
+    VkShaderModule        waterFrag_ = VK_NULL_HANDLE, waterFragList_ = VK_NULL_HANDLE;  // N9.7: -DWATER (o mesmo ambiente FP)
     VkPipeline            resolve_ = VK_NULL_HANDLE;
     VkSampler             sampler_ = VK_NULL_HANDLE, waterSampler_ = VK_NULL_HANDLE;
     std::unordered_map<uint32_t, VkPipeline> pipes_;
@@ -707,6 +719,14 @@ private:
     uint32_t              imageW_ = 0, imageH_ = 0;
     std::vector<uint32_t> frameImage_;
     bool                  fromImage_ = false;
+    // N9.7: a agua aprimorada (set_water): a qualidade e a fase pedidas; no quadro, a qualidade em uso, se ha desenho de
+    // agua (waterWanted_), o horizonte e o fundo; a imagem da cena so existe com agua no quadro (waterScene_) e o descritor
+    // do binding 5 aponta para ela ou para a textura neutra (waterBound_); sem memoria para ela, a agua fica original ate o
+    // alvo mudar (waterFailed_)
+    std::atomic<uint8_t>  waterQ_{0};
+    std::atomic<uint64_t> waterRender_{0};
+    WaterQuality          waterQuality_ = WaterQuality::Original;
+    bool                  waterWanted_ = false, waterBound_ = false, waterFailed_ = false;
     float                 waterTime_ = 0, waterHorizon_ = 0, waterBottom_ = 1;
 
     Error fail(const char* what, VkResult r = VK_SUCCESS) {  // motivo da falha para o diagnostico (stats().last_error)
@@ -786,7 +806,8 @@ private:
                 if (mem_.memoryHeaps[i].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) heap = std::max(heap, mem_.memoryHeaps[i].size);
             // N9.6 fase 1: + 4 B/px da imagem do AO (rgba8 no alvo na alta; rgba32f em 1/4 na media e na baixa). A constante
             // de 96 B/px e a estimativa antiga (medidos ~268 B/px: a correcao fica no N9.12)
-            const double pixels = double(heap) / 4.0 / (96.0 + 4.0);               // pixels do alvo que cabem
+            // N9.7: + 4 B/px da imagem da cena para a agua (rgba8 no alvo, so com a agua ligada e um desenho de agua)
+            const double pixels = double(heap) / 4.0 / (96.0 + 4.0 + 4.0);         // pixels do alvo que cabem
             const double byMem  = std::sqrt(pixels * 3.0 / 4.0);                    // altura 4:3
             const double byDim  = double(p.limits.maxImageDimension2D) * 3.0 / 4.0;  // a largura e 4/3 da altura
             st_.max_internal_height = uint32_t(std::max(480.0, std::min(byMem, byDim)));
@@ -903,17 +924,23 @@ private:
         if (floatControls_ && denormPreserve_) {
             frag_     = module(kPvrFragFcd, sizeof kPvrFragFcd);
             fragList_ = module(kPvrFragAutosortFcd, sizeof kPvrFragAutosortFcd);
+            waterFrag_     = module(kPvrFragFcdWater, sizeof kPvrFragFcdWater);
+            waterFragList_ = module(kPvrFragAutosortFcdWater, sizeof kPvrFragAutosortFcdWater);
             comp_     = module(kResolveCompFcd, sizeof kResolveCompFcd);
         } else if (floatControls_) {
             frag_     = module(kPvrFragFc, sizeof kPvrFragFc);
             fragList_ = module(kPvrFragAutosortFc, sizeof kPvrFragAutosortFc);
+            waterFrag_     = module(kPvrFragFcWater, sizeof kPvrFragFcWater);
+            waterFragList_ = module(kPvrFragAutosortFcWater, sizeof kPvrFragAutosortFcWater);
             comp_     = module(kResolveCompFc, sizeof kResolveCompFc);
         } else {
             frag_     = module(kPvrFrag, sizeof kPvrFrag);
             fragList_ = module(kPvrFragAutosort, sizeof kPvrFragAutosort);
+            waterFrag_     = module(kPvrFragWater, sizeof kPvrFragWater);
+            waterFragList_ = module(kPvrFragAutosortWater, sizeof kPvrFragAutosortWater);
             comp_     = module(kResolveComp, sizeof kResolveComp);
         }
-        if (!vert_ || !frag_ || !fragList_ || !comp_) {
+        if (!vert_ || !frag_ || !fragList_ || !comp_ || !waterFrag_ || !waterFragList_) {
             if (error) *error = "shaders";
             return false;
         }
@@ -981,7 +1008,10 @@ private:
         VkDescriptorBufferInfo pbi{frameData_.buf, 0, VK_WHOLE_SIZE};
         VkDescriptorImageInfo  ii{VK_NULL_HANDLE, color_.view, VK_IMAGE_LAYOUT_GENERAL};
         VkDescriptorImageInfo  di{VK_NULL_HANDLE, depth_.view, VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL};
-        VkDescriptorImageInfo  wi{waterSampler_, waterScene_.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+        // N9.7: a cena para a agua, quando existe; senao a textura neutra (so a variante -DWATER a amostra, e so com a imagem)
+        VkDescriptorImageInfo  wi = waterScene_.img
+                                        ? VkDescriptorImageInfo{waterSampler_, waterScene_.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}
+                                        : VkDescriptorImageInfo{waterSampler_, dummy_.image.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
         // N9.6 fase 2b: a imagem do AO para o catalogo, quando existe; senao a textura neutra (a amostra so acontece com
         // F_AO_SURF, que so liga com a imagem escrita no quadro)
         VkDescriptorImageInfo  si = aoSurf_.img ? VkDescriptorImageInfo{sampler_, aoSurf_.view, VK_IMAGE_LAYOUT_GENERAL}
@@ -1003,9 +1033,12 @@ private:
         VkWriteDescriptorSet list[10];
         uint32_t             n = 0;
         for (int i = 0; i < 10; ++i)
-            if ((i != 5 || tris_.buf) && (i != 7 || frameData_.buf) && (i != 9 || aoSurf_.img || dummy_.image.view)) list[n++] = w[i];
+            if ((i != 5 || tris_.buf) && (i != 7 || frameData_.buf) && (i != 9 || aoSurf_.img || dummy_.image.view) &&
+                (i != 8 || waterScene_.img || dummy_.image.view))
+                list[n++] = w[i];
         f_.vkUpdateDescriptorSets(dev_, n, list, 0, nullptr);
         aoSurfBound_ = aoSurf_.img != VK_NULL_HANDLE;
+        waterBound_  = waterScene_.img != VK_NULL_HANDLE;  // N9.7
         ++st_.frame_set_writes;
     }
 
@@ -1029,10 +1062,7 @@ private:
                            VK_IMAGE_ASPECT_DEPTH_BIT);
         shadow_ = makeImage(w, h, VK_FORMAT_R8_UINT, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
                             VK_IMAGE_ASPECT_COLOR_BIT);
-        waterScene_ = makeImage(w, h, VK_FORMAT_R8G8B8A8_UNORM,
-                                VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
-        waterSceneReady_ = false;
-        if (!color_.img || !depth_.img || !shadow_.img || !waterScene_.img) return false;
+        if (!color_.img || !depth_.img || !shadow_.img) return false;
         {  // passe A
             VkAttachmentDescription at[3] = {};
             at[0].format = VK_FORMAT_R8G8B8A8_UNORM, at[0].samples = VK_SAMPLE_COUNT_1_BIT;
@@ -1605,7 +1635,7 @@ private:
             freeImage(aoHalf_), freeImage(aoSurf_);
         freeImage(shadowMask_);
         st_.ao_image_bytes = 0, aoSurfBound_ = false, lightSetValid_ = false, vmSetValid_ = softSetValid_ = false;
-        waterSceneReady_ = false;
+        waterSceneReady_ = false, waterBound_ = false, waterFailed_ = false, st_.water_scene_bytes = 0;  // N9.7
         aoSetValid_ = false;
         freeBuffer(heads_), freeBuffer(frags_), freeBuffer(readback_), freeBuffer(headerRead_);
     }
@@ -1624,18 +1654,20 @@ private:
     }
 
     // pipeline pela parte fixa do estado: modo, comparacao e escrita de profundidade, fatores de mistura
-    VkPipeline pipeline(PassMode mode, const DrawState& s) {
+    // N9.7: water = a variante -DWATER do fragmento (desenho de agua com a agua aprimorada); a parte fixa e a mesma
+    VkPipeline pipeline(PassMode mode, const DrawState& s, bool water = false) {
         uint32_t cmp = uint32_t(s.depth), zw = s.depth_write ? 1 : 0, src = 0, dst = 0;
         if (mode == PassMode::PunchThrough) cmp = 6, zw = 1;  // >= forcado; z-write disable ignorado
         if (mode == PassMode::TranslucentAutosort) cmp = 6, zw = 0;
         if (mode == PassMode::TranslucentOrdered) src = uint32_t(s.src), dst = uint32_t(s.dst);
-        const uint32_t key = uint32_t(mode) | (cmp << 2) | (zw << 5) | (src << 6) | (dst << 9);
+        const uint32_t key = uint32_t(mode) | (cmp << 2) | (zw << 5) | (src << 6) | (dst << 9) | (uint32_t(water) << 12);
         if (auto it = pipes_.find(key); it != pipes_.end()) return it->second;
 
         VkPipelineShaderStageCreateInfo st[2] = {
             {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_VERTEX_BIT, vert_, "main", nullptr},
             {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_FRAGMENT_BIT,
-             mode == PassMode::TranslucentAutosort ? fragList_ : frag_, "main", nullptr}};
+             mode == PassMode::TranslucentAutosort ? (water ? waterFragList_ : fragList_) : (water ? waterFrag_ : frag_), "main",
+             nullptr}};
         VkVertexInputBindingDescription   vb{0, sizeof(GpuVertex), VK_VERTEX_INPUT_RATE_VERTEX};
         VkVertexInputAttributeDescription va[7] = {{0, 0, VK_FORMAT_R32G32_SFLOAT, 0},  {1, 0, VK_FORMAT_R32_SFLOAT, 8},
                                                    {2, 0, VK_FORMAT_R32G32_SFLOAT, 12}, {3, 0, VK_FORMAT_R32_UINT, 20},
@@ -1748,11 +1780,7 @@ private:
         p.clampMin = fr.clamp_min, p.clampMax = fr.clamp_max;
         p.depthBias = prep_.depth_bias;
         p.invScale  = 1.f / scale_;
-        p.water[0]  = float(marked_water_quality(s.texture));
-        p.water[1]  = waterTime_;
-        p.water[2]  = waterHorizon_ * scale_;
-        p.water[3]  = waterBottom_ * scale_;
-        return p;
+        return p;  // N9.7: water[] so nos desenhos de agua (o laco dos desenhos), que vao pela variante -DWATER
     }
 
     // N8.7: os volumes modificadores da lista 1 (volumes.comp), entre os passes A e B. So com a sombra por intensidade
@@ -1924,7 +1952,22 @@ private:
             aoSetValid_ = false;
         }
         if (!aoOn_.load(std::memory_order_relaxed) && aoSurf_.img) freeImage(aoSurf_), aoSetValid_ = false;
-        if (bool(aoSurf_.img) != aoSurfBound_) writeFrameSets();
+        // N9.7: a imagem da cena para a agua nasce no primeiro quadro com um desenho de agua (agua aprimorada ligada) e sai
+        // com a agua desligada; nunca na Original (o catalogo nao chega la) nem com a agua original. O descritor e regravado
+        // aqui, antes de os comandos o usarem
+        if (waterWanted_ && !waterScene_.img) {
+            MemScope mc(telemetry::Mem::Targets);
+            waterScene_ = makeImage(w_, h_, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+                                    VK_IMAGE_ASPECT_COLOR_BIT);
+            waterSceneReady_ = false;
+            if (!waterScene_.img) {  // sem memoria: a agua fica original ate o alvo mudar
+                std::fprintf(stderr, "[render-vk] agua: sem a imagem da cena neste alvo (a agua fica original)\n");
+                waterFailed_ = true, waterWanted_ = false;
+            }
+        }
+        if (waterQuality_ == WaterQuality::Original && waterScene_.img) freeImage(waterScene_), waterSceneReady_ = false;
+        st_.water_scene_bytes = waterScene_.img ? uint64_t(w_) * h_ * 4 : 0;
+        if (bool(aoSurf_.img) != aoSurfBound_ || bool(waterScene_.img) != waterBound_) writeFrameSets();
         gatherLights(cl);  // N9.6 fase 3
 
         f_.vkResetCommandBuffer(cmd_, 0);
@@ -1983,9 +2026,8 @@ private:
         f_.vkCmdBindDescriptorSets(cmd_, VK_PIPELINE_BIND_POINT_GRAPHICS, gfxLayout_, 1, 1, &fragSet_, 0, nullptr);
         VkPipeline bound = VK_NULL_HANDLE;
         bool       inB = false, second = false;
-        const bool waterFrame = std::any_of(prep_.batches.begin(), prep_.batches.end(), [](const Batch& b) {
-            return marked_water_quality(b.state.texture) != WaterQuality::Original;
-        });
+        // N9.7: a agua aprimorada so com a imagem da cena criada para este quadro (waterWanted_: um desenho de agua)
+        const bool waterFrame = waterWanted_ && waterScene_.img != VK_NULL_HANDLE;
         bool       copiedWaterScene = false;
         // N8.7: o fim do passe A (opacas e punch-through), os volumes e o comeco do passe B (translucidas)
         auto toB = [&]() -> bool {
@@ -2017,7 +2059,7 @@ private:
                              VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_READ_BIT,
                              VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
                              VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT);
-                copiedWaterScene = true;
+                copiedWaterScene = true, ++st_.water_frames;
             }
             VkRenderPassBeginInfo rbB{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
             rbB.renderPass = passB_, rbB.framebuffer = fbB_, rbB.renderArea = {{0, 0}, {w_, h_}};
@@ -2032,10 +2074,13 @@ private:
             }
             const Tex* tex = nullptr;
             if (b.state.texture) {
-                auto it = texs_.find(unmark_water_texture(b.state.texture).value);
+                auto it = texs_.find(b.state.texture.value);
                 if (it != texs_.end() && it->second.ready) tex = &it->second;
             }
-            VkPipeline p = pipeline(b.mode, b.state);
+            // N9.7: um desenho de agua (translucido de uma textura com kMaterialWater) vai pela variante -DWATER
+            const bool water = waterFrame && tex && (tex->material & kMaterialWater) &&
+                               (b.mode == PassMode::TranslucentOrdered || b.mode == PassMode::TranslucentAutosort);
+            VkPipeline p = pipeline(b.mode, b.state, water);
             if (!p) return fail("pipeline");  // o buffer de comandos e recomecado (reset) no proximo quadro
             if (p != bound) f_.vkCmdBindPipeline(cmd_, VK_PIPELINE_BIND_POINT_GRAPHICS, p), bound = p;
             VkRect2D sc{{0, 0}, {w_, h_}};
@@ -2050,8 +2095,26 @@ private:
             f_.vkCmdSetScissor(cmd_, 0, 1, &sc);
             const VkDescriptorSet set = tex ? tex->set : dummy_.set;
             f_.vkCmdBindDescriptorSets(cmd_, VK_PIPELINE_BIND_POINT_GRAPHICS, gfxLayout_, 0, 1, &set, 0, nullptr);
-            const Push pc = push(b, fr, tex);
-            f_.vkCmdPushConstants(cmd_, gfxLayout_, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof pc, &pc);
+            Push pc = push(b, fr, tex);
+            if (water) {
+                // so o build de validacao: BS_AGUA_DIAGNOSTICO=1 pinta os desenhos de agua de magenta, =2 de verde (as duas
+                // mascaras do dominio da agua, para a suite n97_agua); =3 e =4 o mesmo sem o movimento da textura (a pegada
+                // da agua parada: o dominio e a uniao das duas)
+                static const uint32_t waterDebug = [] {
+#if BS_VALIDACAO
+                    const char* v = std::getenv("BS_AGUA_DIAGNOSTICO");
+                    return v && *v >= '1' && *v <= '4' ? uint32_t(*v - '0') : 0u;
+#else
+                    return 0u;
+#endif
+                }();
+                pc.water[0] = waterDebug ? float(2 + waterDebug) : float(waterQuality_), pc.water[1] = waterTime_;
+                pc.water[2] = waterHorizon_ * scale_, pc.water[3] = waterBottom_ * scale_;
+                ++st_.water_draws;
+            }
+            // o fiel le os 64 primeiros bytes (o bloco do N8.7); a agua, os 80
+            f_.vkCmdPushConstants(cmd_, gfxLayout_, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0,
+                                  water ? uint32_t(sizeof pc) : uint32_t(offsetof(Push, water)), &pc);
             f_.vkCmdDraw(cmd_, b.count, 1, b.first, 0);
         }
         if (!inB) {  // sem translucidas: so o passe A (e os volumes)
@@ -2266,7 +2329,7 @@ private:
             for (VkShaderModule* m : {&aoMod_, &aoBlurMod_, &aoHalfMod_, &aoUpMod_, &aoBlurSurfMod_, &aoUpSurfMod_})
                 if (*m) f_.vkDestroyShaderModule(dev_, *m, nullptr), --g_live, *m = VK_NULL_HANDLE;
             if (resolve_) f_.vkDestroyPipeline(dev_, resolve_, nullptr), --g_live;
-            for (VkShaderModule m : {vert_, frag_, fragList_, comp_})
+            for (VkShaderModule m : {vert_, frag_, fragList_, comp_, waterFrag_, waterFragList_})
                 if (m) f_.vkDestroyShaderModule(dev_, m, nullptr), --g_live;
             if (sampler_) f_.vkDestroySampler(dev_, sampler_, nullptr), --g_live;
             if (waterSampler_) f_.vkDestroySampler(dev_, waterSampler_, nullptr), --g_live;

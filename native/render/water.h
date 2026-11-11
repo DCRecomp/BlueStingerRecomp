@@ -1,29 +1,24 @@
 #pragma once
-// N9.7: agua modernizada da Remastered. A selecao e fechada por TextureId comprovado numa captura da area; nunca por
-// cor, transparencia ou lista de desenho. O efeito altera apenas UVs da copia da IR enviada ao renderizador: geometria,
-// profundidade, mistura, estado do jogo e a IR original permanecem intactos.
+// N9.7 (docs/N9-7-PLANO.md): a agua aprimorada da Remastered. As superficies vem do catalogo de materiais
+// (material_catalog.h, kMaterialWater, por TextureId da textura original): nada de lista propria, de marca no handle, de cor,
+// alfa ou lista de desenho. O efeito e so do Vulkan, na variante -DWATER do fragmento: a IR, a geometria, a profundidade,
+// a mistura e o estado do jogo nao mudam, e o caminho fiel (os shaders sem -DWATER) e o do N8.7.
 #include "render/render.h"
-#include "render/texture_replacement.h"
 
 #include <cstdint>
-#include <span>
+#include <functional>
 
 namespace bs::native::render {
 
 enum class WaterQuality : uint8_t { Original, Enhanced, High };
 
-// A marca existe somente na copia da IR enviada ao Vulkan. Os handles reais usam os 30 bits baixos; ela nao muda o
-// formato binario de DrawState/IR e e removida antes de procurar a textura no dispositivo.
-inline constexpr uint32_t kWaterEnhanced = 0x40000000u, kWaterHigh = 0x80000000u, kWaterHandleMask = 0x3FFFFFFFu;
-WaterQuality              marked_water_quality(TextureHandle texture);
-TextureHandle             unmark_water_texture(TextureHandle texture);
-TextureHandle             mark_water_texture(TextureHandle texture, WaterQuality quality);
+// A fase das ondas e o numero do render que o Renderer (transitional/render_core) conta: a contagem e do jogo, nao do
+// relogio nem do dispositivo, entao sobrevive a recriacao do Vulkan e ao recuo para o software (sem salto nas ondas).
+inline constexpr uint32_t kWaterPhasePeriod = 240000;
+inline float              water_phase(uint64_t render) { return float(render % kWaterPhasePeriod); }
 
-bool is_water_surface(const TextureId& id);
-
-// `water_textures` acompanha os indices 1..N usados pelos TextureHandle da IR antes de eles serem trocados pelos handles
-// do dispositivo. Marca os desenhos para o material Vulkan (ondas, reflexo e refracao) e anima suas UVs. Devolve quantos
-// desenhos foram alterados. Original e listas malformadas nao mudam nada.
-uint32_t animate_water(CommandList& cl, std::span<const uint8_t> water_textures, uint64_t frame, WaterQuality quality);
+// O horizonte (o menor y) e o fundo (o maior y) dos vertices dos desenhos de agua do quadro, nos pixels da IR; desenhos
+// com vertices fora da lista ficam de fora. false sem nenhum vertice de agua valido.
+bool water_extent(const CommandList& cl, const std::function<bool(const Draw&)>& is_water, float& top, float& bottom);
 
 } // namespace bs::native::render

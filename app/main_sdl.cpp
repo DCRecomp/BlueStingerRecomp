@@ -110,6 +110,7 @@ struct Args {
     int      ssaoQuality = -1;    // --ssao-qualidade baixa|media|alta (N9.6 fase 1; -1 = a do graficos.toml)
     int      light  = 0;          // --iluminacao ligado|desligado (N9.6 fase 3; 0 = o do graficos.toml; so na Remastered)
     int      shadows = 0;         // --sombras original|aprimoradas (N9.6 fase 4; 0 = o do graficos.toml; so na Remastered)
+    int      water = 0;           // --agua original|aprimorada|alta (N9.7; 0 = a do graficos.toml; 1 + qualidade; so na Remastered)
     int      cameraMode = -1;     // --camera original|livre (N7c; -1 = a do controles.toml, ou Original sem janela)
     int      present = -1;        // --apresentacao vulkan|sdl (N7c; -1 = Vulkan quando houver)
     bs::AudioEffectsProvider audioEffects = bs::AudioEffectsProvider::Legacy;  // --audio-efeitos nativo|legado (N6)
@@ -201,6 +202,12 @@ bool parseArgs(Args& a) {
         else if (s == L"--ssao" && (v = next())) {  // N9.6 fase 1: so nesta execucao
             if (*v == L"desligado") a.ssao = 1;
             else if (*v == L"ligado") a.ssao = 2;
+            else return false;
+        }
+        else if (s == L"--agua" && (v = next())) {  // N9.7: so nesta execucao (nao vai para o graficos.toml)
+            if (*v == L"original") a.water = 1;
+            else if (*v == L"aprimorada") a.water = 2;
+            else if (*v == L"alta") a.water = 3;
             else return false;
         }
         else if (s == L"--sombras" && (v = next())) {  // N9.6 fase 4: so nesta execucao
@@ -852,6 +859,7 @@ public:
     void     set_ssao_quality_override() { ssaoQualityOverride_ = true; }  // nem --ssao-qualidade
     void     set_light_override() { lightOverride_ = true; }  // nem --iluminacao (N9.6 fase 3)
     void     set_shadows_override() { shadowsOverride_ = true; }  // nem --sombras (N9.6 fase 4)
+    void     set_water_override() { waterOverride_ = true; }  // nem --agua (N9.7)
     // antes do apply(prefs, true): a --resolucao-interna e o limite 4:3 da GPU (VulkanStats::max_internal_height)
     void     set_internal_height_override(uint32_t h, uint32_t gpuMax) { heightOverride_ = h, gpuMax_ = (std::max)(480u, gpuMax); }
     // a apresentacao recuou para o SDL (sem slots): o quadro largo deixa de existir nesta execucao
@@ -992,6 +1000,7 @@ public:
         if (ssaoQualityOverride_) d.graphics.ssao_quality = persisted_.graphics.ssao_quality;
         if (lightOverride_) d.graphics.lighting = persisted_.graphics.lighting;  // N9.6 fase 3
         if (shadowsOverride_) d.graphics.shadows = persisted_.graphics.shadows;  // N9.6 fase 4
+        if (waterOverride_) d.graphics.water = persisted_.graphics.water;  // N9.7
         // N9.5 fase 5A (D5-2, D5-4): a ultima proporcao aplicada de fato; a do arquivo na Original, com --proporcao ou
         // quando a escolha nao valeu (software, recuo para o SDL)
         d.graphics.aspect = st::aspect_for_file(applied_.graphics.aspect, wide_ ? st::Aspect::Wide16x9 : st::Aspect::Original4x3,
@@ -1044,7 +1053,7 @@ private:
     // proporcao veio da linha de comando (so nesta execucao)
     bool                              wideAllowed_ = false, aspectOverride_ = false, ssaoOverride_ = false,
                                       ssaoQualityOverride_ = false, lightOverride_ = false,
-                                      shadowsOverride_ = false;
+                                      shadowsOverride_ = false, waterOverride_ = false;
     uint32_t                          wide_ = 0;
     // N9.5 fase 5B: a --resolucao-interna (0 = a do graficos.toml; so nesta execucao) e a altura interna enviada ao jogo
     uint32_t                          heightOverride_ = 0, appliedHeight_ = 0, gpuMax_ = 480;
@@ -1964,6 +1973,10 @@ int mainHeadless(Args& a) {
         std::fprintf(stderr, "erro: --sombras aprimoradas so na edicao Remastered com --render nativo\n");
         return 2;
     }
+    if (a.water >= 2 && (!editionProfile().enhanced_water || opt.render != bs::RenderProvider::Native)) {  // N9.7
+        std::fprintf(stderr, "erro: --agua aprimorada|alta so na edicao Remastered com --render nativo\n");
+        return 2;
+    }
     if (a.light == 2 && (!editionProfile().lighting_effects || opt.render != bs::RenderProvider::Native)) {  // N9.6 fase 3
         std::fprintf(stderr, "erro: --iluminacao ligado so na edicao Remastered com --render nativo\n");
         return 2;
@@ -1999,6 +2012,7 @@ int mainHeadless(Args& a) {
     if (a.aspect == 2) host.setWideWidth(bs::native::render::kWideWidth);  // validado antes de comecar (headlessAspect)
     if (a.light == 2) host.setLighting(true);  // N9.6 fase 3 (validado acima)
     if (a.shadows == 2) host.setShadows(true);  // N9.6 fase 4 (validado acima)
+    if (a.water >= 2) host.setWaterQuality(uint32_t(a.water - 1));  // N9.7 (validado acima)
     if (a.ssao == 2)  // N9.6 fase 1 (validado acima); sem --ssao-qualidade, a media (o padrao do graficos.toml)
         host.setAmbientOcclusion(true, a.ssaoQuality >= 0 ? uint32_t(a.ssaoQuality) : uint32_t(st::SsaoQuality::Medium));
 #if BS_VALIDACAO
@@ -2202,7 +2216,6 @@ int mainWindow(Args& a) {
         persisted        = prefs;
         // O perfil fornece o padrao sem reescrever a preferencia compartilhada entre edicoes. Um arquivo existente
         // sempre vence; numa instalacao nova da Remastered, a agua aprimorada ja nasce ligada e continua ajustavel.
-        if (editionProfile().enhanced_water && !fs::exists(prefsDir / st::kGraphicsFile)) prefs.graphics.water = st::Water::Enhanced;
         renderOverride   = a.renderExplicit;
         cameraOverride   = a.cameraMode >= 0;
         if (cameraOverride) prefs.camera.mode = st::CameraMode(a.cameraMode);
@@ -2253,6 +2266,7 @@ int mainWindow(Args& a) {
     if (a.ssaoQuality >= 0) prefs.graphics.ssao_quality = st::SsaoQuality(a.ssaoQuality);
     if (a.light) prefs.graphics.lighting = a.light == 2;  // N9.6 fase 3: so nesta execucao
     if (a.shadows) prefs.graphics.shadows = a.shadows == 2 ? st::Shadows::Enhanced : st::Shadows::Original;  // N9.6 fase 4
+    if (a.water) prefs.graphics.water = st::Water(a.water - 1);  // N9.7: so nesta execucao (clamp_to desliga sem o recurso)
     // N9.5 (revisao Codex 20261105-180747; fase 5B): o limite da GPU (max_internal_height) e calculado para um alvo 4:3; o
     // quadro largo tem 854/640 da largura e o seu limite e outro (graphics_settings: max_internal_height). Antes da fase 5B
     // ele so valia com o 16:9 ja no inicio; agora vale na proporcao em uso, inclusive depois de uma troca pelo menu, e a
@@ -2313,6 +2327,7 @@ int mainWindow(Args& a) {
         if (a.ssaoQuality >= 0) menu.set_ssao_quality_override();
         if (a.light) menu.set_light_override();
         if (a.shadows) menu.set_shadows_override();
+        if (a.water) menu.set_water_override();
         menu.set_speakers_available(speakers);
         menu.set_internal_height_override(a.internalHeight, gpuMaxHeight);  // so nesta execucao (com o limite da proporcao em uso)
         menu.apply(prefs, true);
