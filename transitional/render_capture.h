@@ -121,6 +121,8 @@ struct Stats {
     uint64_t    vk_max_layers = 0;                                 // maior numero de camadas translucidas num pixel
     uint64_t    vk_ao_frames  = 0;                                 // N9.6 fase 1: renders com a oclusao ambiente
     uint64_t    vk_ao_half_frames = 0;                             // deles, em meia resolucao
+    uint64_t    tex_materials = 0;                                 // N9.6 fase 2b: envios de texturas do catalogo
+    uint64_t    vk_ao_surface_frames = 0;                          // N9.6 fase 2b: renders com o AO nas translucidas dele
     uint64_t    cmp_frames = 0, cmp_pixels = 0, cmp_diff = 0, cmp_diff8 = 0, cmp_worst_render = 0;
     uint32_t    cmp_max = 0;
     double      cmp_worst_fraction = 0;
@@ -171,6 +173,10 @@ bool ambient_occlusion();
 // a qualidade: 0 baixa (meia resolucao, 4 direcoes x 3 passos), 1 media (meia resolucao, 8 x 4; o padrao), 2 alta (o alvo
 // inteiro, 8 x 4: a primeira versao, para a comparacao A/B). native::render::AoQuality. Thread do jogo.
 void     set_ambient_occlusion_quality(uint32_t q);
+// N9.6 fase 2b (native/render/material_catalog.h): o catalogo de materiais por TextureId, so na Remastered (o Vulkan; o
+// software o ignora). Desligado (o padrao, a Original), nenhuma identidade e calculada para ele. Antes do jogo comecar.
+void set_materials(bool on);
+bool materials();
 uint32_t ambient_occlusion_quality();
 // N9.5 fase 4: o pilar dinamico de cada faixa no ultimo render largo (diagnostico das capturas, tools/dev/n95_headless.py H6)
 struct PillarSides {

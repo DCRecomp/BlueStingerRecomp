@@ -291,3 +291,78 @@ instrumentar o produto, a pergunta foi medida, só com leitura e uma captura de 
 - **As translúcidas que cobrem a cena entram na 2b, pelo catálogo:** só texturas identificadas por `TextureId` que funcionam
   como superfície (alfa cheio), uma a uma e com prova; nada genérico.
 - Os modelos 3D dos menus continuam sem AO (decisão anterior).
+
+## 9. Fase 2b: o catálogo de materiais e o AO sob as translúcidas (2026-11-10/11)
+
+Escolha do mantenedor (2026-11-10): o núcleo do catálogo primeiro, neutro, e como primeiro material o AO sob as
+translúcidas que cobrem a cena (seção 8).
+
+### 9.1 O catálogo
+
+- `native/render/material_catalog.h/.cpp`: `TextureId` (o contrato do N7: dimensões + FNV-1a dos texels ARGB8888 da
+  textura **original**) → bits de material. Um só catálogo para o N9.6 (materiais), o N9.7 (água) e o N9.8 (HD: a
+  substituição continua com o material da original). Só linhas medidas, sem curinga, só identidades (nenhuma arte).
+- `render_core`: o id é calculado **uma vez por envio** da textura e só quando alguém o usa (o HD ou o catálogo); o catálogo
+  só liga na Remastered (`render_capture::set_materials`, pelo `main_sdl` antes do jogo) e só no Vulkan (o software, a
+  referência, não o consulta). O material vai ao dispositivo por `IRenderDevice::set_texture_material` (sem efeito no
+  software) e fica na textura do Vulkan.
+- Na Original e com o catálogo vazio, nenhuma identidade é calculada para ele e nada muda.
+
+### 9.2 Inventário (o que entrou e o que ficou de fora)
+
+- `bs-ir-tela texturas <ir> <tsv> [--pasta] [--cobertura]` (novo, só investigação): por desenho, a lista, o `TextureId`, o
+  alfa dos texels, a mistura, o 1/w e o retângulo; `--cobertura` conta os pixels finais que mudam sem cada translúcida (o
+  efeito da remoção, não a cobertura rasterizada direta: revisão Codex 20261110-225319); `--pasta` exporta as texturas em BMP
+  (só `tmp/`).
+- No quadro do quarto (render 2318), a área de opacos coberta por translúcidas (22,9 %) é quase toda de três desenhos: os
+  racks `128x128-743d83eda77f1bb8` (45 637 px finais) e o piso de grade `128x128-563c7fcc146c1f60` (20 629 px); o brilho
+  laranja `64x64-e6aa04e85bbde090` é luz, não superfície. Nas 22 cenas da fase 3B, as duas texturas só aparecem nessa área,
+  sempre translúcidas, SrcAlpha/InvSrcAlpha, escrevendo a profundidade.
+- **O 1/w do opaco por baixo, por pixel** (`tmp/sessao-20261110/n96/f2_coplanar.py`, os triângulos opacos rasterizados da
+  IR): nos racks, 0,66 % de 1/w à frente da parede opaca em todos os 43 583 pixels com opaco por baixo (um decalque um
+  pouco afastado, ~3 unidades a z 500, bem menos que o raio do AO de 60); no piso de grade, mediana 36 % (o fundo de um
+  fosso). A primeira leitura pelos vértices (plano ajustado) tinha sugerido o contrário e foi descartada.
+- **Entrou:** os racks. **Ficou de fora:** o piso de grade (o AO do fundo do fosso não é o da grade).
+
+### 9.3 O AO sob a translúcida
+
+- Quando o quadro tem uma translúcida do catálogo (com o AO ligado no render do framebuffer), o Vulkan cria sob demanda
+  `aoSurf_` (RGBA8 no alvo, 4 B/px) antes de gravar os comandos e regrava o conjunto do quadro (binding 6 do `pvr.frag`;
+  sem ela, a textura neutra de 1 × 1; o binding 5 fica para a água do N9.7). O passe final do AO (variantes `-DSURF` de
+  `ao.comp`, alta e meia resolução) grava em todos os pixels o fator aplicado ao opaco e o log2 do 1/w dele em 24 bits.
+- No passe B, uma translúcida do catálogo (`F_AO_SURF`, bit 28) multiplica a cor pelo fator **só a até 1 % de 1/w do
+  opaco por baixo**; mais longe, a cor do jogo. A imagem sai ao desligar o AO.
+- Nas máscaras de validação (`BS_AO_DIAGNOSTICO=2/3`), o fator gravado vira 0 e 1: os pixels que o catálogo pode mudar
+  ficam do lado "depende da cena" na L2, e todo o resto continua bit a bit (sem afrouxar o critério).
+
+### 9.4 Resultados
+
+- **Revisão Codex** `codex-20261110-225319`: **MÉDIA**, o teste do material só cobria a alta: corrigido (as três
+  qualidades). **BAIXA**, sem as fronteiras do limite de 1 %: corrigido (decalques a 0,9 %, recebe, e a 1,2 %, não recebe).
+  **BAIXA**, `--cobertura` mede o efeito da remoção: aceito, descrição corrigida na ferramenta e no catálogo.
+- **Testes** (binários de 00:43 de 2026-11-11, os finais): unitários 375/0, render 96/0 (o material nas três qualidades:
+  junto à quina 0,745–0,771, longe 0,995; a translúcida longe de opacos, a de 1,2 % e a não cadastrada sem mudança; o HUD
+  bit a bit; o desligado igual ao software); ctest 30/30 e 23/23 (5 pulados sem o disco, não contados); L1–L4 na média 0
+  falhas (catálogo: 1 envio nas duas execuções da Remastered; o AO nas translúcidas em 128 renders, só com o AO ligado);
+  alarme da marca de cena 0 (22 cenas).
+- **Bateria anterior, binários de 22:48** (iguais aos finais no comportamento: mudaram só os testes e textos): L1–L4 0
+  falhas nas três qualidades; H1–H7 0; R1–R4 4/0; Original × `referencias_n87` 10/0.
+- **Equivalência:** as capturas da L na alta comparadas com as da fase 1: o VBlank 3800, todas as execuções com o AO
+  desligado e a máscara branca **iguais**; no 4640, mudanças só na caixa dos racks (x 397–639, y 6–195 do jogo), só
+  escurecendo (4:3: 5 806 px; 1080: 64 439 px, mediana 0,92 da luminância de antes).
+- **Custo** (corredor, que inclui o quarto; GPU ms): RTX 5080 16:9@1080 média 2,02 → 2,10; @2160 média 3,38 → 3,40, alta
+  7,42 → 7,43; AMD 4:3@480 média 7,80 → 7,84, baixa 6,66 → 6,73 (no ruído). Memória +4 B/px só nos quadros com uma
+  translúcida do catálogo e o AO ligado (1080: +8 MiB; 4K: +32 MiB).
+- **Visual** (recorte de 1080, `tmp/sessao-20261110/n96/f2b/racks_antes_depois.png`): os racks escurecem de leve nas bordas,
+  como a parede de trás; sem artefato visível. A conferência na janela é do mantenedor.
+- **Registro de processo:** a primeira execução da bateria (22:53) gravou por engano os logs L, H, R e N87 na pasta da fase 1
+  (`f1d`), sobrescrevendo os logs de texto da bateria final da fase 1 (os resultados já estavam na seção 7, as capturas em
+  `pytemp` e as matrizes `d-*`/`j-*` não foram tocadas), e as etapas de custo e do alarme não rodaram (o script gerado tinha
+  quebras de linha no caminho). Os custos e o alarme foram rodados de novo nos binários finais (00:44–00:56).
+
+### 9.5 Pendências
+
+- O piso de grade e outras translúcidas que não são decalques: o AO delas pede a própria geometria (um passe de profundidade
+  das translúcidas do catálogo), fora desta fase.
+- O inventário das outras áreas (só o quarto do `load` foi medido) e os materiais seguintes do plano (especular, relevo,
+  molhado, emissivos).

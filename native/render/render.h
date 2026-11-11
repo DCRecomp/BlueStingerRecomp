@@ -132,6 +132,9 @@ public:
     virtual Result<void> update_texture(TextureHandle t, std::span<const std::byte> mip_chain) = 0;
     virtual void         set_palette(std::span<const uint32_t> argb) = 0;  // para Palette4/Palette8
     virtual void         destroy_texture(TextureHandle t) = 0;
+    // N9.6 fase 2b: os bits do material da textura (material_catalog.h; 0 = nenhum). So o Vulkan da Remastered os usa;
+    // o software (o recuo, a referencia) os ignora
+    virtual void         set_texture_material(TextureHandle, uint32_t) {}
     virtual Result<void> submit(const CommandList& frame) = 0;
     // Quadro inteiro ja pronto (FMV, telas de carga): sem geometria.
     virtual Result<void> present_image(std::span<const uint32_t> argb, uint32_t width, uint32_t height) = 0;

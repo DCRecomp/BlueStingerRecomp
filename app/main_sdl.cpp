@@ -1946,6 +1946,8 @@ int mainHeadless(Args& a) {
     bs::GameHost host;
     if (a.dumpEvery && !a.capture.empty()) opt.captureEvery = a.dumpEvery, opt.capture = headlessCapture(a);
     const bool headlessNative = opt.render == bs::RenderProvider::Native;
+    // N9.6 fase 2b: o catalogo de materiais so na Remastered (a Original nao calcula identidade nenhuma para ele)
+    bs::transitional::render_capture::set_materials(editionProfile().lighting_effects);
     host.start(std::move(opt));
     if (a.internalHeight) {
         // N9.5 fase 5B: o mesmo limite da janela (o alvo largo tem outro); a altura desce pelos degraus do menu ate caber
@@ -2255,6 +2257,7 @@ int mainWindow(Args& a) {
                 g_spectator.buttons = on;
                 return true;
             };
+        bs::transitional::render_capture::set_materials(editionProfile().lighting_effects);  // N9.6 fase 2b
         host.start(std::move(opt));
         InGameMenu menu(host, *input, window, pres, prefsDir, prefs, persisted, renderOverride, subtitleOverride, cameraOverride, caps,
                         languages);

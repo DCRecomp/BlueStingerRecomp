@@ -5,10 +5,12 @@
 
 #include "render/fidelity_scenes.h"
 #include "render/frame_prep.h"
+#include "render/material_catalog.h"
 #include "render/soft/soft_device.h"
 #include "render/vulkan/vk_device.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -496,4 +498,141 @@ BS_TEST(render_vulkan_ambient_occlusion_quality) {
         BS_CHECK(d->submit(cl).ok() && d->read_frame(back, w, h).ok() && back == oddOff && d->stats().ao_image_bytes == 0);
     }
     BS_CHECK(nr::vulkan_live_objects() == 0);
+}
+
+// N9.6 fase 2b (docs/N9-6-AUDITORIA.md secao 9): o AO sob as translucidas do catalogo de materiais, nas tres qualidades
+// (revisao Codex 20261110-225319: a media e a baixa usam o passe final de meia resolucao). A quina do chao com a parede
+// (ao_scene) e translucidas brancas de alfa cheio por cima: (A) um decalque cadastrado 0,5 % de 1/w acima do chao, junto a
+// quina (como os racks medidos, 0,66 %); (A2) idem a 0,9 % (dentro do limite de 1 %); (D) idem a 1,2 % (fora); (B) uma
+// cadastrada longe de qualquer opaco (a frente da quina); (C) um decalque NAO cadastrado no chao. Com o AO: so A e A2 mostram
+// o AO do chao; B, C e D ficam como sem o material. Desligado: igual ao software.
+BS_TEST(render_vulkan_ambient_occlusion_material_surface) {
+    std::string err;
+    {
+        auto d = nr::VulkanDevice::create(&err);
+        if (!d) BS_SKIP("dispositivo Vulkan");
+        nr::soft::SoftwareDevice sw;
+        nr::TextureDesc          td;
+        td.width = td.height = 8;
+        const std::vector<uint32_t> white(64, 0xFFFFFFFFu);
+        const auto                  bytes = std::as_bytes(std::span<const uint32_t>(white));
+        enum { A, A2, D, B, C, N };
+        nr::TextureHandle v[N], s[N];
+        for (int i = 0; i < N; ++i) v[i] = d->create_texture(td, bytes).value(), s[i] = sw.create_texture(td, bytes).value();
+        // o retangulo de cada uma na tela (para as contagens), na ordem de A ate C
+        struct Rect { float x0, x1, z0, z1, y0, y1; };
+        const Rect r[N] = {{-40, 0, 450, 595, 100, 100}, {20, 60, 450, 595, 100, 100}, {80, 120, 450, 595, 100, 100},
+                           {200, 260, 300, 300, 20, 60}, {-300, -200, 450, 590, 100, 100}};
+        const float lift[N] = {1.005f, 1.009f, 1.012f, 1.f, 1.f};
+        auto scene = [&](const nr::TextureHandle* t) {
+            nr::CommandList cl   = ao_scene();
+            auto            proj = [&](float x, float y, float z, float u, float vv, float k) {
+                nr::Vertex vx;
+                vx.x = 320.f + 500.f * x / z, vx.y = 240.f + 500.f * y / z, vx.inv_w = k / z, vx.color = 0xFFC0C0C0;
+                vx.u = u, vx.v = vv;
+                return vx;
+            };
+            for (int i = 0; i < N; ++i) {
+                nr::Draw dr;
+                dr.state.list = nr::ListType::Translucent, dr.state.texture = t[i];
+                dr.state.src = nr::Blend::SrcAlpha, dr.state.dst = nr::Blend::InvSrcAlpha, dr.state.use_alpha = true;
+                dr.first_vertex = uint32_t(cl.vertices.size()), dr.vertex_count = 4;
+                const Rect& q = r[i];
+                if (i == B) {  // uma placa de frente, a z 300
+                    for (auto [x, y] : {std::pair{q.x0, q.y0}, {q.x1, q.y0}, {q.x0, q.y1}, {q.x1, q.y1}})
+                        cl.vertices.push_back(proj(x, y, q.z0, 0, 0, 1.f));
+                } else {  // no plano do chao (y = 100), com o 1/w multiplicado por `lift`
+                    for (auto [x, z] : {std::pair{q.x0, q.z0}, {q.x1, q.z0}, {q.x0, q.z1}, {q.x1, q.z1}})
+                        cl.vertices.push_back(proj(x, 100, z, 0, 0, lift[i]));
+                }
+                cl.draws.push_back(dr);
+            }
+            return cl;
+        };
+        const nr::CommandList vk = scene(v), soft = scene(s);
+        std::vector<uint32_t> s_img, off;
+        uint32_t              w = 0, h = 0;
+        BS_CHECK(sw.submit(soft).ok() && sw.read_frame(s_img, w, h).ok());
+        auto mark = [&](bool on) {
+            for (int i : {A, A2, D, B}) d->set_texture_material(v[i], on ? nr::kMaterialAoSurface : 0);
+        };
+        mark(true);
+        BS_CHECK(d->submit(vk).ok() && d->read_frame(off, w, h).ok() && off == s_img && !off.empty());  // desligado: o fiel
+        if (off.size() != size_t(640) * 480) return;
+        auto at = [](const std::vector<uint32_t>& img, int x, int y) { return img[size_t(y) * 640 + x]; };
+        auto px = [](float x, float y, float z) { return std::pair{int(320.f + 500.f * x / z), int(240.f + 500.f * y / z)}; };
+        auto box = [&](int i) {  // o retangulo na tela, um pixel para dentro
+            const Rect& q = r[i];
+            const auto [ax, ay] = px(q.x0, i == B ? q.y0 : 100.f, q.z0);
+            const auto [bx, by] = px(q.x1, i == B ? q.y1 : 100.f, i == B ? q.z0 : q.z1);
+            return std::array<int, 4>{std::min(ax, bx) + 1, std::max(ax, bx) - 1, std::min(ay, by) + 1, std::max(ay, by) - 1};
+        };
+        for (nr::AoQuality qa : {nr::AoQuality::High, nr::AoQuality::Medium, nr::AoQuality::Low}) {
+            d->set_ambient_occlusion_quality(qa);
+            d->set_ambient_occlusion(true);
+            std::vector<uint32_t> nomat, mat, again;
+            mark(false);
+            const uint64_t f0 = d->stats().ao_surface_frames;
+            BS_CHECK(d->submit(vk).ok() && d->read_frame(nomat, w, h).ok());  // o AO sem nenhum material: o de antes
+            BS_CHECK(d->stats().ao_surface_frames == f0);
+            mark(true);
+            BS_CHECK(d->submit(vk).ok() && d->read_frame(mat, w, h).ok() && mat.size() == nomat.size());
+            BS_CHECK(d->submit(vk).ok() && d->read_frame(again, w, h).ok() && again == mat);  // determinismo
+            BS_CHECK(d->stats().ao_surface_frames == f0 + 2);
+            const uint64_t aoBytes = qa == nr::AoQuality::High ? uint64_t(640) * 480 * 4 : uint64_t(320) * 240 * 16;
+            BS_CHECK(d->stats().ao_image_bytes == aoBytes + uint64_t(640) * 480 * 4);  // + a imagem do catalogo
+            if (mat.size() != nomat.size()) continue;
+            // A e A2 junto a quina: escurecem (o AO do chao aparece); longe da quina, quase nada
+            auto ratio = [&](float x, float z) {
+                const auto [xx, yy] = px(x, 100, z);
+                return lum(at(mat, xx, yy)) / std::max(1.0, lum(at(nomat, xx, yy)));
+            };
+            const double nearA = ratio(-20, 585), nearA2 = ratio(40, 585), farA = ratio(-20, 460);
+            std::fprintf(stderr, "  AO qualidade %d sob a translucida do catalogo: A junto a quina %.3f, A2 %.3f, A longe %.3f\n",
+                         int(qa), nearA, nearA2, farA);
+            BS_CHECK(nearA < 0.95 && nearA2 < 0.95 && farA > 0.97);
+            bool lighter = false;
+            int  diff[N] = {}, total = 0;
+            for (int y = 0; y < 480; ++y)
+                for (int x = 0; x < 640; ++x) {
+                    const uint32_t p = at(mat, x, y), o = at(nomat, x, y);
+                    lighter = lighter || ((p >> 16) & 0xFF) > ((o >> 16) & 0xFF) || ((p >> 8) & 0xFF) > ((o >> 8) & 0xFF) ||
+                              (p & 0xFF) > (o & 0xFF);
+                    total += p != o;
+                    for (int i = 0; i < N; ++i) {
+                        const auto b = box(i);
+                        diff[i] += p != o && x >= b[0] && x <= b[1] && y >= b[2] && y <= b[3];
+                    }
+                }
+            BS_CHECK(!lighter && total > 0 && diff[A] > 0 && diff[A2] > 0);
+            BS_CHECK(diff[D] == 0);  // a 1,2 % de 1/w: fora do limite, como antes
+            BS_CHECK(diff[B] == 0);  // cadastrada, mas longe de qualquer opaco: como antes
+            BS_CHECK(diff[C] == 0);  // nao cadastrada: como antes
+            for (int y = 20; y < 60; ++y)
+                for (int x = 20; x < 120; ++x) BS_CHECK(at(mat, x, y) == at(off, x, y));  // o HUD fica bit a bit
+        }
+        d->set_ambient_occlusion(false);
+        std::vector<uint32_t> back;
+        BS_CHECK(d->submit(vk).ok() && d->read_frame(back, w, h).ok() && back == s_img);  // desligado de novo = o fiel
+        BS_CHECK(d->stats().ao_image_bytes == 0);
+        for (nr::TextureHandle t : v) d->destroy_texture(t);
+    }
+    BS_CHECK(nr::vulkan_live_objects() == 0);
+}
+
+// N9.6 fase 2b: o catalogo de materiais por TextureId (so identidades medidas, sem curinga)
+BS_TEST(material_catalog_lookup) {
+    BS_CHECK(!nr::material_table().empty());
+    for (const nr::MaterialEntry& e : nr::material_table()) {
+        BS_CHECK(nr::material_flags(e.id) == e.flags && e.flags != 0 && e.what && *e.what);
+        BS_CHECK(nr::parse_texture_id(e.id.text()) == e.id);
+        int same = 0;
+        for (const nr::MaterialEntry& f : nr::material_table()) same += f.id == e.id;
+        BS_CHECK(same == 1);  // uma linha por textura
+    }
+    BS_CHECK(nr::material_flags(nr::TextureId{128, 128, 0x743d83eda77f1bb8ull}) == nr::kMaterialAoSurface);
+    BS_CHECK(nr::material_flags(nr::TextureId{128, 128, 0x743d83eda77f1bb9ull}) == 0);  // um bit do conteudo
+    BS_CHECK(nr::material_flags(nr::TextureId{64, 256, 0x743d83eda77f1bb8ull}) == 0);   // outra forma, o mesmo hash
+    BS_CHECK(nr::material_flags(nr::TextureId{128, 128, 0x563c7fcc146c1f60ull}) == 0);  // o piso de grade: medido e recusado
+    BS_CHECK(nr::material_flags(nr::TextureId{}) == 0);
 }

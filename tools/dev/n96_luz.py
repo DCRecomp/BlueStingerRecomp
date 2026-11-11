@@ -9,6 +9,9 @@ de teste, roteiro passo_load_slot1: LOAD do slot 1 e o corredor RCG02; capturas 
      desligado), muda uma parte da cena, e todo pixel cuja cor nao depende da cena 3D por baixo (igual com a cena preta e
      com a branca: o HUD opaco, as telas 2D, o fundo) fica bit a bit. Um HUD translucido sobre a cena mostra o AO por
      baixo, como deve (uma mascara so, cinza ou magenta, coincidia com a cor original pela quantizacao do RGB555);
+     N9.6 fase 2b: as translucidas do catalogo de materiais (o AO do opaco por baixo) seguem as mascaras (preta: o fator
+     0; branca: 1), entao os pixels que elas podem mudar ficam do lado "depende da cena"; o catalogo envia texturas na
+     Remastered e o AO so chega a elas com o AO ligado;
   L3 Remastered 16:9 desligado x ligado: estado e efeitos identicos; a imagem larga (slot) so escurece e muda;
   L4 Remastered 16:9 em 1080 linhas desligado x ligado: idem na imagem larga em alta resolucao.
 
@@ -89,6 +92,11 @@ def main():
             m = re.search(r"AO em \d+ renders \(meia resolucao (\d+)\)", c.log)
             return int(m.group(1)) if m else -1
 
+        def catalogo(c):  # N9.6 fase 2b: (envios de texturas do catalogo, renders com o AO nas translucidas dele)
+            import re
+            m = re.search(r"catalogo de materiais: (\d+) envios, AO nas translucidas em (\d+) renders", c.log)
+            return (int(m.group(1)), int(m.group(2))) if m else (-1, -1)
+
         def qualidade_certa(c, nome):
             n, h = ao_renders(c), meia(c)
             ok = n > 0 and (h == 0 if a.qualidade == "alta" else h == n) and ("qualidade %s" % a.qualidade) in c.log
@@ -123,6 +131,13 @@ def main():
                   "renders: desligado %d, ligado %d, produto %d" % (ao_renders(off), ao_renders(on), ao_renders(prod)))
             check("L2 log da troca", "[render] oclusao ambiente: ligada" in on.log and "oclusao ambiente" not in off.log)
             qualidade_certa(on, "L2")
+            # N9.6 fase 2b: as texturas do catalogo (o piso e os racks do quarto) chegam ao Vulkan nas duas execucoes da
+            # Remastered; o AO so chega a elas com o AO ligado
+            cat_off, cat_on = catalogo(off), catalogo(on)
+            check("L2 catalogo de materiais: texturas enviadas na Remastered", cat_off[0] > 0 and cat_on[0] > 0,
+                  "desligado %d, ligado %d envios" % (cat_off[0], cat_on[0]))
+            check("L2 catalogo: o AO nas translucidas so com o AO ligado", cat_off[1] == 0 and cat_on[1] > 0,
+                  "desligado %d, ligado %d renders" % (cat_off[1], cat_on[1]))
             qualidade_certa(prod, "L2 produto")
             escurece(off, on, "L2", "")
             igual_estado(off, r["preta"], "L2 4:3 desligado x mascara preta")

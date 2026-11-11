@@ -24,6 +24,12 @@ layout(set = 0, binding = 3, rgba8) uniform image2D aoImg;   // .r = AO (1 = sem
 #else
 layout(set = 0, binding = 4, rgba32f) uniform image2D aoHalf;  // .r = AO, .g = 1/w do representante (0 = fora da cena)
 #endif
+#ifdef SURF
+// N9.6 fase 2b (-DSURF, so no passe final, quando o quadro tem uma translucida do catalogo de materiais): por pixel do alvo,
+// .r = o fator do AO aplicado ao opaco (1 = nenhum) e .gba = log2 do 1/w desse opaco em 24 bits ((log2 + 32) / 32; 0 = sem
+// opaco da cena). O passe B (pvr.frag) multiplica a translucida cadastrada pelo fator so onde ela esta no plano do opaco.
+layout(set = 0, binding = 5, rgba8) uniform writeonly image2D aoSurf;
+#endif
 
 layout(push_constant) uniform P {
     uvec2 size;       // o alvo
@@ -106,8 +112,15 @@ float occlusion(ivec2 p) {
 }
 #endif
 
-// a cor final do pixel p com o AO `ao` (e os diagnosticos de validacao)
-void apply(ivec2 p, float ao) {
+// o pixel p sem opaco da cena para as translucidas do catalogo (SURF); sem SURF, nada
+void surfNone(ivec2 p) {
+#ifdef SURF
+    imageStore(aoSurf, p, vec4(1.0, 0.0, 0.0, 0.0));
+#endif
+}
+
+// a cor final do pixel p com o AO `ao` (e os diagnosticos de validacao); z0 = o 1/w do opaco (para o SURF)
+void apply(ivec2 p, float ao, float z0) {
     const float k = mix(1.0, ao, pc.strength);
     vec4        c = imageLoad(color, p);
     if (pc.debug == 2u) c.rgb = vec3(0.0);       // mascara: a cena preta
@@ -115,6 +128,13 @@ void apply(ivec2 p, float ao) {
     else if (pc.debug != 0u) c.rgb = vec3(ao);
     else c.rgb *= k;
     imageStore(color, p, c);
+#ifdef SURF
+    // nas mascaras de validacao (2 preta, 3 branca), o fator das translucidas do catalogo vira 0 e 1: os pixels que o
+    // catalogo pode mudar contam como "dependem da cena" na suite (n96_luz L2), e todo o resto continua bit a bit
+    const float ks = pc.debug == 2u ? 0.0 : (pc.debug == 3u ? 1.0 : k);
+    const uint  u  = uint(clamp((log2(z0) + 32.0) / 32.0, 1.0 / 16777215.0, 1.0) * 16777215.0 + 0.5);
+    imageStore(aoSurf, p, vec4(ks, float((u >> 16) & 255u), float((u >> 8) & 255u), float(u & 255u)) / vec4(1.0, 255.0, 255.0, 255.0));
+#endif
 }
 
 #if !defined(BLUR) && !defined(HALF)
@@ -127,9 +147,11 @@ void main() {
 void main() {
     const ivec2 p = ivec2(gl_GlobalInvocationID.xy);
     if (p.x >= int(pc.size.x) || p.y >= int(pc.size.y)) return;
-    if (!scene(p)) return;  // fora da cena: a cor do jogo fica
-    const float z0 = invw(p);
-    if (!(z0 > 0.0)) return;
+    const float z0 = scene(p) ? invw(p) : 0.0;
+    if (!(z0 > 0.0)) {  // fora da cena: a cor do jogo fica
+        surfNone(p);
+        return;
+    }
     const ivec2 mx = ivec2(int(pc.size.x) - 1, int(pc.size.y) - 1);
     float       sum = 0.0, wsum = 0.0;
     for (int y = -2; y < 2; ++y)
@@ -140,7 +162,7 @@ void main() {
             const float w = exp(-abs(z - z0) / (0.03 * z0));  // pela diferenca relativa de 1/w (a mesma em z)
             sum += imageLoad(aoImg, q).r * w, wsum += w;
         }
-    apply(p, wsum > 0.0 ? sum / wsum : 1.0);
+    apply(p, wsum > 0.0 ? sum / wsum : 1.0, z0);
 }
 #elif !defined(BLUR) && defined(HALF)
 void main() {
@@ -168,9 +190,11 @@ void main() {
 void main() {
     const ivec2 p = ivec2(gl_GlobalInvocationID.xy);
     if (p.x >= int(pc.size.x) || p.y >= int(pc.size.y)) return;
-    if (!scene(p)) return;  // fora da cena: a cor do jogo fica
-    const float z0 = invw(p);
-    if (!(z0 > 0.0)) return;
+    const float z0 = scene(p) ? invw(p) : 0.0;
+    if (!(z0 > 0.0)) {  // fora da cena: a cor do jogo fica
+        surfNone(p);
+        return;
+    }
     const ivec2 hs = ivec2((int(pc.size.x) + 1) / 2, (int(pc.size.y) + 1) / 2);
     const ivec2 hb = (p >> 1) - ivec2(1);  // os 4 x 4 representantes em volta (8 x 8 pixels do alvo)
     float       sum = 0.0, wsum = 0.0, wmax = 0.0;
@@ -183,6 +207,6 @@ void main() {
             sum += s.r * w, wsum += w, wmax = max(wmax, w);
         }
     // exp(-3): nenhum representante a menos de ~9 % de diferenca de profundidade = outra superficie: sem AO
-    apply(p, wmax > 0.0498 ? sum / wsum : 1.0);
+    apply(p, wmax > 0.0498 ? sum / wsum : 1.0, z0);
 }
 #endif

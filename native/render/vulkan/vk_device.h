@@ -37,6 +37,7 @@ struct VulkanStats {
     // as imagens do AO vivas agora (pixels x bytes do formato; 0 = nenhuma): rgba8 no alvo na alta, rgba32f em meia
     // resolucao (arredondada para cima) na media e na baixa; o AO desligado devolve a memoria no proximo submit
     uint64_t    ao_image_bytes = 0;
+    uint64_t    ao_surface_frames = 0;  // N9.6 fase 2b: renders com o AO escrito para as translucidas do catalogo
     uint64_t    negative_depth_frames = 0;  // quadros com 1/w negativo (profundidade deslocada, ver frame_prep)
     // garantias do modo fiel (igualdade bit a bit com o software): ambiente FP do software nos shaders
     // (VK_KHR_shader_float_controls) e profundidade crua (VK_EXT_depth_range_unrestricted)

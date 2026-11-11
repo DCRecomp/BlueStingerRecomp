@@ -3542,7 +3542,7 @@ Plano: `docs/PLANO-PORT-NATIVO.md`, seções 4 e 4.2.
 | N6 Áudio | **concluída** (2026-10-23): H9 aprovado 3/3 com o Vulkan padrão (0 faltas); legado fora do produto no N8.6. H9 reaberto no N8.8: intermitente, não corrigido, não aprovado | 100 |
 | N7 Vulkan | **funcional, em fechamento técnico**: Vulkan padrão da janela com recuo seguro para o software; N7a, N7b e N7c validadas. Os dois bloqueios ganharam evidência no N8.7 (2026-10-28). **AMD:** a causa do `Invalid Read` foi demonstrada e corrigida (descritor não reescrito no realloc de `tris_`; 0/90 depois). **Fog e volumes:** implementados no software e no Vulkan, iguais em 32 bits, com a sombra conferida com o Flycast; falta um quadro de fog pareado. O N7 fica em 95% até o mantenedor encerrar formalmente esses bloqueios. SSAO, 16:9 real e MSAA permanecem no N9 (`docs/N7-PLANO.md` seção 25) | 95 |
 | N8 Sem legado | **iniciada** em 2026-10-24 (D-N8-1 a D-N8-4). N8.0 **concluído** em 2026-10-25 (regressão nível 3, correções, 16 referências validadas e reproduzidas, fixação do áudio nas suítes históricas); N8.1 **concluído** em 2026-10-26 (cadência B, TMU, CCN, cabo e ponte de interrupções no tempo lógico); N8.2 **concluído** em 2026-10-26 (produto × validação: papéis, `BS_VALIDACAO`, catraca do mapa); N8.3 **concluído** em 2026-10-26 (serviço nativo das syscalls; BIOS, drive e flash simulados fora do produto); N8.4 **concluído** em 2026-10-27 (barramento sem dispositivos; Maple, `--controles/--saves legado` fora do produto); N8.5 **concluído** em 2026-10-27 (filme legado e conversor YUV fora do produto); N8.6 **concluído** em 2026-10-27 (área de som nativa; AICA, áudio legado e DMA do G2 fora do produto); N8.7 **concluído** em 2026-10-30: AMD corrigida, fog e volumes nos dois renderizadores, o caminho gráfico do legado (TA, PVR, VRAM, vídeo, interrupções, DMAC, system block, rasterizador de referência) fora do produto e em sombra na validação; a fronteira guest fica no contrato do jogo (D-K1 a); N8.8 com **fechamento técnico em 2026-11-02, com ressalvas**: regressão nível 3 por composição, H9 e campanha completa abertos (`docs/N8-8-FECHAMENTO.md`) | 95 |
-| N9 Remasterização | **iniciada** em 2026-11-02 (`docs/N9-PLANO.md`): duas edições, Original e Remastered, do mesmo núcleo. N9.0 fechado (2026-11-02). N9-L L0–L5 e a v0.8.0 Preview publicados (validação no Bazzite com o mantenedor). **N9.1 (instalador) e N9.2 (interface da Remastered) com fechamento técnico aceito** (2026-11-04 e 2026-11-05), com as conferências visuais manuais pendentes com o mantenedor. **N9.3 (saves de PC) cancelado em 2026-11-05** por decisão do mantenedor. **N9.5 (widescreen e HUD) com fases 0–5 concluídas tecnicamente** (fases 1–3 publicadas como v0.9.5-1..3; fases 4 e 5 em commits locais, bateria final de 2026-11-10 sem falhas; visual na janela com o mantenedor). N9.6 autorizado em 2026-11-10: fase 0 (investigação) e fase 1 (oclusão ambiente opcional, desligada por padrão, com meia resolução e qualidades) em commits locais; N9.12 (estabilização no final do N9, com a do N9.5) registrado. Ordem gráfica N9.5 → N9.8 e depois N9.4, N9.9–N9.11. A campanha completa continua sendo o gate obrigatório depois do N9 | 27 |
+| N9 Remasterização | **iniciada** em 2026-11-02 (`docs/N9-PLANO.md`): duas edições, Original e Remastered, do mesmo núcleo. N9.0 fechado (2026-11-02). N9-L L0–L5 e a v0.8.0 Preview publicados (validação no Bazzite com o mantenedor). **N9.1 (instalador) e N9.2 (interface da Remastered) com fechamento técnico aceito** (2026-11-04 e 2026-11-05), com as conferências visuais manuais pendentes com o mantenedor. **N9.3 (saves de PC) cancelado em 2026-11-05** por decisão do mantenedor. **N9.5 (widescreen e HUD) com fases 0–5 concluídas tecnicamente** (fases 1–3 publicadas como v0.9.5-1..3; fases 4 e 5 em commits locais, bateria final de 2026-11-10 sem falhas; visual na janela com o mantenedor). N9.6 autorizado em 2026-11-10: fase 0 (investigação) e fase 1 (oclusão ambiente opcional, desligada por padrão, com meia resolução e qualidades), fase 2a (a marca de cena medida, alarme de validação) e fase 2b (o catálogo de materiais por `TextureId` e o AO sob as translúcidas) em commits locais; N9.12 (estabilização no final do N9, com a do N9.5) registrado. Ordem gráfica N9.5 → N9.8 e depois N9.4, N9.9–N9.11. A campanha completa continua sendo o gate obrigatório depois do N9 | 27 |
 | N10 Mods e elevação | não iniciada (extensões preparadas: mídia do N5/N6, texturas HD por conteúdo e shaders validados do N7) | 0 |
 
 Progresso geral: ~81 % (onze etapas de peso igual; N8 em 95 % é estimativa, com campanha e H9 abertos).
@@ -4325,6 +4325,30 @@ não por uma única bateria contínua** (decisão do mantenedor, 2026-11-02).
   do jogo e os rótulos de provedor de `fronteiras_us.toml` defasados desde o N2a.
 - **Pendências:** H9; D-N8-4 no gate pós-N9; ressalva do 7.1 e D-K1(a); limite de 3 h de `n6_h` no executor, defeito a
   corrigir antes de uma futura integral, sem enfraquecer os testes. N9 e N10 não iniciados.
+
+### N9.6 fase 2b: o catálogo de materiais e o AO sob as translúcidas (2026-11-11, commit local)
+
+Detalhes em `docs/N9-6-AUDITORIA.md`, seção 9. Escolha do mantenedor: o núcleo do catálogo e, como primeiro material, o AO
+sob as translúcidas.
+- **Método:** catálogo `native/render/material_catalog` por `TextureId` (o contrato do N7), só na Remastered com o Vulkan,
+  o id calculado uma vez por envio; inventário por `bs-ir-tela texturas --cobertura` (novo, só investigação) no quadro do
+  quarto e nas 22 cenas da fase 3B; o 1/w do opaco por baixo por pixel (triângulos da IR rasterizados). O passe final do AO
+  grava o fator e o 1/w do opaco (`aoSurf_`, sob demanda); a translúcida do catálogo multiplica pelo fator só a até 1 % de
+  1/w do opaco.
+- **Inventário:** entraram os racks do quarto (`128x128-743d83eda77f1bb8`, 0,66 % à frente da parede em todos os pixels); o
+  piso de grade (`128x128-563c7fcc146c1f60`) ficou de fora (o opaco por baixo é o fundo de um fosso, 36 %).
+- **Revisão Codex** `codex-20261110-225319`: MÉDIA (o teste só na alta) e BAIXA (as fronteiras de 1 %) corrigidas; BAIXA
+  (`--cobertura` mede o efeito da remoção) aceita com a descrição corrigida.
+- **Testes, binários finais de 00:43:** unitários 375/0, render 96/0 (o material nas três qualidades, as fronteiras 0,9 % e
+  1,2 %); ctest 30/30 e 23/23 (5 pulados sem o disco, não contados); L1–L4 na média 0 falhas; alarme da marca de cena 0.
+  Binários de 22:48 (o mesmo comportamento): L1–L4 0 falhas nas três qualidades, H1–H7 0, R1–R4 4/0, Original ×
+  `referencias_n87` 10/0. Na alta, as capturas da L iguais às da fase 1 fora da caixa dos racks (o 3800, o desligado e a
+  máscara branca idênticos).
+- **Custo:** no ruído (RTX 5080 4K média 3,38 → 3,40 ms; AMD 480 média 7,80 → 7,84 ms); +4 B/px só nos quadros com a
+  textura e o AO ligado.
+- **Processo:** a primeira bateria (22:53) gravou os logs na pasta da fase 1 (`f1d`) e sobrescreveu os logs de texto L, H, R
+  e N87 da fase 1 (resultados já registrados; capturas e matrizes intactas); custos e alarme não rodaram nela e foram
+  repetidos nos binários finais.
 
 ### N9.6 fase 2a: a marca de cena medida, não implementada no produto (2026-11-10, commit local)
 

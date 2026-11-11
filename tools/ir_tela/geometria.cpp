@@ -2,6 +2,7 @@
 //
 //   bs-ir-tela geometria <ir> [--dist D] [--cx X] [--cy Y] [--normais <saida.bmp>] [--tsv <desenhos.tsv>]
 //                            [--vertices <vertices.tsv>]
+//   bs-ir-tela texturas <ir> <saida.tsv> [--pasta <dir>] [--cobertura]   (N9.6 fase 2b: o inventario por TextureId; no fim do arquivo)
 //
 // O Ninja projeta sx = cx + dist*x/z e sy = cy + dist*y/z (docs/N9-5-AUDITORIA.md 11.1) e o TA recebe 1/w. Com z = 1/(1/w),
 // a posicao no espaco da camera volta: x = (sx - cx)*z/dist, y = (sy - cy)*z/dist. Se 1/w = k/z (escala desconhecida), as
@@ -14,6 +15,7 @@
 //     deslocamento (especular) ligada e nao nula.
 // --normais desenha a cena 3D com a normal de cada triangulo como cor (opaca, sem textura) no rasterizador em software.
 #include "render/render.h"
+#include "render/texture_replacement.h"
 #include "render/soft/soft_device.h"
 #include "render_capture.h"
 
@@ -252,5 +254,87 @@ int ir_tela_geometria(int argc, char** argv) {
         if (!ir_tela_write_bmp(bmp, img, iw, ih)) return std::fprintf(stderr, "nao grava %s\n", bmp), 1;
         std::printf("normais\t%s\t%ux%u\n", bmp, iw, ih);
     }
+    return 0;
+}
+
+// bs-ir-tela texturas <ir> <saida.tsv> [--pasta <dir>] [--cobertura] (N9.6 fase 2b, so investigacao): o inventario dos desenhos pela
+// identidade da textura (native/render/texture_replacement.h: TextureId, o mesmo do catalogo de materiais e das
+// substituicoes HD). Uma linha por desenho: a lista, o TextureId, a fracao de texels de alfa cheio e de alfa zero, a
+// mistura (origem/destino), o 1/w minimo e maximo e o retangulo na tela. --pasta grava cada textura usada em BMP
+// (<TextureId>.bmp; so para a inspecao local: arte do jogo, nunca no repositorio).
+int ir_tela_texturas(int argc, char** argv) {
+    nr::CommandList              cl;
+    std::vector<rc::DumpTexture> tex;
+    if (!rc::load_frame_dump(argv[2], cl, tex)) return std::fprintf(stderr, "nao le a IR: %s\n", argv[2]), 1;
+    std::FILE* tsv = std::fopen(argv[3], "w");
+    if (!tsv) return std::fprintf(stderr, "nao grava %s\n", argv[3]), 1;
+    const char* pasta = opt(argc, argv, "--pasta");
+    std::vector<std::string> ids(tex.size());
+    std::vector<double>      cheio(tex.size()), zero(tex.size());
+    for (size_t i = 0; i < tex.size(); ++i) {
+        const rc::DumpTexture& t = tex[i];
+        ids[i] = nr::texture_id(t.desc.width, t.desc.height, t.argb).text();
+        size_t c = 0, z = 0;
+        for (uint32_t p : t.argb) c += (p >> 24) == 0xFF, z += (p >> 24) == 0;
+        cheio[i] = t.argb.empty() ? 0 : double(c) / double(t.argb.size());
+        zero[i]  = t.argb.empty() ? 0 : double(z) / double(t.argb.size());
+        if (pasta) {
+            const std::string bmp = std::string(pasta) + "/" + ids[i] + ".bmp";
+            if (!ir_tela_write_bmp(bmp.c_str(), t.argb, t.desc.width, t.desc.height))
+                return std::fprintf(stderr, "nao grava %s\n", bmp.c_str()), 1;
+        }
+    }
+    // --cobertura: para cada translucida, os pixels da imagem final que mudam sem ela (o software desenha a IR inteira e,
+    // de novo, sem aquele desenho). E o efeito da remocao, nao a cobertura rasterizada direta: um desenho que escreve a
+    // profundidade tambem muda o que os seguintes deixam aparecer (revisao Codex 20261110-225319)
+    std::vector<long> cover(cl.draws.size(), -1);
+    bool cobertura = false;
+    for (int i = 4; i < argc; ++i) cobertura = cobertura || std::strcmp(argv[i], "--cobertura") == 0;
+    if (cobertura) {
+        nr::soft::SoftwareDevice       dev;
+        std::vector<nr::TextureHandle> h;
+        for (const auto& t : tex) {
+            auto r = dev.create_texture(t.desc, std::as_bytes(std::span<const uint32_t>(t.argb)));
+            if (!r) return std::fprintf(stderr, "textura recusada\n"), 1;
+            h.push_back(r.value());
+        }
+        nr::CommandList base = cl;
+        for (auto& d : base.draws)
+            if (d.state.texture) d.state.texture = h[d.state.texture.value - 1];
+        auto render = [&](const nr::CommandList& c, std::vector<uint32_t>& img) {
+            uint32_t w = 0, hh = 0;
+            return dev.submit(c) && dev.read_frame(img, w, hh);
+        };
+        std::vector<uint32_t> full, part;
+        if (!render(base, full)) return std::fprintf(stderr, "o software recusou a IR\n"), 1;
+        for (size_t di = 0; di < base.draws.size(); ++di) {
+            if (base.draws[di].state.list != nr::ListType::Translucent) continue;
+            nr::CommandList c = base;
+            c.draws.erase(c.draws.begin() + long(di));  // (um desenho sem vertices e recusado pelo software)
+            if (!render(c, part) || part.size() != full.size()) continue;
+            long n = 0;
+            for (size_t i = 0; i < full.size(); ++i) n += part[i] != full[i];
+            cover[di] = n;
+        }
+    }
+    std::fprintf(tsv, "desenho\tlista\ttextura\ttexture_id\talfa_cheio\talfa_zero\tsrc\tdst\tescreve_z\tinvw_min\tinvw_max"
+                      "\tx0\tx1\ty0\ty1\tpixels\n");
+    for (size_t di = 0; di < cl.draws.size(); ++di) {
+        const nr::Draw& d = cl.draws[di];
+        if (d.first_vertex > cl.vertices.size() || d.vertex_count > cl.vertices.size() - d.first_vertex) continue;
+        float lo = INFINITY, hi = -INFINITY, x0 = INFINITY, x1 = -INFINITY, y0 = INFINITY, y1 = -INFINITY;
+        for (uint32_t k = 0; k < d.vertex_count; ++k) {
+            const nr::Vertex& v = cl.vertices[d.first_vertex + k];
+            lo = std::min(lo, v.inv_w), hi = std::max(hi, v.inv_w);
+            x0 = std::min(x0, v.x), x1 = std::max(x1, v.x), y0 = std::min(y0, v.y), y1 = std::max(y1, v.y);
+        }
+        const uint32_t ti = d.state.texture.value;
+        const bool     ok = ti && ti <= tex.size();
+        std::fprintf(tsv, "%zu\t%d\t%u\t%s\t%.3f\t%.3f\t%d\t%d\t%d\t%.9g\t%.9g\t%.1f\t%.1f\t%.1f\t%.1f\t%ld\n", di, int(d.state.list),
+                     ti, ok ? ids[ti - 1].c_str() : "-", ok ? cheio[ti - 1] : 0.0, ok ? zero[ti - 1] : 0.0, int(d.state.src),
+                     int(d.state.dst), int(d.state.depth_write), lo, hi, x0, x1, y0, y1, cover[di]);
+    }
+    std::fclose(tsv);
+    std::printf("texturas\t%zu\tdesenhos\t%zu\n", tex.size(), cl.draws.size());
     return 0;
 }

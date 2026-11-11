@@ -260,9 +260,11 @@ bool ir_tela_write_bmp(const char* path, const std::vector<uint32_t>& argb, uint
     return write_bmp(path, argb, w, h);
 }
 int ir_tela_geometria(int argc, char** argv);  // geometria.cpp (N9.6 fase 0)
+int ir_tela_texturas(int argc, char** argv);   // geometria.cpp (N9.6 fase 2b)
 
 int main(int argc, char** argv) {
     if (argc >= 3 && std::strcmp(argv[1], "geometria") == 0) return ir_tela_geometria(argc, argv);
+    if (argc >= 4 && std::strcmp(argv[1], "texturas") == 0) return ir_tela_texturas(argc, argv);
     if (argc >= 4 && std::strcmp(argv[1], "quadro") == 0) {
         Ir ir;
         return load(argv[2], ir) ? draw(ir, argv[3], opt_width(argc, argv)) : 1;

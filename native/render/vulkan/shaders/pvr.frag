@@ -51,6 +51,7 @@ const uint F_EXACT = 2097152u, F_SAMPLE_CORNER = 4194304u, F_ATTR_CORNER = 83886
 const uint F_FOG = 33554432u;  // N8.7: fog por tabela (TSP bits 23-22 = 0)
 const uint F_SHADOW = 67108864u;  // N8.7: PCW bit 7 (o passe das opacas grava o bit de sombra do pixel)
 const uint F_SCENE  = 134217728u; // N9.6 fase 1: desenho da cena 3D (bit 1 do anexo de sombra; o AO so age nele)
+const uint F_AO_SURF = 268435456u; // N9.6 fase 2b: translucida do catalogo (material_catalog.h): o AO do opaco no plano dela
 
 #include "exact.glsl"
 
@@ -61,6 +62,9 @@ const uint kTriWords = 24u;
 
 // N8.7: os parametros do quadro (FOG_TABLE: 2 entradas de 16 bits por palavra; FOG_COL_RAM; FOG_DENSITY)
 layout(std430, set = 1, binding = 4) readonly buffer FrameData { uint fogTable[64]; uint fogColor; uint fogDensity; } fd;
+// N9.6 fase 2b: o fator do AO e o 1/w do opaco por pixel (ao.comp -DSURF); sem o AO no quadro, uma textura neutra
+// (a amostra so acontece com F_AO_SURF). O binding 5 fica para a agua do N9.7.
+layout(set = 1, binding = 6) uniform sampler2D aoSurfTex;
 
 #ifdef AUTOSORT
 struct Frag {
@@ -233,6 +237,16 @@ void main() {
         const vec4    fc = argb(fd.fogColor | 0xFF000000u);
         precise vec3  g  = o.rgb + (fc.rgb - o.rgb) * f;
         o.rgb            = g;
+    }
+    // N9.6 fase 2b: so a ate 1 % de 1/w do opaco por baixo (um decalque: os racks medidos ficam a 0,66 %); mais longe (uma
+    // grade sobre um fosso, uma placa solta), a cor do jogo
+    if ((pc.flags & F_AO_SURF) != 0u) {
+        const vec4 s = texelFetch(aoSurfTex, p, 0);
+        const uint u = (uint(s.g * 255.0 + 0.5) << 16) | (uint(s.b * 255.0 + 0.5) << 8) | uint(s.a * 255.0 + 0.5);
+        if (u != 0u) {
+            const float iw = exp2(float(u) / 16777215.0 * 32.0 - 32.0);
+            if (abs(z - iw) <= 0.01 * iw) o.rgb *= s.r;
+        }
     }
     const uint mode = (pc.flags >> 17) & 3u;
     if (mode == 1u && q8(o.a) < pc.ptRef) discard;

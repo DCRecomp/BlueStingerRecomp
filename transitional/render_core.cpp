@@ -3,6 +3,7 @@
 // (PvrListRenderer); na validacao o adaptador do decodificador do legado (render_capture.cpp) monta a IR e o chama.
 #include "render_core.h"
 #include "render/wide_frame.h"
+#include "render/material_catalog.h"
 #include "platform/telemetry.h"  // N9.5 fase 5C
 
 #include "debug/gfx_probe.h"
@@ -40,6 +41,7 @@ std::atomic<bool>         g_vkGaveUp{false};              // N9.5 fase 5B: vulka
 uint32_t                  g_wide         = 0;               // N9.5 fase 1: largura do quadro largo (set_wide; 0 = 4:3)
 bool                      g_ao           = false;           // N9.6 fase 1: oclusao ambiente (set_ambient_occlusion)
 nr::AoQuality             g_aoQuality    = nr::AoQuality::Medium;  // a qualidade dela (set_ambient_occlusion_quality)
+bool                      g_materials    = false;  // N9.6 fase 2b: o catalogo de materiais (set_materials; so a Remastered)
 
 std::unique_ptr<Renderer> g_core;
 
@@ -243,11 +245,15 @@ bool Renderer::texture_handle(nr::IRenderDevice& dev, TexCache& cache, bool hd, 
     bool legacy = false;
     if (!texture_argb(k, argb_, legacy)) return false;
     st.tex_legacy += legacy;
+    // a identidade pelo conteudo, so quando alguem a usa (HD ou o catalogo da Remastered): calculada uma vez por envio
+    const bool          mats = g_materials && hd;  // N9.6 fase 2b: o catalogo so no Vulkan (o software e a referencia)
+    const nr::TextureId id   = repl || mats ? nr::texture_id(k.width, k.height, argb_) : nr::TextureId{};
+    const uint32_t      mat  = mats ? nr::material_flags(id) : 0;
+    st.tex_materials += mat != 0;
     // substituicao HD pelo conteudo (nunca pelo endereco): compativel ou o original
     const std::vector<uint32_t>* texels = &argb_;
     uint32_t                     tw = k.width, th = k.height;
     if (repl) {
-        const nr::TextureId id = nr::texture_id(k.width, k.height, argb_);
         if (const nr::ReplacementTexture* r = repl->find(id)) {
             if (nr::replacement_compatible(id, *r)) texels = &r->argb, tw = r->width, th = r->height, ++st.tex_replaced;
             else ++st.tex_replace_rejected;
@@ -269,6 +275,7 @@ bool Renderer::texture_handle(nr::IRenderDevice& dev, TexCache& cache, bool hd, 
         e.handle = r.value();
     }
     e.w = tw, e.h = th, e.provider = repl;
+    if (mats || e.material) dev.set_texture_material(e.handle, mat), e.material = mat;  // N9.6 fase 2b
     // revisao Codex 20261029-013355: os bytes e as geracoes so valem depois do envio que deu certo
     e.raw = raw_, e.gen = gen, e.pal = pal;
     ++st.tex_uploads;
@@ -461,6 +468,7 @@ bool Renderer::vk_attempt(uint32_t w, uint32_t h, std::vector<uint32_t>& out, st
         st.vk_max_layers   = vk_->stats().max_layers;
         st.vk_ao_frames    = vk_->stats().ao_frames;  // N9.6 fase 1
         st.vk_ao_half_frames = vk_->stats().ao_half_frames;
+        st.vk_ao_surface_frames = vk_->stats().ao_surface_frames;  // N9.6 fase 2b
         return true;
     }
     *why = injected                           ? std::string("falha injetada")
@@ -689,6 +697,8 @@ float scale() { return g_scale; }
 
 void     set_wide(uint32_t width) { g_wide = width; }
 void     set_ambient_occlusion(bool on) { g_ao = on; }
+void     set_materials(bool on) { g_materials = on; }
+bool     materials() { return g_materials; }
 void     set_ambient_occlusion_quality(uint32_t q) {
     g_aoQuality = nr::AoQuality(std::min<uint32_t>(q, uint32_t(nr::AoQuality::High)));
 }
@@ -895,12 +905,13 @@ std::string summary() {
         out += b;
     }
     if (!s.vk_device.empty() || !s.vk_error.empty()) {
-        char v[900];
+        char v[1200];
         std::snprintf(v, sizeof v,
                       "[render-vk] %s: quadros %llu, falhas %llu; texturas enviadas %llu (pelo decodificador do legado %llu, "
                       "descartadas do cache %llu, HD %llu, HD incompativeis %llu); dispositivo recriado %llu vez(es); comparados %llu: pixels diferentes %.4f%% (> 8 niveis %.4f%%), maior "
                       "diferenca %u, pior render %llu (%.3f%%); PSNR minimo %.1f dB, medio %.1f dB, quadros abaixo de 40 dB %llu; GPU por "
-                      "quadro: media %.2f ms, pior %.1f ms; camadas translucidas por pixel ate %llu; AO em %llu renders (meia resolucao %llu)%s%s\n",
+                      "quadro: media %.2f ms, pior %.1f ms; camadas translucidas por pixel ate %llu; AO em %llu renders (meia resolucao %llu); catalogo de materiais: %llu "
+                      "envios, AO nas translucidas em %llu renders%s%s\n",
                       s.vk_device.empty() ? "indisponivel" : s.vk_device.c_str(), (unsigned long long)s.vk_frames,
                       (unsigned long long)s.vk_failures, (unsigned long long)s.tex_uploads, (unsigned long long)s.tex_legacy,
                       (unsigned long long)s.tex_evicted, (unsigned long long)s.tex_replaced,
@@ -912,7 +923,8 @@ std::string summary() {
                       s.cmp_frames ? s.cmp_psnr_sum / double(s.cmp_frames) : 0.0, (unsigned long long)s.cmp_below40,
                       s.vk_frames ? s.vk_gpu_ms_total / double(s.vk_frames) : 0.0, s.vk_gpu_ms_max,
                       (unsigned long long)s.vk_max_layers, (unsigned long long)s.vk_ao_frames,
-                      (unsigned long long)s.vk_ao_half_frames,
+                      (unsigned long long)s.vk_ao_half_frames, (unsigned long long)s.tex_materials,
+                      (unsigned long long)s.vk_ao_surface_frames,
                       s.vk_error.empty() ? "" : "; ",
                       s.vk_error.c_str());
         out += v;

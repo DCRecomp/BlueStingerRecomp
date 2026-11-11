@@ -1,6 +1,7 @@
 #include "render/vulkan/vk_device.h"
 
 #include "render/frame_prep.h"
+#include "render/material_catalog.h"
 #include "render/vulkan/spirv/pvr_frag.h"
 #include "render/vulkan/spirv/pvr_frag_autosort.h"
 #include "render/vulkan/spirv/pvr_frag_autosort_fc.h"
@@ -10,9 +11,11 @@
 #include "render/soft/soft_raster.h"
 #include "render/vulkan/spirv/pvr_vert.h"
 #include "render/vulkan/spirv/ao_blur_comp.h"
+#include "render/vulkan/spirv/ao_blur_surf_comp.h"
 #include "render/vulkan/spirv/ao_comp.h"
 #include "render/vulkan/spirv/ao_half_comp.h"
 #include "render/vulkan/spirv/ao_up_comp.h"
+#include "render/vulkan/spirv/ao_up_surf_comp.h"
 #include "render/vulkan/spirv/volumes_comp.h"
 #include "render/vulkan/spirv/volumes_comp_fc.h"
 #include "render/vulkan/spirv/volumes_comp_fcd.h"
@@ -67,7 +70,8 @@ constexpr uint32_t F_TEXTURED = 1, F_GOURAUD = 2, F_OFFSET = 4, F_USE_ALPHA = 8,
                    F_SAMPLE_CORNER = 1u << 22, F_ATTR_CORNER = 1u << 23, F_RAW_DEPTH = 1u << 24,
                    F_FOG = 1u << 25,     // N8.7: fog por tabela
                    F_SHADOW = 1u << 26,  // N8.7: PCW bit 7 (o passe das opacas grava o bit de sombra do pixel)
-                   F_SCENE  = 1u << 27;  // N9.6 fase 1: desenho da cena 3D (bit 1 do anexo de sombra; o AO so age nele)
+                   F_SCENE  = 1u << 27,  // N9.6 fase 1: desenho da cena 3D (bit 1 do anexo de sombra; o AO so age nele)
+                   F_AO_SURF = 1u << 28;  // N9.6 fase 2b: translucida do catalogo: o AO do opaco no plano dela
 constexpr uint32_t kFragBytes = 32;  // struct Frag (std430)
 constexpr uint32_t kFrameDataBytes = 64 * 4 + 2 * 4;  // N8.7: FrameData de pvr.frag (fog)
 constexpr uint32_t kHeader    = 32;  // cabecalho das listas por pixel (Heads: 8 palavras)
@@ -77,6 +81,7 @@ struct Tex {
     Image           image;
     VkDescriptorSet set = VK_NULL_HANDLE;
     bool            ready = false;  // ja recebeu dados (layout de leitura)
+    uint32_t        material = 0;   // N9.6 fase 2b: os bits do catalogo de materiais (set_texture_material)
 };
 
 class VkDev final : public VulkanDevice, public VkBase, public SlotSource {
@@ -306,6 +311,9 @@ public:
     void  set_always_slot(bool on) override { alwaysSlot_ = on; }
     void  set_ambient_occlusion(bool on) override { aoOn_.store(on, std::memory_order_relaxed); }
     void  set_ambient_occlusion_quality(AoQuality q) override { aoQuality_.store(uint8_t(q), std::memory_order_relaxed); }
+    void  set_texture_material(TextureHandle t, uint32_t flags) override {  // N9.6 fase 2b
+        if (auto it = texs_.find(t.value); it != texs_.end()) it->second.material = flags;
+    }
     float scale() const override { return scale_; }
 
     bool remakeReady(int i) {
@@ -614,6 +622,8 @@ private:
     VkPipeline            volPipe_ = VK_NULL_HANDLE;
     // N9.6 fase 1: oclusao ambiente (ao.comp): o AO do quadro (RGBA8, criado na primeira vez que liga), o conjunto e os
     // dois computes (o calculo e a media com a multiplicacao da cor)
+    Image                 aoSurf_;  // N9.6 fase 2b: o fator e o 1/w do opaco por pixel (rgba8 no alvo) para o catalogo
+    bool                  aoSurfBound_ = false, aoSurfWanted_ = false, aoSurfFrame_ = false;
     Image                 aoImg_, aoHalf_;  // a alta usa aoImg_ (rgba8 no alvo); a media e a baixa, aoHalf_ (rgba32f, 1/4)
     VkDescriptorSetLayout aoLayout_ = VK_NULL_HANDLE;
     VkDescriptorPool      aoPool_   = VK_NULL_HANDLE;
@@ -621,6 +631,8 @@ private:
     VkPipelineLayout      aoPipeLayout_ = VK_NULL_HANDLE;
     VkShaderModule        aoMod_ = VK_NULL_HANDLE, aoBlurMod_ = VK_NULL_HANDLE;
     VkShaderModule        aoHalfMod_ = VK_NULL_HANDLE, aoUpMod_ = VK_NULL_HANDLE;
+    VkShaderModule        aoBlurSurfMod_ = VK_NULL_HANDLE, aoUpSurfMod_ = VK_NULL_HANDLE;
+    VkPipeline            aoBlurSurfPipe_ = VK_NULL_HANDLE, aoUpSurfPipe_ = VK_NULL_HANDLE;
     VkPipeline            aoPipe_ = VK_NULL_HANDLE, aoBlurPipe_ = VK_NULL_HANDLE, aoHalfPipe_ = VK_NULL_HANDLE, aoUpPipe_ = VK_NULL_HANDLE;
     bool                  aoSetValid_ = false, aoFailed_ = false;
     std::atomic<bool>     aoOn_{false};
@@ -733,13 +745,16 @@ private:
         li.bindingCount = 1, li.pBindings = &tb;
         if (!ok(f_.vkCreateDescriptorSetLayout(dev_, &li, nullptr, &texLayout_), "layout da textura", error)) return false;
         ++g_live;
-        VkDescriptorSetLayoutBinding fb[5] = {{0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
+        VkDescriptorSetLayoutBinding fb[6] = {{0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
                                               {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
                                               {2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
                                               {3, VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
                                               // N8.7: os parametros do quadro (fog)
-                                              {4, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr}};
-        li.bindingCount = 5, li.pBindings = fb;
+                                              {4, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
+                                              // N9.6 fase 2b: o AO do opaco para as translucidas do catalogo (5 fica
+                                              // para a agua do N9.7)
+                                              {6, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr}};
+        li.bindingCount = 6, li.pBindings = fb;
         if (!ok(f_.vkCreateDescriptorSetLayout(dev_, &li, nullptr, &fragLayout_), "layout das listas", error)) return false;
         ++g_live;
         VkDescriptorSetLayoutBinding rb[3] = {{0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
@@ -754,9 +769,9 @@ private:
         pi.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT, pi.maxSets = 8192, pi.poolSizeCount = 1, pi.pPoolSizes = &tps;
         if (!ok(f_.vkCreateDescriptorPool(dev_, &pi, nullptr, &texPool_), "pool das texturas", error)) return false;
         ++g_live;
-        VkDescriptorPoolSize fps[3] = {{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 8}, {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 2},
-                                       {VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1}};
-        pi.flags = 0, pi.maxSets = 3, pi.poolSizeCount = 3, pi.pPoolSizes = fps;
+        VkDescriptorPoolSize fps[4] = {{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 8}, {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 2},
+                                       {VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1}, {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1}};
+        pi.flags = 0, pi.maxSets = 3, pi.poolSizeCount = 4, pi.pPoolSizes = fps;
         if (!ok(f_.vkCreateDescriptorPool(dev_, &pi, nullptr, &framePool_), "pool do quadro", error)) return false;
         ++g_live;
         VkDescriptorSetAllocateInfo ai{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
@@ -905,8 +920,13 @@ private:
         VkDescriptorBufferInfo pbi{frameData_.buf, 0, VK_WHOLE_SIZE};
         VkDescriptorImageInfo  ii{VK_NULL_HANDLE, color_.view, VK_IMAGE_LAYOUT_GENERAL};
         VkDescriptorImageInfo  di{VK_NULL_HANDLE, depth_.view, VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL};
-        VkWriteDescriptorSet   w[8] = {};
-        for (int i = 0; i < 8; ++i) w[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, w[i].descriptorCount = 1;
+        // N9.6 fase 2b: a imagem do AO para o catalogo, quando existe; senao a textura neutra (a amostra so acontece com
+        // F_AO_SURF, que so liga com a imagem escrita no quadro)
+        VkDescriptorImageInfo  si = aoSurf_.img ? VkDescriptorImageInfo{sampler_, aoSurf_.view, VK_IMAGE_LAYOUT_GENERAL}
+                                                : VkDescriptorImageInfo{sampler_, dummy_.image.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+        VkWriteDescriptorSet   w[9] = {};
+        for (int i = 0; i < 9; ++i) w[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, w[i].descriptorCount = 1;
+        w[8].dstSet = fragSet_, w[8].dstBinding = 6, w[8].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, w[8].pImageInfo = &si;
         w[7].dstSet = fragSet_, w[7].dstBinding = 4, w[7].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, w[7].pBufferInfo = &pbi;
         w[6].dstSet = fragSet_, w[6].dstBinding = 3, w[6].descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, w[6].pImageInfo = &di;
         w[5].dstSet = fragSet_, w[5].dstBinding = 2, w[5].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, w[5].pBufferInfo = &tbi;
@@ -916,11 +936,12 @@ private:
         w[3].dstSet = resolveSet_, w[3].dstBinding = 1, w[3].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, w[3].pBufferInfo = &hbi;
         w[4].dstSet = resolveSet_, w[4].dstBinding = 2, w[4].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, w[4].pImageInfo = &ii;
         // a posicao 5 (triangulos) so existe depois do primeiro quadro: ate la, sem ela
-        VkWriteDescriptorSet list[8];
+        VkWriteDescriptorSet list[9];
         uint32_t             n = 0;
-        for (int i = 0; i < 8; ++i)
-            if ((i != 5 || tris_.buf) && (i != 7 || frameData_.buf)) list[n++] = w[i];
+        for (int i = 0; i < 9; ++i)
+            if ((i != 5 || tris_.buf) && (i != 7 || frameData_.buf) && (i != 8 || aoSurf_.img || dummy_.image.view)) list[n++] = w[i];
         f_.vkUpdateDescriptorSets(dev_, n, list, 0, nullptr);
+        aoSurfBound_ = aoSurf_.img != VK_NULL_HANDLE;
         ++st_.frame_set_writes;
     }
 
@@ -1096,7 +1117,7 @@ private:
     // N9.6 fase 1 (revisao Codex 20261110-113738): os objetos do AO nascem na primeira vez que ele liga; uma falha aqui
     // desliga so o AO (o renderizador fiel continua) e fica no log uma vez. O que ja foi criado sai na destruicao.
     bool aoObjects() {
-        if (aoPipe_ && aoBlurPipe_ && aoHalfPipe_ && aoUpPipe_) return true;
+        if (aoPipe_ && aoBlurPipe_ && aoHalfPipe_ && aoUpPipe_ && aoBlurSurfPipe_ && aoUpSurfPipe_) return true;
         if (aoFailed_) return false;
         std::string err;
         auto fail_ao = [&](const std::string& why) {
@@ -1106,17 +1127,19 @@ private:
         };
         // 3: o AO no alvo (alta); 4: o AO em meia resolucao (media e baixa). Cada pipeline usa so a sua: a outra imagem pode
         // nem existir (so a da qualidade escolhida e criada)
-        VkDescriptorSetLayoutBinding ab[5] = {
+        VkDescriptorSetLayoutBinding ab[6] = {
             {0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
             {1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
             {2, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
             {3, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
-            {4, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr}};
+            {4, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+            // N9.6 fase 2b: o fator e o 1/w do opaco para as translucidas do catalogo (so as variantes SURF)
+            {5, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr}};
         VkDescriptorSetLayoutCreateInfo ali{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
-        ali.bindingCount = 5, ali.pBindings = ab;
+        ali.bindingCount = 6, ali.pBindings = ab;
         if (!ok(f_.vkCreateDescriptorSetLayout(dev_, &ali, nullptr, &aoLayout_), "layout do AO", &err)) return fail_ao(err);
         ++g_live;
-        VkDescriptorPoolSize       aps[2] = {{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2}, {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 3}};
+        VkDescriptorPoolSize       aps[2] = {{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2}, {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 4}};
         VkDescriptorPoolCreateInfo api{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
         api.maxSets = 1, api.poolSizeCount = 2, api.pPoolSizes = aps;
         if (!ok(f_.vkCreateDescriptorPool(dev_, &api, nullptr, &aoPool_), "pool do AO", &err)) return fail_ao(err);
@@ -1131,11 +1154,13 @@ private:
         ++g_live;
         aoMod_ = module(kAoComp, sizeof kAoComp), aoBlurMod_ = module(kAoBlurComp, sizeof kAoBlurComp);
         aoHalfMod_ = module(kAoHalfComp, sizeof kAoHalfComp), aoUpMod_ = module(kAoUpComp, sizeof kAoUpComp);
-        if (!aoMod_ || !aoBlurMod_ || !aoHalfMod_ || !aoUpMod_) {
+        aoBlurSurfMod_ = module(kAoBlurSurfComp, sizeof kAoBlurSurfComp), aoUpSurfMod_ = module(kAoUpSurfComp, sizeof kAoUpSurfComp);
+        if (!aoMod_ || !aoBlurMod_ || !aoHalfMod_ || !aoUpMod_ || !aoBlurSurfMod_ || !aoUpSurfMod_) {
             return fail_ao("shader do AO");
         }
         for (auto [mod, pipe] : {std::pair{aoMod_, &aoPipe_}, std::pair{aoBlurMod_, &aoBlurPipe_},
-                                 std::pair{aoHalfMod_, &aoHalfPipe_}, std::pair{aoUpMod_, &aoUpPipe_}}) {
+                                 std::pair{aoHalfMod_, &aoHalfPipe_}, std::pair{aoUpMod_, &aoUpPipe_},
+                                 std::pair{aoBlurSurfMod_, &aoBlurSurfPipe_}, std::pair{aoUpSurfMod_, &aoUpSurfPipe_}}) {
             VkComputePipelineCreateInfo ac{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
             ac.stage  = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_COMPUTE_BIT, mod, "main", nullptr};
             ac.layout = aoPipeLayout_;
@@ -1151,11 +1176,13 @@ private:
         VkDescriptorImageInfo ci{VK_NULL_HANDLE, color_.view, VK_IMAGE_LAYOUT_GENERAL};
         VkDescriptorImageInfo ai{VK_NULL_HANDLE, aoImg_.view, VK_IMAGE_LAYOUT_GENERAL};
         VkDescriptorImageInfo hi{VK_NULL_HANDLE, aoHalf_.view, VK_IMAGE_LAYOUT_GENERAL};
-        VkWriteDescriptorSet  w[5] = {};
-        const VkDescriptorImageInfo* inf[5] = {&di, &si, &ci, &ai, &hi};
+        VkDescriptorImageInfo ui{VK_NULL_HANDLE, aoSurf_.view, VK_IMAGE_LAYOUT_GENERAL};
+        VkWriteDescriptorSet  w[6] = {};
+        const VkDescriptorImageInfo* inf[6] = {&di, &si, &ci, &ai, &hi, &ui};
         uint32_t                     n      = 0;
-        for (uint32_t i = 0; i < 5; ++i) {
-            if ((i == 3 && !aoImg_.img) || (i == 4 && !aoHalf_.img)) continue;  // so a imagem da qualidade escolhida
+        for (uint32_t i = 0; i < 6; ++i) {
+            // so a imagem da qualidade escolhida; a 5 so com uma translucida do catalogo
+            if ((i == 3 && !aoImg_.img) || (i == 4 && !aoHalf_.img) || (i == 5 && !aoSurf_.img)) continue;
             w[n].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, w[n].dstSet = aoSet_, w[n].dstBinding = i, w[n].descriptorCount = 1;
             w[n].descriptorType = i < 2 ? VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER : VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
             w[n].pImageInfo     = inf[i];
@@ -1200,7 +1227,8 @@ private:
         }
         // revisao Codex 20261110-161728: o tamanho das imagens do AO vivas (pixels x formato), para os testes e o diagnostico
         st_.ao_image_bytes = (aoImg_.img ? uint64_t(w_) * h_ * 4 : 0) +
-                             (aoHalf_.img ? uint64_t((w_ + 1) / 2) * ((h_ + 1) / 2) * 16 : 0);
+                             (aoHalf_.img ? uint64_t((w_ + 1) / 2) * ((h_ + 1) / 2) * 16 : 0) +
+                             (aoSurf_.img ? uint64_t(w_) * h_ * 4 : 0);  // N9.6 fase 2b
         if (!aoSetValid_) writeAoSet();
         imageBarrier(mine.img, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0,
                      VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT);
@@ -1235,8 +1263,19 @@ private:
         else f_.vkCmdDispatch(cmd_, (w_ + 7) / 8, (h_ + 7) / 8, 1);
         imageBarrier(mine.img, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
                      VK_ACCESS_SHADER_WRITE_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_READ_BIT);
-        f_.vkCmdBindPipeline(cmd_, VK_PIPELINE_BIND_POINT_COMPUTE, half ? aoUpPipe_ : aoBlurPipe_);
+        // N9.6 fase 2b: com uma translucida do catalogo no quadro, o passe final grava tambem o fator e o 1/w do opaco
+        const bool surf = aoSurfWanted_ && aoSurf_.img && aoSurfBound_;
+        if (surf)
+            imageBarrier(aoSurf_.img, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 0,
+                         VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT);
+        f_.vkCmdBindPipeline(cmd_, VK_PIPELINE_BIND_POINT_COMPUTE,
+                             half ? (surf ? aoUpSurfPipe_ : aoUpPipe_) : (surf ? aoBlurSurfPipe_ : aoBlurPipe_));
         f_.vkCmdDispatch(cmd_, (w_ + 7) / 8, (h_ + 7) / 8, 1);
+        if (surf) {  // lida pelas translucidas do passe B (pvr.frag, binding 6)
+            imageBarrier(aoSurf_.img, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                         VK_ACCESS_SHADER_WRITE_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_ACCESS_SHADER_READ_BIT);
+            aoSurfFrame_ = true, ++st_.ao_surface_frames;
+        }
         // a cor escrita pelo compute: lida e escrita pelos volumes, pelo passe B e pelas copias
         imageBarrier(color_.img, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
                      VK_ACCESS_SHADER_WRITE_BIT,
@@ -1257,8 +1296,8 @@ private:
         if (pass_) f_.vkDestroyRenderPass(dev_, pass_, nullptr), --g_live, pass_ = VK_NULL_HANDLE;
         if (fbB_) f_.vkDestroyFramebuffer(dev_, fbB_, nullptr), --g_live, fbB_ = VK_NULL_HANDLE;
         if (passB_) f_.vkDestroyRenderPass(dev_, passB_, nullptr), --g_live, passB_ = VK_NULL_HANDLE;
-        freeImage(color_), freeImage(depth_), freeImage(shadow_), freeImage(aoImg_), freeImage(aoHalf_);
-        st_.ao_image_bytes = 0;
+        freeImage(color_), freeImage(depth_), freeImage(shadow_), freeImage(aoImg_), freeImage(aoHalf_), freeImage(aoSurf_);
+        st_.ao_image_bytes = 0, aoSurfBound_ = false;
         aoSetValid_ = false;
         freeBuffer(heads_), freeBuffer(frags_), freeBuffer(readback_), freeBuffer(headerRead_);
     }
@@ -1383,6 +1422,10 @@ private:
         if (s.fog == Fog::Table && !soft::fog_volumes_disabled()) fl |= F_FOG;  // N8.7
         if (s.shadow) fl |= F_SHADOW;
         if (b.scene3d) fl |= F_SCENE;
+        // N9.6 fase 2b: uma translucida do catalogo, com o AO escrito para ela neste quadro
+        if (aoSurfFrame_ && tex && (tex->material & kMaterialAoSurface) &&
+            (b.mode == PassMode::TranslucentOrdered || b.mode == PassMode::TranslucentAutosort))
+            fl |= F_AO_SURF;
         if (!fr.sample_center) fl |= F_SAMPLE_CORNER;
         if (!fr.attribute_center) fl |= F_ATTR_CORNER;
         if (rawDepth_) fl |= F_RAW_DEPTH;
@@ -1512,6 +1555,29 @@ private:
         if (!uploadBytes_.empty() && !ensureHost(staging_, uploadBytes_.size(), VK_BUFFER_USAGE_TRANSFER_SRC_BIT))
             return Error::Io;
         if (!uploadBytes_.empty()) std::memcpy(staging_.map, uploadBytes_.data(), uploadBytes_.size());
+
+        // N9.6 fase 2b: o AO para as translucidas do catalogo de materiais. A imagem nasce no primeiro quadro com uma delas
+        // (com o AO ligado no render do framebuffer) e sai com o AO desligado; o descritor do quadro e regravado aqui, antes
+        // de os comandos o usarem (o quadro anterior ja terminou: o submit espera a cerca)
+        aoSurfFrame_  = false;
+        aoSurfWanted_ = false;
+        if (aoOn_.load(std::memory_order_relaxed) && fr.height == 480 && fr.width >= 640 && !aoFailed_)
+            for (const Batch& b : prep_.batches)
+                if ((b.mode == PassMode::TranslucentOrdered || b.mode == PassMode::TranslucentAutosort) && b.state.texture) {
+                    auto it = texs_.find(b.state.texture.value);
+                    if (it != texs_.end() && (it->second.material & kMaterialAoSurface)) {
+                        aoSurfWanted_ = true;
+                        break;
+                    }
+                }
+        if (aoSurfWanted_ && !aoSurf_.img) {
+            MemScope mc(telemetry::Mem::Targets);
+            aoSurf_ = makeImage(w_, h_, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+                                VK_IMAGE_ASPECT_COLOR_BIT);
+            aoSetValid_ = false;
+        }
+        if (!aoOn_.load(std::memory_order_relaxed) && aoSurf_.img) freeImage(aoSurf_), aoSetValid_ = false;
+        if (bool(aoSurf_.img) != aoSurfBound_) writeFrameSets();
 
         f_.vkResetCommandBuffer(cmd_, 0);
         VkCommandBufferBeginInfo bi{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
@@ -1794,12 +1860,12 @@ private:
             if (volPool_) f_.vkDestroyDescriptorPool(dev_, volPool_, nullptr), --g_live, volPool_ = VK_NULL_HANDLE;
             if (volLayout_) f_.vkDestroyDescriptorSetLayout(dev_, volLayout_, nullptr), --g_live, volLayout_ = VK_NULL_HANDLE;
             if (volMod_) f_.vkDestroyShaderModule(dev_, volMod_, nullptr), --g_live, volMod_ = VK_NULL_HANDLE;
-            for (VkPipeline* p : {&aoPipe_, &aoBlurPipe_, &aoHalfPipe_, &aoUpPipe_})  // N9.6 fase 1
+            for (VkPipeline* p : {&aoPipe_, &aoBlurPipe_, &aoHalfPipe_, &aoUpPipe_, &aoBlurSurfPipe_, &aoUpSurfPipe_})  // N9.6
                 if (*p) f_.vkDestroyPipeline(dev_, *p, nullptr), --g_live, *p = VK_NULL_HANDLE;
             if (aoPipeLayout_) f_.vkDestroyPipelineLayout(dev_, aoPipeLayout_, nullptr), --g_live, aoPipeLayout_ = VK_NULL_HANDLE;
             if (aoPool_) f_.vkDestroyDescriptorPool(dev_, aoPool_, nullptr), --g_live, aoPool_ = VK_NULL_HANDLE;
             if (aoLayout_) f_.vkDestroyDescriptorSetLayout(dev_, aoLayout_, nullptr), --g_live, aoLayout_ = VK_NULL_HANDLE;
-            for (VkShaderModule* m : {&aoMod_, &aoBlurMod_, &aoHalfMod_, &aoUpMod_})
+            for (VkShaderModule* m : {&aoMod_, &aoBlurMod_, &aoHalfMod_, &aoUpMod_, &aoBlurSurfMod_, &aoUpSurfMod_})
                 if (*m) f_.vkDestroyShaderModule(dev_, *m, nullptr), --g_live, *m = VK_NULL_HANDLE;
             if (resolve_) f_.vkDestroyPipeline(dev_, resolve_, nullptr), --g_live;
             for (VkShaderModule m : {vert_, frag_, fragList_, comp_})

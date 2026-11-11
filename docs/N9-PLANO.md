@@ -318,6 +318,9 @@ só como histórico:
 - **Fase 2a (2026-11-10, commit local; auditoria seção 8):** a marca de cena medida antes de implementar: nenhum desenho
   opaco de cena com 1/w constante nas 22 cenas; a falta de AO vem das translúcidas por cima. Decisão do mantenedor: a
   marca não entra no produto, alarme só de validação `tools/dev/n96_cena.py`; as translúcidas vão para a 2b (catálogo).
+- **Fase 2b (2026-11-11, commit local; auditoria seção 9):** o catálogo de materiais por `TextureId`
+  (`native/render/material_catalog`, um só para o N9.6, o N9.7 e o N9.8) e o primeiro material, o AO sob as translúcidas
+  que são decalques (a até 1 % de 1/w do opaco); entrou os racks do quarto, o piso de grade ficou de fora (um fosso).
 
 ### N9.7 — Água e reflexos (R, G)
 
