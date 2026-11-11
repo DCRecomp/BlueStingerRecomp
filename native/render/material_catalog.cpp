@@ -21,10 +21,19 @@ constexpr MaterialEntry kTable[] = {
     {{64, 16, 0x10b0adb7ecfefb45ull}, kMaterialEmissive, "corredor RCG02: a placa EXIT acesa (opaca)"},
     {{64, 32, 0x14cb38a2d38b4ed9ull}, kMaterialEmissive, "corredor RCG02: a placa HEIGHT LIMIT acesa (opaca)"},
     {{64, 64, 0xe6aa04e85bbde090ull}, kMaterialEmissive, "quarto RCG02: o brilho laranja da faixa de luz do chao (translucida One/Zero)"},
-    // N9.7 (do prototipo do Codex, 2026-11-08; docs/N9-7-AGUA.md): medido na IR do cais RCG00 do passo_cgate no passo 2800
-    // (comando `ir cais` do assistido, `bs-ir-tela materiais`): 46 desenhos translucidos ModulateAlpha, SrcAlpha/InvSrcAlpha,
-    // o mar junto ao cais e o horizonte; nenhuma outra textura daquela IR e agua
-    {{32, 32, 0x7458e3539d31cd8dull}, kMaterialWater, "cais RCG00: o mar (46 desenhos translucidos ModulateAlpha)"},
+    // N9.7: o mar do cais RCG00. O primeiro quadro veio do prototipo do Codex (2026-11-08, a IR do passo 2800 do passo_cgate,
+    // 46 desenhos translucidos ModulateAlpha, SrcAlpha/InvSrcAlpha). O jogo anima o mar trocando a textura: nas IRs dos
+    // renders 15100 a 17200 da rota passo_cgate, de 10 em 10 (docs/N9-7-AGUA.md, inventario), as oito texturas abaixo se
+    // revezam no mesmo papel, uma por render, sempre com o mesmo numero de desenhos daquele render (30, 27 ou 24) e o mesmo
+    // estado; conferidas pela textura exportada (o mesmo padrao azul). Com um quadro so, a agua aprimorada piscava.
+    {{32, 32, 0xcdbab87a1d8d396dull}, kMaterialWater, "cais RCG00: o mar, quadro da animacao (cdbab87a)"},
+    {{32, 32, 0x7458e3539d31cd8dull}, kMaterialWater, "cais RCG00: o mar, quadro da animacao (7458e353, o do prototipo)"},
+    {{32, 32, 0x261eb2b953a38814ull}, kMaterialWater, "cais RCG00: o mar, quadro da animacao (261eb2b9)"},
+    {{32, 32, 0x2b81e35cd4ec3972ull}, kMaterialWater, "cais RCG00: o mar, quadro da animacao (2b81e35c)"},
+    {{32, 32, 0x6737c065625ed694ull}, kMaterialWater, "cais RCG00: o mar, quadro da animacao (6737c065)"},
+    {{32, 32, 0x8fdc859527593d4bull}, kMaterialWater, "cais RCG00: o mar, quadro da animacao (8fdc8595)"},
+    {{32, 32, 0x0de910958b4effafull}, kMaterialWater, "cais RCG00: o mar, quadro da animacao (0de91095)"},
+    {{32, 32, 0x5ffc9e41aef13e20ull}, kMaterialWater, "cais RCG00: o mar, quadro da animacao (5ffc9e41)"},
 };
 // clang-format on
 } // namespace

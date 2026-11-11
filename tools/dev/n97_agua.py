@@ -2,7 +2,8 @@
 cais RCG00 (o mar aparece nos VBlanks ~30 700 a ~34 200; levantamento de 2026-11-11 com BS_AGUA_DIAGNOSTICO).
 
 Mesmo arranjo do n96_luz (pasta temporaria por execucao, copia do exe e do instalacao.toml da edicao, cartao vazio).
-Capturas nos VBlanks 30700, 33500 e 34200. Casos:
+Capturas nos VBlanks 30600, 30700, 30800, 33500, 33600 e 34200 (o mar e animado pela troca da textura: oito quadros no
+catalogo; a agua tem de aparecer em todos, sem piscar). Casos:
   W1 recusas: a Original com --agua alta e a Remastered no software com --agua alta saem com 2;
   W2 Remastered 4:3: agua original x aprimorada x alta (produto) x alta (validacao) x as duas mascaras (validacao,
      BS_AGUA_DIAGNOSTICO=1 magenta e =2 verde, e =3 e =4 o mesmo sem o movimento da textura: o pixel diferente entre magenta
@@ -37,7 +38,7 @@ from n95_headless import Corrida  # noqa: E402
 RAIZ = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 ROTEIRO = os.path.join(RAIZ, "tools", "dist", "roteiros", "passo_cgate.txt")
 VBLANKS = 34300
-VBS = ("030700", "033500", "034200")
+VBS = ("030600", "030700", "030800", "033500", "033600", "034200")  # o mar em todos (os oito quadros da animacao)
 CAPTURAS = ",".join("%d-%d" % (int(v), int(v)) for v in VBS)
 
 
@@ -130,6 +131,9 @@ def main():
                 mudou_total += int(mudou.sum())
                 check("%s %s: so o dominio da agua muda" % (nome, v), fora == 0,
                       "%d pixels mudaram, %d fora do dominio (%d pixels de agua)" % (int(mudou.sum()), fora, int(dom.sum())))
+                # sem piscar: todo quadro com o mar visivel (dominio) recebe a agua (o jogo anima o mar trocando a textura)
+                check("%s %s: a agua em todo quadro com o mar" % (nome, v), dom.sum() == 0 or mudou.sum() > dom.sum() // 2,
+                      "%d de %d pixels de agua mudaram" % (int(mudou.sum()), int(dom.sum())))
             check("%s: a agua muda a imagem" % nome, mudou_total > 0, "%d pixels nas capturas" % mudou_total)
 
         if "W1" in casos:
@@ -173,14 +177,14 @@ def main():
             t, off, vhigh = r["troca"], r["off"], r["vhigh"]
             igual_estado(off, t, "W5 transicoes")
             check("W5 as trocas no log", "[validacao] agua no VBlank 32000: 0" in t.log and "[validacao] agua no VBlank 34000: 2" in t.log)
-            for v, ref, nome in ((VBS[0], vhigh, "alta"), (VBS[1], off, "original"), (VBS[2], vhigh, "alta")):
+            for v, ref, nome in (("030700", vhigh, "alta"), ("033500", off, "original"), ("034200", vhigh, "alta")):
                 check("W5 %s: o quadro da %s" % (v, nome), t.img("v%s.bmp" % v) is not None and
                       np.array_equal(t.img("v%s.bmp" % v), ref.img("v%s.bmp" % v)))
         if "W6" in casos:
             f, off, vhigh = r["falha"], r["off"], r["vhigh"]
             igual_estado(off, f, "W6 recuperacao")
             check("W6 o dispositivo recriado", "falha do Vulkan injetada no VBlank 32000" in f.log and "dispositivo recriado 1 vez" in f.log)
-            for v in VBS[1:]:
+            for v in ("033500", "033600", "034200"):
                 check("W6 %s: o quadro da alta sem a falha" % v, f.img("v%s.bmp" % v) is not None and
                       np.array_equal(f.img("v%s.bmp" % v), vhigh.img("v%s.bmp" % v)))
     finally:

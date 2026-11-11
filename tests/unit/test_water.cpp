@@ -76,20 +76,25 @@ constexpr Cfg kCfgs[] = {{640, 1.f, false, "640 s1"}, {640, 1.f, true, "640 s1 a
                          {854, 1.f, false, "854 s1"}};
 } // namespace
 
-// A1: so a textura medida do mar e agua no catalogo; vizinhos de hash e de forma nao; nenhuma linha mistura a agua com
-// outro material
+// A1/A5: so as oito texturas medidas da animacao do mar sao agua no catalogo; vizinhos de hash e de forma nao; nenhuma
+// linha mistura a agua com outro material; as tres texturas 32x32 que aparecem junto com o mar no cais nao sao agua
 BS_TEST(water_catalog_identifies_only_the_measured_sea) {
     BS_CHECK(nr::material_flags(kSea) == nr::kMaterialWater);
     BS_CHECK(nr::material_flags({32, 32, 0x7458e3539d31cd8cull}) == 0);  // um bit do conteudo
     BS_CHECK(nr::material_flags({64, 16, 0x7458e3539d31cd8dull}) == 0);  // outra forma, o mesmo hash
     BS_CHECK(nr::material_flags({}) == 0);
+    constexpr uint64_t kFrames[] = {0xcdbab87a1d8d396dull, 0x7458e3539d31cd8dull, 0x261eb2b953a38814ull, 0x2b81e35cd4ec3972ull,
+                                    0x6737c065625ed694ull, 0x8fdc859527593d4bull, 0x0de910958b4effafull, 0x5ffc9e41aef13e20ull};
+    for (uint64_t h : kFrames) BS_CHECK(nr::material_flags({32, 32, h}) == nr::kMaterialWater);
+    for (uint64_t h : {0xe19fbff0ce31792aull, 0x525a701d686a76a5ull, 0x2606c337ad632f8dull})
+        BS_CHECK(nr::material_flags({32, 32, h}) == 0);
     size_t water = 0;
     for (const nr::MaterialEntry& e : nr::material_table())
         if (e.flags & nr::kMaterialWater) {
             ++water;
-            BS_CHECK(e.flags == nr::kMaterialWater && e.id == kSea);
+            BS_CHECK(e.flags == nr::kMaterialWater && e.id.width == 32 && e.id.height == 32);
         }
-    BS_CHECK(water == 1);
+    BS_CHECK(water == std::size(kFrames));
 }
 
 // O horizonte e o fundo so dos desenhos de agua; desenhos com vertices fora da lista ficam de fora; sem agua, false

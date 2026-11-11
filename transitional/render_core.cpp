@@ -54,18 +54,33 @@ std::unique_ptr<Renderer> g_core;
 Renderer::~Renderer() { drop_vk(false); }
 
 bool Renderer::draw(uint32_t w, uint32_t h, std::vector<uint32_t>& image) {
-    static const std::pair<uint64_t, std::string> dumpAt = [] {
+    // <render>:<arquivo> guarda um render; N9.7 (o inventario da agua): <inicio>-<fim>/<passo>:<prefixo> guarda os renders
+    // do intervalo, de passo em passo, em <prefixo>.<render>.ir
+    struct DumpAt {
+        uint64_t    first = 0, last = 0, step = 1;
+        std::string path;
+        bool        range = false;
+    };
+    static const DumpAt dumpAt = [] {
+        DumpAt      d;
         const char* v = std::getenv("BS_RENDER_IR_GUARDAR");
-        if (!v || !std::strchr(v, ':')) return std::pair<uint64_t, std::string>{0, {}};
-        return std::pair<uint64_t, std::string>{std::strtoull(v, nullptr, 10), std::strchr(v, ':') + 1};
+        if (!v || !std::strchr(v, ':')) return d;
+        unsigned long long a = 0, b = 0, s = 0;
+        if (std::sscanf(v, "%llu-%llu/%llu:", &a, &b, &s) == 3 && a && b >= a && s) d.first = a, d.last = b, d.step = s, d.range = true;
+        else d.first = d.last = std::strtoull(v, nullptr, 10);
+        d.path = std::strchr(v, ':') + 1;
+        return d;
     }();
-    if (dumpAt.first && st.renders + 1 == dumpAt.first)
-        std::fprintf(stderr, "[render] IR do render %llu em %s: %s\n", static_cast<unsigned long long>(dumpAt.first),
-                     dumpAt.second.c_str(), save_frame_dump(dumpAt.second, frame) ? "ok" : "FALHOU");
+    const uint64_t rn = st.renders + 1;
+    if (dumpAt.first && rn >= dumpAt.first && rn <= dumpAt.last && (rn - dumpAt.first) % dumpAt.step == 0) {
+        const std::string path = dumpAt.range ? dumpAt.path + "." + std::to_string(rn) + ".ir" : dumpAt.path;
+        std::fprintf(stderr, "[render] IR do render %llu em %s: %s\n", static_cast<unsigned long long>(rn), path.c_str(),
+                     save_frame_dump(path, frame) ? "ok" : "FALHOU");
+    }
 #if BS_VALIDACAO
-    if (dumpAt.first && st.renders + 1 == dumpAt.first)  // N9.5 fase 2: a proveniencia ao lado (<arquivo>.origem.tsv)
+    if (dumpAt.first && !dumpAt.range && rn == dumpAt.first)  // N9.5 fase 2: a proveniencia ao lado (<arquivo>.origem.tsv)
         std::fprintf(stderr, "[render] proveniencia do render %llu: %s\n", static_cast<unsigned long long>(dumpAt.first),
-                     save_frame_origins(dumpAt.second + ".origem.tsv", frame) ? "ok" : "sem origens");
+                     save_frame_origins(dumpAt.path + ".origem.tsv", frame) ? "ok" : "sem origens");
 #endif
     // N8.7: o renderizador em software desenha a IR (soft_device), tambem como recuo do Vulkan (o motivo da queda ja
     // foi registrado por vk_render)
