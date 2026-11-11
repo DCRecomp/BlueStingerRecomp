@@ -156,7 +156,11 @@ BS_TEST(render_vulkan_water_material) {
             const Shot enh = shoot(*d, cl);
             const uint64_t tw = uint64_t(cfg.w * cfg.scale + 0.5f), th = uint64_t(480 * cfg.scale + 0.5f);
             BS_CHECK(enh.ok && d->stats().water_frames == 1 && d->stats().water_draws == 1);
-            BS_CHECK(d->stats().water_scene_bytes == tw * th * 4);  // a imagem da cena so agora, do tamanho do alvo
+            // a imagem da cena so agora, do tamanho do alvo (o alocado: o logico mais o alinhamento do driver, revisao Codex
+            // 20261111-121354)
+            std::fprintf(stderr, "  agua (%s): imagem da cena %llu bytes alocados, %llu logicos\n", cfg.name,
+                         (unsigned long long)d->stats().water_scene_bytes, (unsigned long long)(tw * th * 4));
+            BS_CHECK(d->stats().water_scene_bytes >= tw * th * 4 && d->stats().water_scene_bytes <= tw * th * 5);  // ate 25 % de alinhamento
             const auto [above, water] = diff_rows(off.img, enh.img, cfg.w);
             std::fprintf(stderr, "  agua (%s): %zu pixels da superficie mudaram, %zu acima\n", cfg.name, water, above);
             BS_CHECK(above == 0 && water > size_t(cfg.w) * 240 / 4);
@@ -247,6 +251,57 @@ BS_TEST(render_vulkan_water_with_lighting_effects) {
         d->set_ambient_occlusion(false), d->set_lighting(false), d->set_shadows(false);
         d->set_water(nr::WaterQuality::Original, 42);
         BS_CHECK(shoot(*d, cl).ok && d->stats().water_scene_bytes == 0);
+        d->destroy_texture(sea);
+    }
+    BS_CHECK(nr::vulkan_live_objects() == 0);
+}
+
+// Revisao Codex 20261111-121354: (1) a agua conta so o render concluido. Doze camadas de agua no autosort passam da lista
+// de fragmentos inicial (640 x 480 x 4): o quadro e gravado de novo e conta uma vez, com os mesmos desenhos de um quadro sem
+// a regravacao. (2) O reflexo e a refracao usam a copia da cena: o mesmo mar, de alfa cheio, sobre dois fundos opacos
+// diferentes. Com a agua original as linhas do mar saem iguais (o fundo nao aparece por baixo); com a alta, diferentes (so
+// pela cena copiada: um shader que so movesse a textura e mudasse o tom daria o mesmo nos dois fundos).
+BS_TEST(render_vulkan_water_counts_and_scene_dependence) {
+    const std::vector<uint32_t> tex = sea_texels();
+    nr::TextureDesc             td;
+    td.width = td.height = 8;
+    const auto  bytes = std::as_bytes(std::span<const uint32_t>(tex));
+    std::string err;
+    {
+        auto d = nr::VulkanDevice::create(&err);
+        if (!d) BS_SKIP("dispositivo Vulkan");
+        const nr::TextureHandle sea = d->create_texture(td, bytes).value();
+        d->set_texture_material(sea, nr::kMaterialWater), d->set_water(nr::WaterQuality::High, 7);
+        nr::CommandList many = water_scene(640, sea, true);
+        const nr::Draw  layer = many.draws[1];
+        for (int i = 0; i < 11; ++i) many.draws.push_back(layer);  // doze camadas na mesma superficie
+        const uint64_t r0 = d->stats().fragment_retries, f0 = d->stats().water_frames, w0 = d->stats().water_draws;
+        BS_CHECK(shoot(*d, many).ok);
+        const uint64_t r1 = d->stats().fragment_retries, f1 = d->stats().water_frames, w1 = d->stats().water_draws;
+        BS_CHECK(shoot(*d, many).ok);  // a lista ja cresceu: sem regravar
+        const uint64_t r2 = d->stats().fragment_retries, f2 = d->stats().water_frames, w2 = d->stats().water_draws;
+        std::fprintf(stderr, "  agua com regravacao: %llu regravacoes, %llu renders, %llu desenhos; sem: %llu, %llu, %llu\n",
+                     (unsigned long long)(r1 - r0), (unsigned long long)(f1 - f0), (unsigned long long)(w1 - w0),
+                     (unsigned long long)(r2 - r1), (unsigned long long)(f2 - f1), (unsigned long long)(w2 - w1));
+        BS_CHECK(r1 - r0 >= 1 && r2 == r1);  // a primeira transbordou e foi refeita; a segunda nao
+        BS_CHECK(f1 - f0 == 1 && f2 - f1 == 1 && w1 - w0 == w2 - w1 && w2 - w1 > 0);
+
+        auto scene = [&](uint32_t c0, uint32_t c1) {  // o fundo opaco em duas cores e o mar de alfa cheio por cima
+            nr::CommandList cl = water_scene(640, sea, true);
+            cl.vertices[0].color = cl.vertices[1].color = c0, cl.vertices[2].color = cl.vertices[3].color = c1;
+            for (size_t i = 4; i < 8; ++i) cl.vertices[i].color = 0xFFFFFFFFu;
+            return cl;
+        };
+        const nr::CommandList a = scene(0xFF102030u, 0xFF203040u), b = scene(0xFFE0C020u, 0xFFF0A010u);
+        d->set_water(nr::WaterQuality::Original, 7);
+        const Shot oa = shoot(*d, a), ob = shoot(*d, b);
+        d->set_water(nr::WaterQuality::High, 7);
+        const Shot ha = shoot(*d, a), hb = shoot(*d, b);
+        size_t off_diff = 0, on_diff = 0;
+        for (size_t i = size_t(640) * 240; i < oa.img.size() && i < ob.img.size() && i < ha.img.size() && i < hb.img.size(); ++i)
+            off_diff += oa.img[i] != ob.img[i], on_diff += ha.img[i] != hb.img[i];
+        std::fprintf(stderr, "  agua sobre dois fundos: original %zu pixels do mar diferentes, alta %zu\n", off_diff, on_diff);
+        BS_CHECK(oa.ok && ob.ok && ha.ok && hb.ok && off_diff == 0 && on_diff > size_t(640) * 240 / 4);
         d->destroy_texture(sea);
     }
     BS_CHECK(nr::vulkan_live_objects() == 0);

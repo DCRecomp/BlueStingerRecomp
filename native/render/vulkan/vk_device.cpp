@@ -319,6 +319,8 @@ public:
             if (writeSlot_ >= 0 && presentQueue_ != queue_ && !remakeReady(writeSlot_)) writeSlot_ = -1;
             if (!fragments(used + used / 2 + 1024)) return fail("listas por pixel (memoria)");
         }
+        // N9.7 (revisao Codex 20261111-121354): a agua conta so o render concluido (a tentativa que transbordou e refeita)
+        st_.water_frames += waterFramesRec_, st_.water_draws += waterDrawsRec_;
         st_.frames++, st_.triangles += prep_.triangles, st_.culled += prep_.culled;
         st_.nonfinite_depth += prep_.nonfinite_depth, st_.batches += prep_.batches.size();
         st_.negative_depth_frames += prep_.depth_bias != 0;  // so importa sem profundidade crua
@@ -727,6 +729,7 @@ private:
     std::atomic<uint64_t> waterRender_{0};
     WaterQuality          waterQuality_ = WaterQuality::Original;
     bool                  waterWanted_ = false, waterBound_ = false, waterFailed_ = false;
+    uint64_t              waterFramesRec_ = 0, waterDrawsRec_ = 0;  // os da tentativa de gravacao em curso
     float                 waterTime_ = 0, waterHorizon_ = 0, waterBottom_ = 1;
 
     Error fail(const char* what, VkResult r = VK_SUCCESS) {  // motivo da falha para o diagnostico (stats().last_error)
@@ -1905,6 +1908,7 @@ private:
 
     Result<void> record(const CommandList& cl) {
         const FrameParams& fr = cl.frame;
+        waterFramesRec_ = waterDrawsRec_ = 0;  // N9.7: os da tentativa (publicados no fim do submitFrame)
         const size_t       vbytes = std::max<size_t>(prep_.vertices.size() * sizeof(GpuVertex), 64);
         if (!ensureHost(verts_, vbytes, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT)) return fail("buffer de vertices");
         if (!prep_.vertices.empty()) std::memcpy(verts_.map, prep_.vertices.data(), prep_.vertices.size() * sizeof(GpuVertex));
@@ -1966,7 +1970,7 @@ private:
             }
         }
         if (waterQuality_ == WaterQuality::Original && waterScene_.img) freeImage(waterScene_), waterSceneReady_ = false;
-        st_.water_scene_bytes = waterScene_.img ? uint64_t(w_) * h_ * 4 : 0;
+        st_.water_scene_bytes = waterScene_.img ? uint64_t(waterScene_.alloc) : 0;  // o alocado (revisao Codex 20261111-121354)
         if (bool(aoSurf_.img) != aoSurfBound_ || bool(waterScene_.img) != waterBound_) writeFrameSets();
         gatherLights(cl);  // N9.6 fase 3
 
@@ -2059,7 +2063,7 @@ private:
                              VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_READ_BIT,
                              VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
                              VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT);
-                copiedWaterScene = true, ++st_.water_frames;
+                copiedWaterScene = true, ++waterFramesRec_;
             }
             VkRenderPassBeginInfo rbB{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
             rbB.renderPass = passB_, rbB.framebuffer = fbB_, rbB.renderArea = {{0, 0}, {w_, h_}};
@@ -2110,7 +2114,7 @@ private:
                 }();
                 pc.water[0] = waterDebug ? float(2 + waterDebug) : float(waterQuality_), pc.water[1] = waterTime_;
                 pc.water[2] = waterHorizon_ * scale_, pc.water[3] = waterBottom_ * scale_;
-                ++st_.water_draws;
+                ++waterDrawsRec_;
             }
             // o fiel le os 64 primeiros bytes (o bloco do N8.7); a agua, os 80
             f_.vkCmdPushConstants(cmd_, gfxLayout_, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0,

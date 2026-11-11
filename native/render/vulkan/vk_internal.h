@@ -90,6 +90,7 @@ struct Image {
     VkDeviceMemory mem = VK_NULL_HANDLE;
     VkImageView    view = VK_NULL_HANDLE;
     VkDeviceSize   bytes = 0;  // N9.5 fase 5C
+    VkDeviceSize   alloc = 0;  // N9.7: o tamanho alocado (VkMemoryRequirements::size), sempre (bytes e o da telemetria)
     uint8_t        cat = 0;
 };
 
@@ -207,6 +208,7 @@ struct VkBase {
             return {};
         }
         ++g_live;
+        im.alloc = mr.size;
         if (telemetry::enabled()) im.bytes = mr.size, im.cat = uint8_t(t_memCat), telemetry::mem_add(t_memCat, true, int64_t(mr.size));
         return im;
     }
