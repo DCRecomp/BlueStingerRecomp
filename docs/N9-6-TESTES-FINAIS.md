@@ -84,7 +84,21 @@ Legenda: **[P]** produto (`msvc-release`), **[V]** validação (`msvc-validacao`
 | F5-5 | Revisão Codex da fase 5 (menu e ligações) | achados tratados |
 | F5-6 | Uma Preview nova pelo Builder (`tools/dist/make_preview.ps1 -Disc`, saída e cache em `tmp/`) e `test_edicao.ps1 -Preview` nela (R5) | rc 0; 0 falhas |
 
-## 5. Depois da bateria
+### Itens acrescentados na bateria
+
+| # | Teste | Critério |
+|---|---|---|
+| L7 | `n96_luz.py --casos L7` [P][V]: 4:3 tudo desligado × AO + luz + sombras (F3-3) e a Original no Vulkan (L6) | estado e efeitos idênticos; os três efeitos rodaram (os contadores de execução); fora da cena 3D bit a bit (as máscaras do L2); 0 envios do catálogo na Original |
+| X2 | `render_vulkan_effects_target_switch` (revisão Codex do conjunto) | a troca de arranjo no mesmo dispositivo igual a um dispositivo novo; nada sobra |
+
+## 5. Resultado (2026-11-11)
+
+Em `docs/N9-6-AUDITORIA.md`, seção 13. Aprovados: 1.1–1.4, R1–R6, L1–L7, F3-1–F3-3, F3-6, F4-1–F4-3, F4-6, F5-1–F5-3, F5-6.
+Medidos e registrados: C1–C3, F3-4, F4-4. Revisões: X1, X2, F3-7, F4-7, F5-5. **Sem aprovação:** o `boot_trace` do ctest
+(precisa dos snapshots do Flycast, que não existem nesta máquina), V1, F3-5 e F4-5 (com o mantenedor), F5-4 (a decisão do
+mantenedor).
+
+## 6. Depois da bateria
 
 1. A auditoria (`docs/N9-6-AUDITORIA.md`) e o `STATUS.md` com os resultados, separados por binário e data.
 2. O master avançado preservando a água; o mesmo `git status --short` e o mesmo `--numstat` da árvore principal.

@@ -3542,7 +3542,7 @@ Plano: `docs/PLANO-PORT-NATIVO.md`, seções 4 e 4.2.
 | N6 Áudio | **concluída** (2026-10-23): H9 aprovado 3/3 com o Vulkan padrão (0 faltas); legado fora do produto no N8.6. H9 reaberto no N8.8: intermitente, não corrigido, não aprovado | 100 |
 | N7 Vulkan | **funcional, em fechamento técnico**: Vulkan padrão da janela com recuo seguro para o software; N7a, N7b e N7c validadas. Os dois bloqueios ganharam evidência no N8.7 (2026-10-28). **AMD:** a causa do `Invalid Read` foi demonstrada e corrigida (descritor não reescrito no realloc de `tris_`; 0/90 depois). **Fog e volumes:** implementados no software e no Vulkan, iguais em 32 bits, com a sombra conferida com o Flycast; falta um quadro de fog pareado. O N7 fica em 95% até o mantenedor encerrar formalmente esses bloqueios. SSAO, 16:9 real e MSAA permanecem no N9 (`docs/N7-PLANO.md` seção 25) | 95 |
 | N8 Sem legado | **iniciada** em 2026-10-24 (D-N8-1 a D-N8-4). N8.0 **concluído** em 2026-10-25 (regressão nível 3, correções, 16 referências validadas e reproduzidas, fixação do áudio nas suítes históricas); N8.1 **concluído** em 2026-10-26 (cadência B, TMU, CCN, cabo e ponte de interrupções no tempo lógico); N8.2 **concluído** em 2026-10-26 (produto × validação: papéis, `BS_VALIDACAO`, catraca do mapa); N8.3 **concluído** em 2026-10-26 (serviço nativo das syscalls; BIOS, drive e flash simulados fora do produto); N8.4 **concluído** em 2026-10-27 (barramento sem dispositivos; Maple, `--controles/--saves legado` fora do produto); N8.5 **concluído** em 2026-10-27 (filme legado e conversor YUV fora do produto); N8.6 **concluído** em 2026-10-27 (área de som nativa; AICA, áudio legado e DMA do G2 fora do produto); N8.7 **concluído** em 2026-10-30: AMD corrigida, fog e volumes nos dois renderizadores, o caminho gráfico do legado (TA, PVR, VRAM, vídeo, interrupções, DMAC, system block, rasterizador de referência) fora do produto e em sombra na validação; a fronteira guest fica no contrato do jogo (D-K1 a); N8.8 com **fechamento técnico em 2026-11-02, com ressalvas**: regressão nível 3 por composição, H9 e campanha completa abertos (`docs/N8-8-FECHAMENTO.md`) | 95 |
-| N9 Remasterização | **iniciada** em 2026-11-02 (`docs/N9-PLANO.md`): duas edições, Original e Remastered, do mesmo núcleo. N9.0 fechado (2026-11-02). N9-L L0–L5 e a v0.8.0 Preview publicados (validação no Bazzite com o mantenedor). **N9.1 (instalador) e N9.2 (interface da Remastered) com fechamento técnico aceito** (2026-11-04 e 2026-11-05), com as conferências visuais manuais pendentes com o mantenedor. **N9.3 (saves de PC) cancelado em 2026-11-05** por decisão do mantenedor. **N9.5 (widescreen e HUD) com fases 0–5 concluídas tecnicamente** (fases 1–3 publicadas como v0.9.5-1..3; fases 4 e 5 em commits locais, bateria final de 2026-11-10 sem falhas; visual na janela com o mantenedor). N9.6 autorizado em 2026-11-10: fase 0 (investigação) e fase 1 (oclusão ambiente opcional, desligada por padrão, com meia resolução e qualidades), fase 2a (a marca de cena medida, alarme de validação) e fase 2b (o catálogo de materiais por `TextureId` e o AO sob as translúcidas) em commits locais; N9.12 (estabilização no final do N9, com a do N9.5) registrado. Ordem gráfica N9.5 → N9.8 e depois N9.4, N9.9–N9.11. A campanha completa continua sendo o gate obrigatório depois do N9 | 27 |
+| N9 Remasterização | **iniciada** em 2026-11-02 (`docs/N9-PLANO.md`): duas edições, Original e Remastered, do mesmo núcleo. N9.0 fechado (2026-11-02). N9-L L0–L5 e a v0.8.0 Preview publicados (validação no Bazzite com o mantenedor). **N9.1 (instalador) e N9.2 (interface da Remastered) com fechamento técnico aceito** (2026-11-04 e 2026-11-05), com as conferências visuais manuais pendentes com o mantenedor. **N9.3 (saves de PC) cancelado em 2026-11-05** por decisão do mantenedor. **N9.5 (widescreen e HUD) com fases 0–5 concluídas tecnicamente** (fases 1–3 publicadas como v0.9.5-1..3; fases 4 e 5 em commits locais, bateria final de 2026-11-10 sem falhas; visual na janela com o mantenedor). N9.6 autorizado em 2026-11-10: fase 0 (investigação) e fase 1 (oclusão ambiente opcional, desligada por padrão, com meia resolução e qualidades), fase 2a (a marca de cena medida, alarme de validação), fase 2b (o catálogo de materiais por `TextureId` e o AO sob as translúcidas), fase 3 (a luz das fontes), fase 4 (as sombras aprimoradas) e fase 5 (o menu e a matriz) em commits locais, com a bateria final de 2026-11-11 sem falhas (o visual e o preset "Alto" com o mantenedor); N9.12 (estabilização no final do N9, com a do N9.5) registrado. Ordem gráfica N9.5 → N9.8 e depois N9.4, N9.9–N9.11. A campanha completa continua sendo o gate obrigatório depois do N9 | 27 |
 | N10 Mods e elevação | não iniciada (extensões preparadas: mídia do N5/N6, texturas HD por conteúdo e shaders validados do N7) | 0 |
 
 Progresso geral: ~81 % (onze etapas de peso igual; N8 em 95 % é estimativa, com campanha e H9 abertos).
@@ -4325,6 +4325,29 @@ não por uma única bateria contínua** (decisão do mantenedor, 2026-11-02).
   do jogo e os rótulos de provedor de `fronteiras_us.toml` defasados desde o N2a.
 - **Pendências:** H9; D-N8-4 no gate pós-N9; ressalva do 7.1 e D-K1(a); limite de 3 h de `n6_h` no executor, defeito a
   corrigir antes de uma futura integral, sem enfraquecer os testes. N9 e N10 não iniciados.
+
+### N9.6: a bateria final (2026-11-11)
+
+Detalhes em `docs/N9-6-AUDITORIA.md`, seção 13; a lista em `docs/N9-6-TESTES-FINAIS.md`.
+- **Método:** `tmp/sessao-20261110/n96/bateria_final.ps1` nos binários de `c49e8c8`, uma bateria pesada por vez, com o vigia de
+  memória (01:44 a 05:41). Depois, as correções da revisão Codex e o caso L7 nos três presets recompilados (só testes mudaram).
+- **Aprovados:** SPIR-V 39/39; unitários 376/0, render 101/0 (a luz e as sombras agora em 640 s1, 640 s2 e 854, e a troca de arranjo no mesmo dispositivo), ui 25/0,
+  remaster 5/0; ctest 30/30 e 23/23; `real_disc`, `runtime_data`, `analysis_real` com o disco e `movie_manifest` com a Preview
+  nova. R1 10 iguais; H1–H7 0 falhas; R1–R4 4/0; P1–P5 0 falhas; Preview nova pelo Builder rc 0 e `test_edicao` 11/0; J1–J7
+  0 falhas; L1–L6 na média, L1–L4 na baixa e na alta, 0 falhas; `n96_cena` 0 alarmes; L7 (os três efeitos juntos: estado,
+  efeitos e fora da cena 3D bit a bit; o catálogo com 0 envios na Original) 0 falhas. L3: a alta igual à da fase 1, menos a
+  caixa dos racks do 2b. F3-2 e F4-2: as caixas registradas.
+- **Medido:** custo (RTX 5080 em 1080 e 2160; AMD em 480 e 1080), frametime na janela e memória dos alvos. Na AMD em 1080 as
+  sombras levam a GPU de 26,0 a 53,5 ms.
+- **Sem aprovação:** `boot_trace` (os snapshots do Flycast não existem nesta máquina); V1, F3-5 e F4-5 (o visual, com o
+  mantenedor); F5-4 (o preset "Alto", decisão do mantenedor).
+- **Revisão Codex `20261111-014426`:** três achados aceitos e corrigidos (o critério do L6, as escalas e o quadro largo nos testes
+  de render, o menu com cada recurso sozinho).
+- **Revisão Codex `20261111-055403` (o conjunto):** três achados aceitos (os contadores dos três efeitos no L7; o zero exato do
+  catálogo na Original; o teste `render_vulkan_effects_target_switch` da troca de arranjo no mesmo dispositivo, render 101/0) e
+  um mantido com motivo (a máscara do L7 é mais estrita que o necessário: só reprova a mais, e passou).
+- **N9.12:** a estimativa de VRAM do limite da resolução interna não conta a máscara das sombras nem a imagem do AO das
+  translúcidas.
 
 ### N9.6 fase 5: o menu e a matriz (2026-11-11, commit local, só nível 1)
 

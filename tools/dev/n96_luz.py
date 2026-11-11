@@ -19,6 +19,9 @@ de teste, roteiro passo_load_slot1: LOAD do slot 1 e o corredor RCG02; capturas 
   L6 (N9.6 fase 4) as sombras aprimoradas: a Original com --sombras aprimoradas sai com 2; Remastered 4:3 originais x
      aprimoradas (com a luz ligada nas duas, para as sombras de contato): estado e efeitos identicos; a borda suave so nas
      aprimoradas; nenhum pixel fora da cena 3D muda (o HUD).
+  L7 (testes finais F3-3 e L6) os tres efeitos juntos: Remastered 4:3 tudo desligado x AO + luz + sombras: estado e efeitos
+     identicos, os tres rodaram, fora da cena 3D bit a bit (as mascaras do L2); a Original no Vulkan sem envios do catalogo.
+     So por --casos (nao esta no padrao).
 
   python tools/dev/n96_luz.py --exe <produto> --exe-validacao <validacao> --data <data> --cartao <pasta de saves sintetica>
                               [--casos L1,L2,L3,L4] [--qualidade baixa|media|alta] [--manter]
@@ -92,6 +95,14 @@ def main():
             r["l6o"] = Corrida(base, "l6o", a, "original", nat + ["--sombras", "aprimoradas"], False)
             r["l6_off"] = Corrida(base, "l6_off", a, "remastered", nat + ["--iluminacao", "ligado"])
             r["l6_on"] = Corrida(base, "l6_on", a, "remastered", nat + ["--iluminacao", "ligado", "--sombras", "aprimoradas"])
+        if "L7" in casos:  # N9.6 testes finais F3-3 e L6: os tres efeitos juntos; a Original no Vulkan sem o catalogo
+            r["l7_off"] = Corrida(base, "l7_off", a, "remastered", nat)
+            r["l7_on"] = Corrida(base, "l7_on", a, "remastered", nat + lig + ["--iluminacao", "ligado", "--sombras", "aprimoradas"])
+            r["l7o"] = Corrida(base, "l7o", a, "original", nat)
+            if "L2" not in casos:  # as mascaras da cena 3D (as mesmas do L2)
+                for nome, val in (("preta", "2"), ("branca", "3")):
+                    r[nome] = Corrida(base, nome, a, "remastered", nat + lig, exe=a.exe_validacao)
+                    r[nome].env["BS_AO_DIAGNOSTICO"] = val
         with ThreadPoolExecutor(3) as ex:
             list(ex.map(lambda c: c.rodar(), r.values()))
 
@@ -202,7 +213,8 @@ def main():
             check("L6 Original com --sombras aprimoradas recusada", r["l6o"].rc == 2, "rc %d" % r["l6o"].rc)
             off6, on6 = r["l6_off"], r["l6_on"]
             igual_estado(off6, on6, "L6 4:3 sombras originais x aprimoradas")
-            check("L6 borda suave so nas aprimoradas", borda(off6) == 0 and borda(on6) >= 0,
+            # revisao Codex 20261111-014426: a rota tem volumes (o quarto: 7 507 no render 2318), entao a borda suave tem de rodar
+            check("L6 borda suave so nas aprimoradas", borda(off6) == 0 and borda(on6) > 0,
                   "originais %d, aprimoradas %d renders" % (borda(off6), borda(on6)))
             check("L6 log da troca", "[render] sombras aprimoradas: ligadas" in on6.log)
             for v in VBS:
@@ -213,6 +225,29 @@ def main():
                 hud = (g1[400:450, 20:340] != g0[400:450, 20:340]).any(axis=2).sum()
                 check("L6 %s: o HUD do canto igual" % v, int(hud) == 0, "%d pixels; %.1f %% da imagem mudou" % (
                     int(hud), 100 * float((g1 != g0).any(axis=2).mean())))
+        if "L7" in casos:
+            off7, on7, o7 = r["l7_off"], r["l7_on"], r["l7o"]
+            igual_estado(off7, on7, "L7 4:3 tudo desligado x AO + luz + sombras")
+            import re
+            # revisao Codex 20261111-055403: os contadores de execucao dos tres passes (nao so as mensagens da troca)
+            ml = re.search(r"luz das fontes em (\d+) renders \(ate (\d+) luzes\)", on7.log)
+            mb = re.search(r"borda suave dos volumes em (\d+) renders", on7.log)
+            luz7 = (int(ml.group(1)), int(ml.group(2))) if ml else (-1, -1)
+            borda7 = int(mb.group(1)) if mb else -1
+            check("L7 os tres efeitos rodaram", ao_renders(on7) > 0 and luz7[0] > 0 and luz7[1] >= 1 and borda7 > 0,
+                  "AO em %d renders; luz em %d (ate %d luzes); borda suave em %d" % (ao_renders(on7), luz7[0], luz7[1], borda7))
+            co = catalogo(o7)
+            # o resumo do catalogo tem de existir na Original e dizer 0 (a ausencia, -1, nao aprova)
+            check("L7 catalogo: nenhum envio na Original, envios na Remastered", o7.rc == 0 and co[0] == 0 and catalogo(off7)[0] > 0,
+                  "Original %d, Remastered %d envios" % (co[0], catalogo(off7)[0]))
+            for v in VBS:
+                g0, g1, gb, gw = (c.img("v%s.bmp" % v) for c in (off7, on7, r["preta"], r["branca"]))
+                if any(g is None for g in (g0, g1, gb, gw)) or g0.shape != g1.shape:
+                    check("L7 %s: capturas" % v, False, "ausente ou de outro tamanho")
+                    continue
+                fora = ~(gb != gw).any(axis=2)
+                check("L7 %s: fora da cena 3D bit a bit" % v, bool((g1[fora] == g0[fora]).all()) and 0.0 < fora.mean() < 1.0,
+                      "%.1f %% fora da cena; %.1f %% da imagem mudou" % (100 * fora.mean(), 100 * float((g1 != g0).any(axis=2).mean())))
         if "L4" in casos:
             igual_estado(r["h_off"], r["h_on"], "L4 16:9 1080 desligado x ligado")
             escurece(r["h_off"], r["h_on"], "L4", "_hd")

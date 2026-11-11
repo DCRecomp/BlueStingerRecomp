@@ -387,7 +387,27 @@ BS_TEST(settings_menu_lighting_options) {
         }
         const int fx = find(v, "Efeitos de imagem");
         BS_CHECK(fx >= 0 && v.items[size_t(fx)].enabled == have);  // so o SSAO entre os efeitos
-        if (!have) continue;
+        if (!have) {
+            // revisao Codex 20261111-014426: cada entrada so com o SEU recurso (um ligado por vez)
+            for (int only = 0; only < 3; ++only) {
+                st::Capabilities c1;
+                c1.vulkan = true, c1.max_height = 2160;
+                c1.features.shadows = only == 0, c1.features.lighting = only == 1, c1.features.ssao = only == 2;
+                bs::SettingsMenu m1(pt(), c1, {"en-US"});
+                m1.open();
+                go(m1, "Gráficos"), m1.input(MenuAction::Confirm, 0);
+                const bs::MenuView v1 = m1.view();
+                BS_CHECK(v1.items[size_t(find(v1, "Sombras"))].enabled == (only == 0));
+                BS_CHECK(v1.items[size_t(find(v1, "Iluminação aprimorada"))].enabled == (only == 1));
+                BS_CHECK(v1.items[size_t(find(v1, "Efeitos de imagem"))].enabled == (only == 2));
+                if (only == 2) {
+                    go(m1, "Efeitos de imagem"), m1.input(MenuAction::Confirm, 0);
+                    const bs::MenuView e1 = m1.view();
+                    BS_CHECK(e1.items[size_t(find(e1, "SSAO"))].enabled);
+                }
+            }
+            continue;
+        }
         bs::Preferences p;
         go(m, "Sombras"), m.input(MenuAction::Right, 0);
         BS_CHECK(m.take_changes(p) && p.graphics.shadows == st::Shadows::Enhanced);

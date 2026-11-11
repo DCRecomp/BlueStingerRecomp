@@ -475,3 +475,114 @@ D6-4 a + b. **Só nível 1**; a validação vai para a bateria final (`docs/N9-6
   (`tmp/sessao-20261110/backup-main-antes-f4`); a mescla foi refeita medindo o sujo contra a base (`dc8aa61`) e o status e o
   numstat ficaram iguais aos de antes; os arquivos particulares intactos. Desde então a gravação é conferida pelo log antes
   de mover o ref.
+
+## 13. A bateria final do N9.6 (2026-11-11)
+
+Pela lista `docs/N9-6-TESTES-FINAIS.md`, uma bateria pesada por vez, com o vigia de memória e TEMP/TMP em `tmp/`. Script
+`tmp/sessao-20261110/n96/bateria_final.ps1`, saída em `tmp/sessao-20261110/n96/final/`, de 01:44 a 05:41.
+
+### 13.1 Binários
+
+- **Bateria principal:** os três presets do commit `c49e8c8` (fase 5), exes de 2026-11-11 01:39 (`msvc-release` e
+  `msvc-validacao`).
+- **Correções da revisão Codex `20261111-014426`** (seção 13.4), depois da bateria, nos três presets recompilados de
+  `c49e8c8` com elas: os testes (unitários, render, ui, remaster, ctest, SPIR-V), o L7 e as caixas. O código do produto não
+  mudou entre os dois binários: as correções tocam só `tests/unit/test_render_vulkan.cpp`, `tests/unit/test_settings_menu.cpp`
+  e `tools/dev/n96_luz.py`.
+
+### 13.2 Resultados (nenhum item pulado conta como aprovado)
+
+| Item | Resultado |
+|---|---|
+| 1.1–1.4 antes | exes conferidos (data e `git log -1`); SPIR-V 39/39; unitários 376/0, render 100/0, ui 25/0, remaster 5/0; ctest debug 30/30 e release 23/23, com 5 pulados sem o disco; arquivos particulares com o mesmo hash (`c4ad9e1a87788ed4`, `fd68ddd2a0c9c054`) |
+| ctest com o disco | `real_disc`, `runtime_data`, `analysis_real` aprovados com `BS_DISC_IMAGE`; `movie_manifest` aprovado com `BS_DATA_DIR` na Preview nova (110 s). **`boot_trace` não rodou**: precisa dos snapshots do Flycast (`BS_SNAPSHOT_DIR`), que não existem nesta máquina. Fica sem aprovação (testa o boot da CPU, não o render) |
+| R1 | Original × `referencias_n87`: 10 iguais, 0 diferentes |
+| R2 | H1–H7: 53 ok, 0 falhas (as "falhas" do log do H7 são as injetadas pelo próprio caso) |
+| R3 | R1–R4: 4 casos, 0 falhas (R4: Remastered = Original sem a câmera, 1030 passos, 0 diferentes) |
+| R4 / F3-6 / F4-6 / F5-2 | P1–P5: 22 ok, 0 falhas |
+| R5 / F5-6 | Preview nova pelo Builder (`v0.9.5-3-13-gc49e8c8-dirty`; o "dirty" vem da água e dos arquivos particulares da árvore principal, que o Builder não leva) rc 0; `test_edicao` 11 ok, 0 falhas |
+| R6 / F5-1 | J1–J7: 0 falhas (J6/J7a com as trocas pelo menu da pausa; J7b e J7c com o recuo) |
+| L1 | `n96_luz.py --qualidade media` L1–L6: 54 ok, 0 falhas |
+| L2 | baixa e alta (L1–L4): 40 ok e 40 ok, 0 falhas |
+| L3 | A alta contra a fase 1 (`pytemp/n96_luz_c2f0h_3r` × `n96_luz_syho4vaj`): o desligado igual em todas as capturas (4:3, 16:9, 1080); o ligado igual no 003800 e, no 004640, só a caixa dos racks do 2b: x 397–639, y 11–195 no 640 (5 806 px, 1,9 %, diferença até 25), x 504–853, y 11–198 na imagem larga e x 1135–1921, y 24–448 na de 1080. A luz e as sombras não estão nesses casos (desligadas por padrão) |
+| L4 | `n96_cena.py`: 22 TSVs, 10 180 desenhos opacos, 0 com 1/w constante, rc 0 |
+| L5 | AO e efeitos desligados = modo fiel: as máscaras do L2 e o H (acima); os testes de render na escala 1 desligados = software bit a bit |
+| L6 | o catálogo: 5 envios na Remastered (L2); **0 na Original no Vulkan** (L7, abaixo) |
+| F3-1 | L5: a Original recusa (rc 2); estado e efeitos iguais (2 326 passos); luz em 571 renders, até 8 luzes; só clareia |
+| F3-2 | luz desligada × ligada no 4:3: 003800 muda 22,95 % (diferença até 9; a maior região x 0–244, a parede junto da câmera; as demais, as faixas do teto e as placas, x 402–639); 004640 muda 16,47 % (até 25; x 0–381, y 0–345 e a faixa x 376–416). Fora da cena 3D nada muda (L7) |
+| F3-3 | **L7** (caso novo do `n96_luz.py`): 4:3 tudo desligado × AO média + luz + sombras: estado idêntico (2 326 passos), efeitos idênticos, os três rodaram (AO em 2 333 renders), fora da cena 3D bit a bit (2,2 % e 32,0 % da imagem fora da cena; 27,2 % e 25,6 % mudaram) |
+| F4-1 | L6: a Original recusa; estado e efeitos iguais; borda suave em 571 renders (critério novo, > 0); o HUD do canto igual (0 px) |
+| F4-2 | borda suave: 571 renders na rota do corredor e 12 040 na do heliporto (cais e exterior), 0 sem as sombras. As caixas (luz ligada nas duas): 003800 3,15 %, dentro da região que a luz clareia (x 0–212 ⊂ x 0–244, diferença até 9, a mesma da luz): sombra de contato tirando a luz; 004640 0,60 %: o contorno da sombra do personagem no chão (x 369–525, y 346–410), o alto do teto e pontos no personagem. Imagens em `tmp/sessao-20261110/n96/codex/f4_*.png` |
+| F4-3 | R1 10 iguais; `bs_render_tests` 100/0 |
+| C1 / F3-4 / F4-4 / F5-3 | medidos (13.3) |
+| C2 | medidos (13.3) |
+| C3 | medidos (13.3) |
+| V1, F3-5, F4-5 | **com o mantenedor** (não aprovados aqui) |
+| X1 | seção 13.4 |
+| F5-4 | **pendente:** decisão do mantenedor |
+| Memória | vigia: pico do Blue Stinger 5 120 MB (as três execuções em paralelo), commit livre mínimo 19,41 GB |
+
+### 13.3 Custo e memória
+
+GPU por quadro, média em ms (`gpu_total_ms`), sem janela, `n95_desempenho.py`:
+
+| Config | corredor | cais | exterior |
+|---|---|---|---|
+| RTX 5080 16:9@1080 | 0,68 | 1,40 | 1,07 |
+| + AO média | 0,89 | 1,44 | 1,15 |
+| + luz | 0,56 | 1,61 | 2,12 |
+| + sombras | 1,86 | 2,02 | 2,33 |
+| + AO média + luz + sombras | 2,38 | 2,28 | 2,33 |
+| RTX 5080 16:9@2160 | 1,95 | 4,37 | 4,24 |
+| + AO média | 3,38 | 5,00 | 4,62 |
+| + luz | 2,06 | 4,40 | 4,18 |
+| + sombras | 3,31 | 5,55 | 4,60 |
+| + AO média + luz + sombras | 4,85 | 6,14 | 5,31 |
+
+AMD Radeon integrada, corredor: 4:3@480 5,53; + AO média 7,87; + AO baixa 6,66; + luz 5,78; + sombras 6,42; + AO baixa + luz
++ sombras 8,39. 16:9@1080 26,0; + AO baixa 39,8; + luz 28,0; **+ sombras 53,5**.
+
+Na janela (C2, corredor): AMD 16:9@1080 59,3 fps, p50 16,0 ms, 30,9 % dos quadros acima de 16,7 ms, GPU 26,5 ms; com AO
+baixa + luz + sombras 41,8 fps, 28,1 % acima de 25 ms, GPU 72,7 ms. RTX 5080 16:9@2160 59,98 fps, GPU 3,4 ms; com AO média
++ luz + sombras 59,8 fps, GPU 5,0 ms.
+
+Memória dos alvos (`mem_alvos_mib_pico`): RTX 1080 610,4 MiB; + AO média 628,4 (+18,0, cerca de 8,7 B/px); + luz 610,4
+(+0); + sombras 619,0 (+8,6, cerca de 4,2 B/px, a máscara RGBA8); tudo 636,9. RTX 2160 2 432,0; + AO 2 497,8 (+65,8, ~8,3
+B/px); + sombras 2 464,0 (+32,0, 4,0 B/px); tudo 2 529,7. AMD 480 95,5; + AO 97,9; + sombras 96,7.
+
+Leitura (sem meta inventada): na RTX 5080 os três efeitos juntos cabem com folga em 2160. Na AMD integrada, em 480 eles
+cabem; em 1080 o jogo já não fecha 60 fps sem efeitos, e o AO e principalmente as sombras (o `soft_shadows.comp` em tela
+cheia) dobram o custo. **A estimativa do limite da resolução interna** (`vk_device.cpp`: 96 + 4 B/px) não conta a máscara das
+sombras (4 B/px) nem a imagem do AO sob as translúcidas, e o AO medido fica em ~8 B/px. Já era uma subestimativa conhecida
+(medido ~268 B/px), adiada para o N9.12, que fica com esses números.
+
+### 13.4 Revisões Codex (X1, F3-7, F4-7, F5-5)
+
+- **`reviews/codex-20261111-014426.md`** (fases 3–5), três achados, todos aceitos:
+  - MÉDIA: o L6 aprovava com 0 renders da borda suave (`borda(on6) >= 0`). Corrigido para `> 0`, e a bateria deu 571.
+  - MÉDIA: a luz e as sombras não eram conferidas na escala 2 nem no quadro largo. Os três testes
+    (`render_vulkan_lighting_emissive`, `render_vulkan_soft_shadows`, `render_vulkan_contact_shadows`) passam a rodar em
+    640 escala 1, 640 escala 2 e 854 escala 1. Na escala 1, desligado = software bit a bit. Os três passam nos três arranjos,
+    com os mesmos números: luz 1,250, rampa de 4 pixels de 127 a 255, contato 0,800.
+  - BAIXA: o menu só era conferido com os recursos juntos. `settings_menu_lighting_options` passa a ligar cada recurso
+    sozinho.
+- **`reviews/codex-20261111-055403.md`** (o conjunto das fases 0–5 e as correções acima), quatro achados:
+  - MÉDIA, aceito: o L7 dava os três efeitos por rodados pelas mensagens da troca. Agora ele exige os contadores de execução:
+    AO em 2 333 renders, luz em 571 (até 8 luzes) e borda suave em 571.
+  - MÉDIA, mantido com motivo: a máscara de "fora da cena 3D" do L7 vem das execuções com o AO e não cobre um receptor de
+    sombra com 1/w constante. O critério é mais estrito que o necessário: ele só pode reprovar a mais, nunca aprovar sem
+    efeito. Rodou e passou (0 pixels fora da máscara mudaram). Se um dia reprovar por isso, a máscara passa a ser a união dos
+    domínios dos três efeitos, sem afrouxar o critério.
+  - BAIXA, aceito: a Original aprovava com o resumo do catálogo ausente (-1). Agora ela exige o resumo e o valor 0 exato, e deu 0.
+  - BAIXA, aceito: os arranjos criavam um dispositivo cada. Novo teste `render_vulkan_effects_target_switch`: no mesmo
+    dispositivo, com os três efeitos ligados, a sequência 640 s1 → 640 s2 → 854 → 640 s1. Cada quadro sai igual ao de um
+    dispositivo novo no mesmo arranjo, os três contadores sobem a cada quadro e nenhum objeto Vulkan sobra. `bs_render_tests`
+    101/0.
+  - Depois das correções: os três presets; unitários 376/0, render 101/0, ui 25/0, remaster 5/0; ctest 30/30 e 23/23; SPIR-V
+    39/39; L7 0 falhas.
+
+### 13.5 Riscos para o N9.12
+
+- A estimativa de VRAM do limite da resolução interna (13.3).
+- O custo das sombras aprimoradas em GPU integrada em 1080, que pesa na decisão do preset "Alto" (F5-4).
+- Os riscos das seções 10.4 e 11.3 (o espaço de tela da sombra de contato, a penumbra de volumes pequenos, o raio da luz).

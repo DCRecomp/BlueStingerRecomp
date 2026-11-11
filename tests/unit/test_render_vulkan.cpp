@@ -637,81 +637,96 @@ BS_TEST(material_catalog_lookup) {
     BS_CHECK(nr::material_flags(nr::TextureId{}) == 0);
 }
 
+// N9.6 fases 3 e 4: os arranjos em que a luz e as sombras sao conferidas (revisao Codex 20261111-014426): a escala 1 e a 2 da
+// resolucao interna (o invScale dos shaders e o raio da penumbra em pixels do alvo) e o quadro largo de 854 colunas (o
+// centro da projecao em 427). read_frame devolve a imagem no tamanho do jogo (854 ou 640 x 480).
+namespace {
+struct FxCfg {
+    uint32_t    w;
+    float       scale;
+    const char* name;
+};
+constexpr FxCfg kFxCfgs[] = {{640, 1.f, "640x480"}, {640, 2.f, "640x480 escala 2"}, {854, 1.f, "854x480 (largo)"}};
+} // namespace
+
 // N9.6 fase 3 (docs/N9-6-AUDITORIA.md secao 10): a luz das fontes do catalogo. A quina (ao_scene) com duas partes de uma
 // lampada cadastrada (kMaterialEmissive) perto do chao, a direita (x 300, y 60, z 560), e uma placa NAO cadastrada a esquerda.
 // Ligada: o chao junto da lampada clareia; a parede longe (fora do raio) e o HUD ficam bit a bit; as duas partes viram uma luz
-// so; a placa sem cadastro nao acende nada. Desligada: igual ao software.
+// so; sem a lampada no catalogo, nenhuma luz. Desligada: igual ao software.
 BS_TEST(render_vulkan_lighting_emissive) {
-    std::string err;
-    {
-        auto d = nr::VulkanDevice::create(&err);
-        if (!d) BS_SKIP("dispositivo Vulkan");
-        nr::soft::SoftwareDevice sw;
-        nr::TextureDesc          td;
-        td.width = td.height = 8;
-        const std::vector<uint32_t> white(64, 0xFFFFFFFFu);
-        const auto                  bytes = std::as_bytes(std::span<const uint32_t>(white));
-        const nr::TextureHandle vL = d->create_texture(td, bytes).value(), vU = d->create_texture(td, bytes).value();
-        const nr::TextureHandle sL = sw.create_texture(td, bytes).value(), sU = sw.create_texture(td, bytes).value();
-        auto scene = [&](nr::TextureHandle lamp, nr::TextureHandle plain) {
-            nr::CommandList cl   = ao_scene();
-            auto            proj = [&](float x, float y, float z) {
+    for (const FxCfg& cfg : kFxCfgs) {
+        std::string err;
+        {
+            auto d = nr::VulkanDevice::create(&err);
+            if (!d) BS_SKIP("dispositivo Vulkan");
+            d->set_scale(cfg.scale);
+            nr::soft::SoftwareDevice sw;
+            nr::TextureDesc          td;
+            td.width = td.height = 8;
+            const std::vector<uint32_t> white(64, 0xFFFFFFFFu);
+            const auto                  bytes = std::as_bytes(std::span<const uint32_t>(white));
+            const nr::TextureHandle vL = d->create_texture(td, bytes).value(), vU = d->create_texture(td, bytes).value();
+            const nr::TextureHandle sL = sw.create_texture(td, bytes).value(), sU = sw.create_texture(td, bytes).value();
+            const float             cx = float(cfg.w) / 2.f;
+            auto proj = [&](float x, float y, float z) {
                 nr::Vertex vx;
-                vx.x = 320.f + 500.f * x / z, vx.y = 240.f + 500.f * y / z, vx.inv_w = 1.f / z, vx.color = 0xFFFFFFFF;
+                vx.x = cx + 500.f * x / z, vx.y = 240.f + 500.f * y / z, vx.inv_w = 1.f / z, vx.color = 0xFFFFFFFF;
                 return vx;
             };
-            auto quad = [&](nr::TextureHandle t, float x, float y, float z, float r) {
-                nr::Draw dr;
-                dr.state.list = nr::ListType::Translucent, dr.state.texture = t;
-                dr.state.src = nr::Blend::SrcAlpha, dr.state.dst = nr::Blend::InvSrcAlpha, dr.state.use_alpha = true;
-                dr.first_vertex = uint32_t(cl.vertices.size()), dr.vertex_count = 4;
-                for (auto [a, b] : {std::pair{-r, -r}, {r, -r}, {-r, r}, {r, r}}) cl.vertices.push_back(proj(x + a, y + b, z));
-                cl.draws.push_back(dr);
+            auto scene = [&](nr::TextureHandle lamp, nr::TextureHandle plain) {
+                nr::CommandList cl = ao_scene(cfg.w);
+                auto quad = [&](nr::TextureHandle t, float x, float y, float z, float r) {
+                    nr::Draw dr;
+                    dr.state.list = nr::ListType::Translucent, dr.state.texture = t;
+                    dr.state.src = nr::Blend::SrcAlpha, dr.state.dst = nr::Blend::InvSrcAlpha, dr.state.use_alpha = true;
+                    dr.first_vertex = uint32_t(cl.vertices.size()), dr.vertex_count = 4;
+                    for (auto [a, b] : {std::pair{-r, -r}, {r, -r}, {-r, r}, {r, r}}) cl.vertices.push_back(proj(x + a, y + b, z));
+                    cl.draws.push_back(dr);
+                };
+                quad(lamp, 295, 60, 560, 6), quad(lamp, 305, 60, 560, 6);  // duas partes da mesma lampada
+                quad(plain, -200, -150, 560, 6);                           // uma placa sem cadastro
+                return cl;
             };
-            quad(lamp, 295, 60, 560, 6), quad(lamp, 305, 60, 560, 6);  // duas partes da mesma lampada
-            quad(plain, -200, -150, 560, 6);                           // uma placa sem cadastro
-            return cl;
-        };
-        const nr::CommandList vk = scene(vL, vU), soft = scene(sL, sU);
-        std::vector<uint32_t> s_img, off, on, again;
-        uint32_t              w = 0, h = 0;
-        BS_CHECK(sw.submit(soft).ok() && sw.read_frame(s_img, w, h).ok());
-        d->set_texture_material(vL, nr::kMaterialEmissive), d->set_texture_light(vL, 0xFFFFFF);
-        BS_CHECK(d->submit(vk).ok() && d->read_frame(off, w, h).ok() && off == s_img && !off.empty());  // desligada: o fiel
-        const uint64_t f0 = d->stats().light_frames;
-        d->set_lighting(true);
-        BS_CHECK(d->submit(vk).ok() && d->read_frame(on, w, h).ok() && on.size() == off.size());
-        BS_CHECK(d->submit(vk).ok() && d->read_frame(again, w, h).ok() && again == on);  // determinismo
-        BS_CHECK(d->stats().light_frames == f0 + 2 && d->stats().lights_max == 1);    // as duas partes: uma luz
-        if (on.size() != size_t(640) * 480) return;
-        auto at  = [](const std::vector<uint32_t>& img, int x, int y) { return img[size_t(y) * 640 + x]; };
-        auto px  = [](float x, float y, float z) { return std::pair{int(320.f + 500.f * x / z), int(240.f + 500.f * y / z)}; };
-        const auto [nx, ny] = px(250, 100, 540);   // o chao junto da lampada
-        const auto [fx, fy] = px(-250, -200, 580);  // a parede longe (fora do raio de 400)
-        const double nearR = lum(at(on, nx, ny)) / std::max(1.0, lum(at(off, nx, ny)));
-        std::fprintf(stderr, "  luz das fontes: chao junto da lampada %.3f\n", nearR);
-        BS_CHECK(nearR > 1.05);
-        BS_CHECK(at(on, fx, fy) == at(off, fx, fy));
-        bool darker = false;
-        for (size_t i = 0; i < on.size(); ++i) {
-            const uint32_t p = on[i], o = off[i];
-            darker = darker || ((p >> 16) & 0xFF) < ((o >> 16) & 0xFF) || ((p >> 8) & 0xFF) < ((o >> 8) & 0xFF) || (p & 0xFF) < (o & 0xFF);
+            const nr::CommandList vk = scene(vL, vU), soft = scene(sL, sU);
+            std::vector<uint32_t> off, on, again;
+            uint32_t              w = 0, h = 0;
+            d->set_texture_material(vL, nr::kMaterialEmissive), d->set_texture_light(vL, 0xFFFFFF);
+            BS_CHECK(d->submit(vk).ok() && d->read_frame(off, w, h).ok() && w == cfg.w && h == 480);
+            if (cfg.scale == 1.f) {  // na escala 1, desligada = o modo fiel bit a bit
+                std::vector<uint32_t> s_img;
+                BS_CHECK(sw.submit(soft).ok() && sw.read_frame(s_img, w, h).ok() && off == s_img);
+            }
+            const uint64_t f0 = d->stats().light_frames;
+            d->set_lighting(true);
+            BS_CHECK(d->submit(vk).ok() && d->read_frame(on, w, h).ok() && on.size() == off.size());
+            BS_CHECK(d->submit(vk).ok() && d->read_frame(again, w, h).ok() && again == on);  // determinismo
+            BS_CHECK(d->stats().light_frames == f0 + 2 && d->stats().lights_max == 1);    // as duas partes: uma luz
+            if (on.size() != size_t(cfg.w) * 480) continue;
+            auto at = [&](const std::vector<uint32_t>& img, int x, int y) { return img[size_t(y) * cfg.w + x]; };
+            auto px = [&](float x, float y, float z) { return std::pair{int(cx + 500.f * x / z), int(240.f + 500.f * y / z)}; };
+            const auto [nx, ny] = px(250, 100, 540);   // o chao junto da lampada
+            const auto [fx, fy] = px(-250, -200, 580);  // a parede longe (fora do raio de 400)
+            const double nearR = lum(at(on, nx, ny)) / std::max(1.0, lum(at(off, nx, ny)));
+            std::fprintf(stderr, "  luz das fontes (%s): chao junto da lampada %.3f\n", cfg.name, nearR);
+            BS_CHECK(nearR > 1.05);
+            BS_CHECK(at(on, fx, fy) == at(off, fx, fy));
+            bool darker = false;
+            for (size_t i = 0; i < on.size(); ++i) {
+                const uint32_t p = on[i], o = off[i];
+                darker = darker || ((p >> 16) & 0xFF) < ((o >> 16) & 0xFF) || ((p >> 8) & 0xFF) < ((o >> 8) & 0xFF) || (p & 0xFF) < (o & 0xFF);
+            }
+            BS_CHECK(!darker);  // a luz so soma
+            for (int y = 22; y < 58; ++y)
+                for (int x = 22; x < 118; ++x) BS_CHECK(at(on, x, y) == at(off, x, y));  // o HUD fica bit a bit
+            d->set_texture_material(vL, 0);  // sem a lampada no catalogo: nenhuma luz
+            std::vector<uint32_t> none;
+            const uint64_t        f1 = d->stats().light_frames;
+            BS_CHECK(d->submit(vk).ok() && d->read_frame(none, w, h).ok() && none == off && d->stats().light_frames == f1);
+            d->set_lighting(false);
+            for (nr::TextureHandle t : {vL, vU}) d->destroy_texture(t);
         }
-        BS_CHECK(!darker);  // a luz so soma
-        for (int y = 20; y < 60; ++y)
-            for (int x = 20; x < 120; ++x) BS_CHECK(at(on, x, y) == at(off, x, y));  // o HUD fica bit a bit
-        // a placa sem cadastro: sem a lampada no quadro, nenhuma luz
-        d->set_texture_material(vL, 0);
-        std::vector<uint32_t> none;
-        const uint64_t        f1 = d->stats().light_frames;
-        BS_CHECK(d->submit(vk).ok() && d->read_frame(none, w, h).ok() && none == off && d->stats().light_frames == f1);
-        d->set_texture_material(vL, nr::kMaterialEmissive);
-        d->set_lighting(false);
-        std::vector<uint32_t> back;
-        BS_CHECK(d->submit(vk).ok() && d->read_frame(back, w, h).ok() && back == s_img);  // desligada de novo = o fiel
-        for (nr::TextureHandle t : {vL, vU}) d->destroy_texture(t);
+        BS_CHECK(nr::vulkan_live_objects() == 0);
     }
-    BS_CHECK(nr::vulkan_live_objects() == 0);
 }
 
 // N9.6 fase 3: a cor da luz de uma fonte, pelos texels claros e visiveis
@@ -729,107 +744,201 @@ BS_TEST(material_emissive_color) {
     BS_CHECK(fontes == 4);
 }
 
-// N9.6 fase 4 (docs/N9-6-AUDITORIA.md secao 11, D6-4 a): os volumes originais com a borda suave. Um chao opaco com o bit de
-// sombra no quadro inteiro e um volume fechado de inclusao em x < 320 (a face da frente a frente do chao, a de tras atras):
-// desligadas, o modo fiel; ligadas, o fundo do volume e o lado de fora ficam como no modo fiel e a borda e uma rampa.
+// N9.6 fase 4 (docs/N9-6-AUDITORIA.md secao 11, D6-4 a): os volumes originais com a borda suave, nos tres arranjos. Um chao
+// opaco com o bit de sombra no quadro inteiro e um volume fechado de inclusao na metade esquerda: desligadas, o modo fiel;
+// ligadas, o fundo do volume e o lado de fora iguais ao das desligadas e a borda uma rampa (de 2 pixels do jogo, nas escalas).
 BS_TEST(render_vulkan_soft_shadows) {
-    std::string err;
-    {
-        auto d = nr::VulkanDevice::create(&err);
-        if (!d) BS_SKIP("dispositivo Vulkan");
-        nr::CommandList cl;
-        cl.frame.width = 640, cl.frame.height = 480, cl.frame.clear_color = 0xFF000000, cl.frame.shadow_scale = 0x180;
-        nr::Draw dr;
-        dr.state.shadow = true, dr.first_vertex = 0, dr.vertex_count = 4;
-        for (auto [x, y] : {std::pair{0.f, 0.f}, {640.f, 0.f}, {0.f, 480.f}, {640.f, 480.f}})
-            cl.vertices.push_back({x, y, 1.f, 0, 0, 0xFFFF0000u, 0});
-        cl.draws.push_back(dr);
-        nr::ModifierVolume m;
-        m.first_vertex = uint32_t(cl.vertices.size()), m.triangle_count = 4, m.list = nr::ListType::OpaqueModifier;
-        m.inclusion = true, m.closed = true;
-        for (const float z : {2.f, 0.5f})
-            for (auto [x, y] : {std::pair{0.f, 0.f}, {320.f, 0.f}, {0.f, 480.f}, {320.f, 0.f}, {320.f, 480.f}, {0.f, 480.f}})
-                cl.vertices.push_back({x, y, z, 0, 0, 0, 0});
-        cl.modifiers.push_back(m);
-        nr::soft::SoftwareDevice sw;
-        std::vector<uint32_t>    s_img, off, on, again;
-        uint32_t                 w = 0, h = 0;
-        BS_CHECK(sw.submit(cl).ok() && sw.read_frame(s_img, w, h).ok());
-        BS_CHECK(d->submit(cl).ok() && d->read_frame(off, w, h).ok() && off == s_img && !off.empty());  // desligadas: o fiel
-        const uint64_t f0 = d->stats().soft_shadow_frames;
-        d->set_shadows(true);
-        BS_CHECK(d->submit(cl).ok() && d->read_frame(on, w, h).ok() && on.size() == off.size());
-        BS_CHECK(d->submit(cl).ok() && d->read_frame(again, w, h).ok() && again == on);  // determinismo
-        BS_CHECK(d->stats().soft_shadow_frames == f0 + 2);
-        if (on.size() != size_t(640) * 480) return;
-        auto red = [](const std::vector<uint32_t>& img, int x, int y) { return int((img[size_t(y) * 640 + x] >> 16) & 0xFF); };
-        BS_CHECK(red(on, 100, 240) == red(off, 100, 240) && red(off, 100, 240) < 0x90);  // o fundo do volume: o original
-        BS_CHECK(red(on, 500, 240) == red(off, 500, 240) && red(off, 500, 240) == 0xFF);  // fora: o original
-        int prev = -1, ramp = 0;
-        bool mono = true;
-        for (int x = 314; x <= 326; ++x) {
-            const int r = red(on, x, 240);
-            mono = mono && r >= prev, prev = r;
-            ramp += r > red(off, 100, 240) && r < 0xFF;
+    for (const FxCfg& cfg : kFxCfgs) {
+        std::string err;
+        {
+            auto d = nr::VulkanDevice::create(&err);
+            if (!d) BS_SKIP("dispositivo Vulkan");
+            d->set_scale(cfg.scale);
+            const float     W = float(cfg.w), X = W / 2.f;
+            nr::CommandList cl;
+            cl.frame.width = cfg.w, cl.frame.height = 480, cl.frame.clear_color = 0xFF000000, cl.frame.shadow_scale = 0x180;
+            nr::Draw dr;
+            dr.state.shadow = true, dr.first_vertex = 0, dr.vertex_count = 4;
+            for (auto [x, y] : {std::pair{0.f, 0.f}, {W, 0.f}, {0.f, 480.f}, {W, 480.f}}) cl.vertices.push_back({x, y, 1.f, 0, 0, 0xFFFF0000u, 0});
+            cl.draws.push_back(dr);
+            nr::ModifierVolume m;
+            m.first_vertex = uint32_t(cl.vertices.size()), m.triangle_count = 4, m.list = nr::ListType::OpaqueModifier;
+            m.inclusion = true, m.closed = true;
+            for (const float z : {2.f, 0.5f})
+                for (auto [x, y] : {std::pair{0.f, 0.f}, {X, 0.f}, {0.f, 480.f}, {X, 0.f}, {X, 480.f}, {0.f, 480.f}})
+                    cl.vertices.push_back({x, y, z, 0, 0, 0, 0});
+            cl.modifiers.push_back(m);
+            std::vector<uint32_t> off, on, again;
+            uint32_t              w = 0, h = 0;
+            BS_CHECK(d->submit(cl).ok() && d->read_frame(off, w, h).ok() && w == cfg.w && h == 480);
+            if (cfg.scale == 1.f) {  // na escala 1, desligadas = o modo fiel bit a bit
+                nr::soft::SoftwareDevice sw;
+                std::vector<uint32_t>    s_img;
+                BS_CHECK(sw.submit(cl).ok() && sw.read_frame(s_img, w, h).ok() && off == s_img);
+            }
+            const uint64_t f0 = d->stats().soft_shadow_frames;
+            d->set_shadows(true);
+            BS_CHECK(d->submit(cl).ok() && d->read_frame(on, w, h).ok() && on.size() == off.size());
+            BS_CHECK(d->submit(cl).ok() && d->read_frame(again, w, h).ok() && again == on);  // determinismo
+            BS_CHECK(d->stats().soft_shadow_frames == f0 + 2);
+            if (on.size() != size_t(cfg.w) * 480) continue;
+            auto red = [&](const std::vector<uint32_t>& img, int x, int y) { return int((img[size_t(y) * cfg.w + x] >> 16) & 0xFF); };
+            const int xe = int(X);
+            BS_CHECK(red(on, 100, 240) == red(off, 100, 240) && red(off, 100, 240) < 0x90);        // o fundo do volume
+            BS_CHECK(red(on, xe + 140, 240) == red(off, xe + 140, 240) && red(off, xe + 140, 240) == 0xFF);  // fora
+            int  prev = -1, ramp = 0;
+            bool mono = true;
+            for (int x = xe - 6; x <= xe + 6; ++x) {
+                const int r = red(on, x, 240);
+                mono = mono && r >= prev, prev = r;
+                ramp += r > red(off, 100, 240) && r < 0xFF;
+            }
+            std::fprintf(stderr, "  borda suave (%s): %d pixels na rampa, de %d a %d\n", cfg.name, ramp, red(on, xe - 6, 240),
+                         red(on, xe + 6, 240));
+            BS_CHECK(mono && ramp >= 2 && ramp <= 8);  // ~2 pixels do jogo de cada lado
+            d->set_shadows(false);
+            std::vector<uint32_t> back;
+            BS_CHECK(d->submit(cl).ok() && d->read_frame(back, w, h).ok() && back == off);  // desligadas de novo
         }
-        std::fprintf(stderr, "  borda suave: %d pixels na rampa (x 314..326), de %d a %d\n", ramp, red(on, 314, 240), red(on, 326, 240));
-        BS_CHECK(mono && ramp >= 2);
-        d->set_shadows(false);
-        std::vector<uint32_t> back;
-        BS_CHECK(d->submit(cl).ok() && d->read_frame(back, w, h).ok() && back == s_img);  // desligadas de novo = o fiel
+        BS_CHECK(nr::vulkan_live_objects() == 0);
     }
-    BS_CHECK(nr::vulkan_live_objects() == 0);
 }
 
-// N9.6 fase 4 (D6-4 b): a sombra de contato da luz das fontes. A lampada (x 300, y 60, z 560), um painel vertical opaco em
-// x = 275 (y de 40 a 95, z de 500 a 600) entre ela e o chao em (250, 100, 540): com as sombras, esse ponto recebe menos luz;
-// um ponto do chao sem nada no caminho (330, 100, 540) recebe a mesma luz.
+// N9.6 fase 4 (D6-4 b): a sombra de contato da luz das fontes, nos tres arranjos. A lampada (x 300, y 60, z 560), um painel
+// vertical opaco em x = 275 (y de 40 a 95, z de 500 a 600) entre ela e o chao em (250, 100, 540): com as sombras, esse ponto
+// recebe menos luz; um ponto do chao sem nada no caminho (330, 100, 540) recebe a mesma luz.
 BS_TEST(render_vulkan_contact_shadows) {
-    std::string err;
+    for (const FxCfg& cfg : kFxCfgs) {
+        std::string err;
+        {
+            auto d = nr::VulkanDevice::create(&err);
+            if (!d) BS_SKIP("dispositivo Vulkan");
+            d->set_scale(cfg.scale);
+            nr::TextureDesc td;
+            td.width = td.height = 8;
+            const std::vector<uint32_t> white(64, 0xFFFFFFFFu);
+            const nr::TextureHandle     lamp = d->create_texture(td, std::as_bytes(std::span<const uint32_t>(white))).value();
+            const float                 cx   = float(cfg.w) / 2.f;
+            nr::CommandList             cl   = ao_scene(cfg.w);
+            auto proj = [&](float x, float y, float z) {
+                nr::Vertex vx;
+                vx.x = cx + 500.f * x / z, vx.y = 240.f + 500.f * y / z, vx.inv_w = 1.f / z, vx.color = 0xFFC0C0C0;
+                return vx;
+            };
+            {  // o painel (opaco, da cena: o 1/w varia)
+                nr::Draw dr;
+                dr.first_vertex = uint32_t(cl.vertices.size()), dr.vertex_count = 4;
+                for (auto [y, z] : {std::pair{40.f, 500.f}, {40.f, 600.f}, {95.f, 500.f}, {95.f, 600.f}}) cl.vertices.push_back(proj(275, y, z));
+                cl.draws.push_back(dr);
+            }
+            {  // a lampada
+                nr::Draw dr;
+                dr.state.list = nr::ListType::Translucent, dr.state.texture = lamp;
+                dr.state.src = nr::Blend::SrcAlpha, dr.state.dst = nr::Blend::InvSrcAlpha, dr.state.use_alpha = true;
+                dr.first_vertex = uint32_t(cl.vertices.size()), dr.vertex_count = 4;
+                for (auto [a, b] : {std::pair{-4.f, -4.f}, {4.f, -4.f}, {-4.f, 4.f}, {4.f, 4.f}}) cl.vertices.push_back(proj(300 + a, 60 + b, 560));
+                cl.draws.push_back(dr);
+            }
+            d->set_texture_material(lamp, nr::kMaterialEmissive), d->set_texture_light(lamp, 0xFFFFFF);
+            d->set_lighting(true);
+            std::vector<uint32_t> lit, shadowed;
+            uint32_t              w = 0, h = 0;
+            BS_CHECK(d->submit(cl).ok() && d->read_frame(lit, w, h).ok());
+            d->set_shadows(true);
+            BS_CHECK(d->submit(cl).ok() && d->read_frame(shadowed, w, h).ok() && shadowed.size() == lit.size());
+            if (lit.size() != size_t(cfg.w) * 480) continue;
+            auto at = [&](const std::vector<uint32_t>& img, int x, int y) { return img[size_t(y) * cfg.w + x]; };
+            auto px = [&](float x, float y, float z) { return std::pair{int(cx + 500.f * x / z), int(240.f + 500.f * y / z)}; };
+            const auto [bx, by] = px(250, 100, 540);  // atras do painel
+            const auto [qx, qy] = px(330, 100, 540);  // sem nada no caminho
+            const double blocked = lum(at(shadowed, bx, by)) / std::max(1.0, lum(at(lit, bx, by)));
+            std::fprintf(stderr, "  sombra de contato (%s): atras do painel %.3f; sem obstaculo %s\n", cfg.name, blocked,
+                         at(shadowed, qx, qy) == at(lit, qx, qy) ? "igual" : "DIFERENTE");
+            BS_CHECK(blocked < 0.95);
+            BS_CHECK(at(shadowed, qx, qy) == at(lit, qx, qy));
+            d->destroy_texture(lamp);
+        }
+        BS_CHECK(nr::vulkan_live_objects() == 0);
+    }
+}
+
+// N9.6 testes finais (revisao Codex 20261111-055403): a troca de arranjo no MESMO dispositivo com os tres efeitos ligados. A
+// quina (ao_scene) com o bit de sombra no chao, um volume fechado de inclusao na metade esquerda e a lampada cadastrada;
+// sequencia 640 s1 -> 640 s2 -> 854 s1 -> 640 s1. Cada quadro igual ao de um dispositivo novo no mesmo arranjo (nenhum
+// descritor ou recurso velho depois do freeTarget), os tres contadores sobem a cada quadro e nada sobra no fim.
+BS_TEST(render_vulkan_effects_target_switch) {
+    auto scene = [](uint32_t w, nr::TextureHandle lamp) {
+        nr::CommandList cl = ao_scene(w);
+        cl.frame.shadow_scale = 0x180;
+        cl.draws[0].state.shadow = true;  // o chao recebe a sombra
+        const float cx = float(w) / 2.f, X = cx;
+        auto proj = [&](float x, float y, float z) {
+            nr::Vertex vx;
+            vx.x = cx + 500.f * x / z, vx.y = 240.f + 500.f * y / z, vx.inv_w = 1.f / z, vx.color = 0xFFFFFFFF;
+            return vx;
+        };
+        nr::Draw dr;  // a lampada
+        dr.state.list = nr::ListType::Translucent, dr.state.texture = lamp;
+        dr.state.src = nr::Blend::SrcAlpha, dr.state.dst = nr::Blend::InvSrcAlpha, dr.state.use_alpha = true;
+        dr.first_vertex = uint32_t(cl.vertices.size()), dr.vertex_count = 4;
+        for (auto [a, b] : {std::pair{-6.f, -6.f}, {6.f, -6.f}, {-6.f, 6.f}, {6.f, 6.f}}) cl.vertices.push_back(proj(300 + a, 60 + b, 560));
+        cl.draws.push_back(dr);
+        nr::ModifierVolume m;  // o volume na metade esquerda, na frente e atras do chao (1/w do chao entre 1/620 e 1/200)
+        m.first_vertex = uint32_t(cl.vertices.size()), m.triangle_count = 4, m.list = nr::ListType::OpaqueModifier;
+        m.inclusion = true, m.closed = true;
+        for (const float z : {0.01f, 0.0005f})
+            for (auto [x, y] : {std::pair{0.f, 0.f}, {X, 0.f}, {0.f, 480.f}, {X, 0.f}, {X, 480.f}, {0.f, 480.f}})
+                cl.vertices.push_back({x, y, z, 0, 0, 0, 0});
+        cl.modifiers.push_back(m);
+        return cl;
+    };
+    nr::TextureDesc td;
+    td.width = td.height = 8;
+    const std::vector<uint32_t> white(64, 0xFFFFFFFFu);
+    const auto                  bytes = std::as_bytes(std::span<const uint32_t>(white));
+    auto arm = [&](nr::VulkanDevice& d, const FxCfg& cfg) {
+        d.set_scale(cfg.scale);
+        d.set_ambient_occlusion(true), d.set_lighting(true), d.set_shadows(true);
+    };
+    const FxCfg seq[] = {kFxCfgs[0], kFxCfgs[1], kFxCfgs[2], kFxCfgs[0]};
+    std::vector<std::vector<uint32_t>> ref;  // cada arranjo num dispositivo novo
+    std::string                        err;
+    for (const FxCfg& cfg : seq) {
+        auto d = nr::VulkanDevice::create(&err);
+        if (!d) BS_SKIP("dispositivo Vulkan");
+        const nr::TextureHandle lamp = d->create_texture(td, bytes).value();
+        d->set_texture_material(lamp, nr::kMaterialEmissive), d->set_texture_light(lamp, 0xFFFFFF);
+        arm(*d, cfg);
+        std::vector<uint32_t> img, off;
+        uint32_t              w = 0, h = 0;
+        BS_CHECK(d->submit(scene(cfg.w, lamp)).ok() && d->read_frame(img, w, h).ok() && w == cfg.w && h == 480);
+        BS_CHECK(d->stats().ao_frames == 1 && d->stats().light_frames == 1 && d->stats().soft_shadow_frames == 1 &&
+                 d->stats().lights_max >= 1);
+        d->set_ambient_occlusion(false), d->set_lighting(false), d->set_shadows(false);
+        BS_CHECK(d->submit(scene(cfg.w, lamp)).ok() && d->read_frame(off, w, h).ok() && off.size() == img.size());
+        BS_CHECK(off != img);  // os efeitos mudam a imagem neste arranjo
+        ref.push_back(img);
+        d->destroy_texture(lamp);
+    }
+    BS_CHECK(nr::vulkan_live_objects() == 0);
     {
         auto d = nr::VulkanDevice::create(&err);
         if (!d) BS_SKIP("dispositivo Vulkan");
-        nr::TextureDesc td;
-        td.width = td.height = 8;
-        const std::vector<uint32_t> white(64, 0xFFFFFFFFu);
-        const nr::TextureHandle     lamp = d->create_texture(td, std::as_bytes(std::span<const uint32_t>(white))).value();
-        nr::CommandList cl   = ao_scene();
-        auto            proj = [&](float x, float y, float z) {
-            nr::Vertex vx;
-            vx.x = 320.f + 500.f * x / z, vx.y = 240.f + 500.f * y / z, vx.inv_w = 1.f / z, vx.color = 0xFFC0C0C0;
-            return vx;
-        };
-        {  // o painel (opaco, da cena: o 1/w varia)
-            nr::Draw dr;
-            dr.first_vertex = uint32_t(cl.vertices.size()), dr.vertex_count = 4;
-            for (auto [y, z] : {std::pair{40.f, 500.f}, {40.f, 600.f}, {95.f, 500.f}, {95.f, 600.f}}) cl.vertices.push_back(proj(275, y, z));
-            cl.draws.push_back(dr);
-        }
-        {  // a lampada
-            nr::Draw dr;
-            dr.state.list = nr::ListType::Translucent, dr.state.texture = lamp;
-            dr.state.src = nr::Blend::SrcAlpha, dr.state.dst = nr::Blend::InvSrcAlpha, dr.state.use_alpha = true;
-            dr.first_vertex = uint32_t(cl.vertices.size()), dr.vertex_count = 4;
-            for (auto [a, b] : {std::pair{-4.f, -4.f}, {4.f, -4.f}, {-4.f, 4.f}, {4.f, 4.f}}) cl.vertices.push_back(proj(300 + a, 60 + b, 560));
-            cl.draws.push_back(dr);
-        }
+        const nr::TextureHandle lamp = d->create_texture(td, bytes).value();
         d->set_texture_material(lamp, nr::kMaterialEmissive), d->set_texture_light(lamp, 0xFFFFFF);
-        d->set_lighting(true);
-        std::vector<uint32_t> lit, shadowed;
-        uint32_t              w = 0, h = 0;
-        BS_CHECK(d->submit(cl).ok() && d->read_frame(lit, w, h).ok());
-        d->set_shadows(true);
-        BS_CHECK(d->submit(cl).ok() && d->read_frame(shadowed, w, h).ok() && shadowed.size() == lit.size());
-        if (lit.size() != size_t(640) * 480) return;
-        auto at = [](const std::vector<uint32_t>& img, int x, int y) { return img[size_t(y) * 640 + x]; };
-        auto px = [](float x, float y, float z) { return std::pair{int(320.f + 500.f * x / z), int(240.f + 500.f * y / z)}; };
-        const auto [bx, by] = px(250, 100, 540);  // atras do painel
-        const auto [cx, cy] = px(330, 100, 540);  // sem nada no caminho
-        const double blocked = lum(at(shadowed, bx, by)) / std::max(1.0, lum(at(lit, bx, by)));
-        std::fprintf(stderr, "  sombra de contato: atras do painel %.3f; sem obstaculo %s\n", blocked,
-                     at(shadowed, cx, cy) == at(lit, cx, cy) ? "igual" : "DIFERENTE");
-        BS_CHECK(blocked < 0.95);
-        BS_CHECK(at(shadowed, cx, cy) == at(lit, cx, cy));
+        for (size_t i = 0; i < std::size(seq); ++i) {
+            arm(*d, seq[i]);
+            const nr::VulkanStats s0 = d->stats();
+            std::vector<uint32_t> img;
+            uint32_t              w = 0, h = 0;
+            BS_CHECK(d->submit(scene(seq[i].w, lamp)).ok() && d->read_frame(img, w, h).ok() && w == seq[i].w);
+            const nr::VulkanStats s1 = d->stats();
+            BS_CHECK(s1.ao_frames == s0.ao_frames + 1 && s1.light_frames == s0.light_frames + 1 &&
+                     s1.soft_shadow_frames == s0.soft_shadow_frames + 1);
+            const bool same = img == ref[i];
+            std::fprintf(stderr, "  troca de arranjo %zu (%s): %s ao dispositivo novo\n", i, seq[i].name, same ? "igual" : "DIFERENTE");
+            BS_CHECK(same);
+        }
         d->destroy_texture(lamp);
     }
     BS_CHECK(nr::vulkan_live_objects() == 0);
