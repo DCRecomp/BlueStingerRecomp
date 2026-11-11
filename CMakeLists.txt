@@ -112,8 +112,9 @@ endif()
 # Executavel nativo e seu nucleo (app/); o executavel so com BS_BUILD_GAME=ON.
 add_subdirectory(app)
 
-# N9.5 fase 0 (so investigacao): desenha uma IR guardada numa largura escolhida e mede a geometria
-if(BS_BUILD_TOOLS AND BS_VALIDACAO)
+# N9.5/N9.7 (so investigacao): desenha uma IR guardada, mede a geometria e audita materiais/agua. A leitura de uma IR
+# ja guardada nao depende do runtime de validacao, portanto a ferramenta tambem pode ser montada no preset Release.
+if(BS_BUILD_TOOLS)
   add_executable(bs-ir-tela tools/ir_tela/main.cpp tools/ir_tela/geometria.cpp)  # geometria: N9.6 fase 0
   target_link_libraries(bs-ir-tela PRIVATE bs_transitional)
 endif()

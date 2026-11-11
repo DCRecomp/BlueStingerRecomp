@@ -30,7 +30,9 @@ BS_TEST(graphics_presets_and_classification) {
     // o Original nao tem nenhum efeito
     const st::GraphicsSettings o = st::preset(st::Preset::Original);
     BS_CHECK(!o.bloom && !o.ssao && !o.tonemap && !o.crt && o.sharpen == 0 && !o.lighting && o.msaa == 1 &&
-             o.filter == st::Filter::Original && o.shadows == st::Shadows::Original && o.shader.empty());
+             o.filter == st::Filter::Original && o.shadows == st::Shadows::Original && o.water == st::Water::Original &&
+             o.shader.empty());
+    BS_CHECK(st::preset(st::Preset::Balanced).water == st::Water::Enhanced && st::preset(st::Preset::High).water == st::Water::High);
 }
 
 BS_TEST(graphics_clamp_to_capabilities) {
@@ -289,6 +291,7 @@ BS_TEST(graphics_toml_round_trip_and_invalid_values) {
     s.aspect = st::Aspect::Wide16x9, s.window_w = 1280, s.window_h = 960, s.vulkan = true;
     std::string warn;
     BS_CHECK(st::from_toml(st::to_toml(s), &warn) == s && warn.empty());
+    BS_CHECK(st::from_toml("[imagem]\nagua = \"aprimorada\"\n").water == st::Water::Enhanced);
     // valor desconhecido: o padrao no campo, com aviso; fora da faixa: para a faixa
     const st::GraphicsSettings r =
         st::from_toml("[imagem]\nresolucao = \"8k\"\nescala = 900\nmsaa = 3\n[tela]\nmodo = \"janela\"\n", &warn);

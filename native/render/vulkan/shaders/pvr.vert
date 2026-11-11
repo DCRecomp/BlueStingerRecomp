@@ -22,6 +22,7 @@ layout(push_constant) uniform Batch {
     uint  clampMin, clampMax;
     float depthBias;   // subtraido de 1/w antes da escala (quadros com 1/w negativo)
     float invScale;    // 1 / escala da resolucao interna: pixel do alvo -> coordenadas do jogo (1 no modo fiel)
+    vec4  water;       // qualidade, tempo, horizonte e fundo em pixels do alvo (N9.7)
 } pc;
 
 layout(location = 0) noperspective out float vZ;

@@ -418,6 +418,11 @@ void GameHost::setRenderScale(float scale) {
     notifyRequest();
 }
 
+void GameHost::setWaterQuality(uint32_t quality) {
+    waterPending_.store(int(std::min<uint32_t>(quality, 2)));
+    notifyRequest();
+}
+
 void GameHost::setWideWidth(uint32_t width) {
     widePending_.store(int64_t(width));
     notifyRequest();
@@ -515,6 +520,11 @@ void GameHost::applyRequests() {
     if (const float s = scalePending_.exchange(0.f); s > 0 && s != transitional::render_capture::scale()) {
         transitional::render_capture::set_scale(s);
         std::fprintf(stderr, "[render] resolucao interna: escala %.3g (%ux%u)\n", s, unsigned(640 * s + 0.5f), unsigned(480 * s + 0.5f));
+    }
+    if (const int q = waterPending_.exchange(-1); q >= 0 && uint32_t(q) != transitional::render_capture::water()) {
+        transitional::render_capture::set_water(uint32_t(q));
+        static const char* names[] = {"original", "aprimorada", "alta"};
+        std::fprintf(stderr, "[render] agua: %s\n", names[q]);
     }
     if (const int r = rendererPending_.exchange(-1); r >= 0 && !std::getenv("BS_RENDER_IR")) {
         transitional::render_capture::install(RenderProvider(r) == RenderProvider::Native ? transitional::render_capture::Mode::Native

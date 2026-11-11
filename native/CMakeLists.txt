@@ -117,6 +117,7 @@ add_library(bs_native_render STATIC render/texture_convert.cpp render/render_ir.
             render/frame_prep.cpp           # N7b: o que o rasterizador decide por triangulo, para a GPU
             render/post_shader.cpp          # N7c: pacotes e validacao dos shaders de pos-processamento
             render/wide_frame.cpp           # N9.5 fase 1: o quadro largo (hor+) por translacao da IR
+            render/water.cpp                # N9.7: ondulacao so nas superficies de agua identificadas
             render/material_catalog.cpp     # N9.6 fase 2b: o catalogo de materiais por TextureId (Remastered)
             render/soft/soft_raster.cpp     # N8.7: rasterizador de referencia em software (o recuo do Vulkan)
             render/soft/soft_parallel_${BS_PLAT}.cpp  # N9-L: linhas em paralelo (backend de plataforma)

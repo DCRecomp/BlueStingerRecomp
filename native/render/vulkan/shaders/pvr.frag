@@ -42,6 +42,7 @@ layout(push_constant) uniform Batch {
     uint  clampMin, clampMax;
     float depthBias;   // subtraido de 1/w antes da escala (quadros com 1/w negativo)
     float invScale;    // 1 / escala da resolucao interna: pixel do alvo -> coordenadas do jogo (1 no modo fiel)
+    vec4  water;       // qualidade, tempo, horizonte e fundo em pixels do alvo (N9.7)
 } pc;
 
 const uint F_TEXTURED = 1u, F_GOURAUD = 2u, F_OFFSET = 4u, F_USE_ALPHA = 8u, F_IGNORE_TEX_ALPHA = 16u;
@@ -62,6 +63,8 @@ const uint kTriWords = 24u;
 
 // N8.7: os parametros do quadro (FOG_TABLE: 2 entradas de 16 bits por palavra; FOG_COL_RAM; FOG_DENSITY)
 layout(std430, set = 1, binding = 4) readonly buffer FrameData { uint fogTable[64]; uint fogColor; uint fogDensity; } fd;
+// N9.7: copia da cena opaca, feita entre os passes A e B. So desenhos de agua identificados a amostram.
+layout(set = 1, binding = 5) uniform sampler2D sceneColor;
 // N9.6 fase 2b: o fator do AO e o 1/w do opaco por pixel (ao.comp -DSURF); sem o AO no quadro, uma textura neutra
 // (a amostra so acontece com F_AO_SURF). O binding 5 fica para a agua do N9.7.
 layout(set = 1, binding = 6) uniform sampler2D aoSurfTex;
@@ -178,6 +181,52 @@ float fogAlpha(float invW) {
     return r;
 }
 
+// N9.7: material da agua. Tres trens de onda geram a normal por pixel; a cena opaca e amostrada na posicao atual
+// (refracao) e espelhada em torno do horizonte da malha (reflexo em espaco de tela). O tom original continua como base.
+vec3 shadeWater(vec3 base, ivec2 pix) {
+    const float high = step(1.5, pc.water.x);
+    const vec2  suv = (vec2(pix) + 0.5) / pc.size;
+    const float horizon = clamp(pc.water.z / pc.size.y, 0.0, 1.0);
+    const float bottom = max(pc.water.w / pc.size.y, horizon + 1.0 / pc.size.y);
+    const float depth = clamp((suv.y - horizon) / (bottom - horizon), 0.0, 1.0);
+    const float t = pc.water.y;
+    const vec2 q = vec2(suv.x * 31.0, depth * 13.0);
+
+    const float a = q.x + q.y * 0.72 + t * 1.15;
+    const float b = q.x * -0.63 + q.y * 1.38 - t * 0.81;
+    const float c = q.x * 1.71 - q.y * 0.44 + t * 0.47;
+    const float wave = sin(a) * 0.48 + sin(b) * 0.32 + sin(c) * 0.20;
+    const float dx = cos(a) * 0.48 - cos(b) * 0.20 + cos(c) * 0.34;
+    const float dy = cos(a) * 0.35 + cos(b) * 0.44 - cos(c) * 0.09;
+    const vec3 normal = normalize(vec3(-dx * mix(0.22, 0.34, high), -dy * mix(0.18, 0.29, high), 1.0));
+    const vec2 distort = normal.xy * mix(2.2, 4.0, high) / pc.size;
+
+    const vec2 refractUv = clamp(suv + distort * (0.55 + depth * 0.45), vec2(0.001), vec2(0.999));
+    const float reflectedY = horizon - (suv.y - horizon) * mix(0.52, 0.62, high);
+    const vec2 rawReflectUv = vec2(suv.x - distort.x * 1.8, reflectedY + distort.y * 2.2);
+    const vec2 reflectUv = clamp(rawReflectUv, vec2(0.001), vec2(0.999));
+    const vec3 refracted = texture(sceneColor, refractUv).rgb;
+    const vec3 reflectedOnScreen = texture(sceneColor, reflectUv).rgb;
+    const float onScreen = step(0.0, rawReflectUv.x) * step(rawReflectUv.x, 1.0) *
+                           step(0.0, rawReflectUv.y) * step(rawReflectUv.y, 1.0);
+    // O que o espelho pedir fora da imagem usa um ambiente de ceu/maresia em vez de esticar o texel da borda.
+    const vec3 reflectedFallback = mix(vec3(0.16, 0.31, 0.43), vec3(0.43, 0.64, 0.78), 1.0 - depth);
+    const vec3 reflected = mix(reflectedFallback, reflectedOnScreen, onScreen);
+
+    // Perto do horizonte a vista e rasante e o reflexo domina; perto da camera a refracao e o tom original dominam.
+    const float fresnel = mix(0.14, 0.34, high) * (1.0 - smoothstep(0.0, 0.88, depth)) + mix(0.05, 0.08, high);
+    vec3 color = mix(base, refracted, mix(0.08, 0.14, high));
+    color = mix(color, reflected, clamp(fresnel, 0.0, 0.48));
+    color *= vec3(0.94, 1.01, 1.09);  // absorcao leve: preserva o azul e reduz um pouco o vermelho
+    color += vec3(0.0, 0.012, 0.032) * (0.35 + 0.65 * depth);
+
+    const vec3 lightDir = normalize(vec3(-0.38, -0.48, 0.80));
+    const float specular = pow(max(dot(normal, lightDir), 0.0), mix(34.0, 58.0, high));
+    const float crest = smoothstep(0.72, 1.0, wave) * (0.035 + 0.055 * high) * (0.35 + 0.65 * (1.0 - depth));
+    color += vec3(0.78, 0.91, 1.0) * (specular * mix(0.32, 0.55, high) + crest);
+    return clamp(color, 0.0, 1.0);
+}
+
 void main() {
     const ivec2 p = ivec2(gl_FragCoord.xy);
     float z;
@@ -231,6 +280,7 @@ void main() {
         else o = vec4(t.rgb * col.rgb, t.a * col.a);                               // modulate alpha
         if ((pc.flags & F_OFFSET) != 0u) o.rgb += off;
     }
+    if (pc.water.x > 0.5) o.rgb = shadeWater(o.rgb, p);
     if ((pc.flags & F_CLAMP) != 0u) o = min(max(o, argb(pc.clampMin)), argb(pc.clampMax));
     if ((pc.flags & F_FOG) != 0u) {  // N8.7: fog por tabela, sobre a cor final (o alfa nao muda)
         precise float f  = fogAlpha(z);

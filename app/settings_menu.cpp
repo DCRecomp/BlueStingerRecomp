@@ -158,6 +158,9 @@ std::vector<SettingsMenu::Entry> SettingsMenu::entries() const {
                      f.shadows, [](Preferences& p, int d) { p.graphics.shadows = cycle(p.graphics.shadows, d, 2); }});
         e.push_back({L("Iluminação aprimorada", "Enhanced lighting"), soon(f.lighting, onoff(g.lighting)), f.lighting,
                      [](Preferences& p, int) { p.graphics.lighting = !p.graphics.lighting; }});
+        const char* water[] = {"original", L("aprimorada", "enhanced"), L("alta", "high")};
+        e.push_back({L("Água", "Water"), soon(f.water, water[size_t(g.water)]), f.water,
+                     [](Preferences& p, int d) { p.graphics.water = cycle(p.graphics.water, d, 3); }});
         e.push_back({L("Texturas HD", "HD textures"), soon(f.hd_textures, onoff(g.hd_textures)), f.hd_textures,
                      [](Preferences& p, int) { p.graphics.hd_textures = !p.graphics.hd_textures; }});
         {  // N7c (secao 21): os efeitos de imagem numa pagina propria (submenu: sem valor; "em breve" sem nenhum efeito)
@@ -352,6 +355,7 @@ std::vector<SettingsMenu::Entry> SettingsMenu::entries() const {
 void SettingsMenu::commit(const Preferences& wanted, double now) {
     Preferences next = wanted;
     next.graphics    = st::clamp_to(next.graphics, caps_);  // nada que o renderizador nao tenha
+    if (!profile_.enhanced_water) next.graphics.water = st::Water::Original;
     next.camera      = native::edition::clamp_to(next.camera, profile_);  // nem "Restaurar padroes" tira a camera exigida
     if (next == prefs_) return;
     if (st::requires_confirmation(prefs_.graphics, next.graphics) && pending_ != Pending::Display)
@@ -378,6 +382,7 @@ void SettingsMenu::input(MenuAction a, double now) {
                 pending_ = Pending::None;
                 // Original Dreamcast, volumes 100, legendas ligadas; o idioma escolhido fica (ele e tambem o da interface)
                 Preferences def;
+                if (profile_.enhanced_water) def.graphics.water = st::Water::Enhanced;
                 def.subtitles.language = prefs_.subtitles.language;
                 commit(def, now);
                 if (pending_ == Pending::Display) pending_ = Pending::None;  // restaurar ja foi confirmado

@@ -3,6 +3,7 @@
 // (PvrListRenderer); na validacao o adaptador do decodificador do legado (render_capture.cpp) monta a IR e o chama.
 #include "render_core.h"
 #include "render/wide_frame.h"
+#include "render/water.h"
 #include "render/material_catalog.h"
 #include "platform/telemetry.h"  // N9.5 fase 5C
 
@@ -44,6 +45,7 @@ nr::AoQuality             g_aoQuality    = nr::AoQuality::Medium;  // a qualidad
 bool                      g_materials    = false;  // N9.6 fase 2b: o catalogo de materiais (set_materials; so a Remastered)
 bool                      g_lighting     = false;  // N9.6 fase 3: a luz das fontes do catalogo (set_lighting)
 bool                      g_shadows      = false;  // N9.6 fase 4: as sombras aprimoradas (set_shadows)
+nr::WaterQuality          g_water        = nr::WaterQuality::Original;  // N9.7: so a Remastered habilita
 
 std::unique_ptr<Renderer> g_core;
 
@@ -207,7 +209,7 @@ bool Renderer::ensure_vk() {
 // handle do dispositivo para a textura: refeita quando os bytes da VRAM (ou a paleta) mudam. hd: as substituicoes HD
 // valem (so no Vulkan; o software amostra o original)
 bool Renderer::texture_handle(nr::IRenderDevice& dev, TexCache& cache, bool hd, const TextureKey& k,
-                              nr::TextureHandle& out) {
+                              nr::TextureHandle& out, bool& water) {
     if (g_fault == Fault::Texture) {
         g_fault = Fault::None;
         return false;
@@ -228,6 +230,7 @@ bool Renderer::texture_handle(nr::IRenderDevice& dev, TexCache& cache, bool hd, 
         }
 #endif
         out = e.handle;
+        water = e.water;
         return true;
     }
     texture_source(k, raw_);
@@ -242,6 +245,7 @@ bool Renderer::texture_handle(nr::IRenderDevice& dev, TexCache& cache, bool hd, 
     if (e.handle && e.raw == raw_ && e.provider == repl) {  // os bytes nao mudaram: a geracao nova vale para o handle
         e.gen = gen, e.pal = pal;
         out = e.handle;
+        water = e.water;
         return true;
     }
     bool legacy = false;
@@ -249,9 +253,10 @@ bool Renderer::texture_handle(nr::IRenderDevice& dev, TexCache& cache, bool hd, 
     st.tex_legacy += legacy;
     // a identidade pelo conteudo, so quando alguem a usa (HD ou o catalogo da Remastered): calculada uma vez por envio
     const bool          mats = g_materials && hd;  // N9.6 fase 2b: o catalogo so no Vulkan (o software e a referencia)
-    const nr::TextureId id   = repl || mats ? nr::texture_id(k.width, k.height, argb_) : nr::TextureId{};
+    const nr::TextureId id   = nr::texture_id(k.width, k.height, argb_);  // a agua (N9.7) tambem a usa
     const uint32_t      mat  = mats ? nr::material_flags(id) : 0;
     st.tex_materials += mat != 0;
+    e.water = nr::is_water_surface(id);  // N9.7 (prototipo): a mesma identidade
     // substituicao HD pelo conteudo (nunca pelo endereco): compativel ou o original
     const std::vector<uint32_t>* texels = &argb_;
     uint32_t                     tw = k.width, th = k.height;
@@ -283,6 +288,7 @@ bool Renderer::texture_handle(nr::IRenderDevice& dev, TexCache& cache, bool hd, 
     e.raw = raw_, e.gen = gen, e.pal = pal;
     ++st.tex_uploads;
     out = e.handle;
+    water = e.water;
     return true;
 }
 
@@ -303,11 +309,16 @@ bool Renderer::soft_render(uint32_t w, uint32_t h, std::vector<uint32_t>& out) {
     if (!soft_) soft_ = std::make_unique<soft::SoftwareDevice>();
     if (st.renders % 300 == 0) evict(*soft_, softTex_);
     std::vector<nr::TextureHandle> handles(frame.textures.size());
+    bool ignoredWater = false;
     for (size_t i = 0; i < frame.textures.size(); ++i)
-        if (!texture_handle(*soft_, softTex_, false, frame.textures[i], handles[i])) return soft_fail("textura");
+        if (!texture_handle(*soft_, softTex_, false, frame.textures[i], handles[i], ignoredWater)) return soft_fail("textura");
     const std::vector<nr::Draw> saved = frame.cl.draws;
     for (nr::Draw& d : frame.cl.draws)
-        if (d.state.texture) d.state.texture = handles[d.state.texture.value - 1];
+        if (d.state.texture) {
+            const nr::WaterQuality water = nr::marked_water_quality(d.state.texture);
+            const uint32_t         source = nr::unmark_water_texture(d.state.texture).value;
+            d.state.texture = nr::mark_water_texture(handles[source - 1], water);
+        }
     const auto r  = soft_->submit(frame.cl);
     frame.cl.draws = saved;
     uint32_t rw = 0, rh = 0;
@@ -372,14 +383,24 @@ bool Renderer::vk_attempt(uint32_t w, uint32_t h, std::vector<uint32_t>& out, st
     if (!ensure_vk()) return false;
     if (st.renders % 300 == 0) evict(*vk_, vkTex_);
     std::vector<nr::TextureHandle> handles(frame.textures.size());
-    for (size_t i = 0; i < frame.textures.size(); ++i)
-        if (!texture_handle(*vk_, vkTex_, true, frame.textures[i], handles[i])) {
+    std::vector<uint8_t>           waterTextures(frame.textures.size());
+    bool                           anyWater = false;
+    for (size_t i = 0; i < frame.textures.size(); ++i) {
+        bool isWater = false;
+        if (!texture_handle(*vk_, vkTex_, true, frame.textures[i], handles[i], isWater)) {
             // sem a textura o quadro sairia errado: este render fica no software (nunca um desenho sem textura)
             if (st.vk_error.empty()) st.vk_error = "textura nao enviada ao Vulkan (render no software)";
             *why = "textura";
             return false;
         }
+        waterTextures[i] = uint8_t(isWater), anyWater = anyWater || isWater;
+    }
     const std::vector<nr::Draw> saved = frame.cl.draws;  // a IR do quadro fica com os handles do quadro
+    std::vector<nr::Vertex> savedVertices;
+    if (g_water != nr::WaterQuality::Original && anyWater) {
+        savedVertices = frame.cl.vertices;
+        nr::animate_water(frame.cl, waterTextures, st.renders, g_water);
+    }
     for (nr::Draw& d : frame.cl.draws)
         if (d.state.texture) d.state.texture = handles[d.state.texture.value - 1];
     uint32_t   rw = 0, rh = 0;
@@ -454,6 +475,7 @@ bool Renderer::vk_attempt(uint32_t w, uint32_t h, std::vector<uint32_t>& out, st
         nr::crop_center(wideImg_.data(), wideW, h, out.data(), w);
     }
     frame.cl.draws = saved;
+    if (!savedVertices.empty()) frame.cl.vertices = std::move(savedVertices);
     uint32_t       iw = 0, ih = 0;
     const uint64_t seq = ok && (sc != 1.f || wideW) ? vk_->last_slot(iw, ih) : 0;
     if (ok && (sc != 1.f || wideW)) {
@@ -718,6 +740,11 @@ bool     ambient_occlusion() { return g_ao; }
 uint32_t wide() { return g_wide; }
 bool        vulkan_gave_up() { return g_vkGaveUp.load(); }
 PillarSides pillar_sides() { return g_core ? PillarSides{g_core->pillar().left(), g_core->pillar().right()} : PillarSides{}; }
+
+void set_water(uint32_t quality) {
+    g_water = nr::WaterQuality(std::min<uint32_t>(quality, uint32_t(nr::WaterQuality::High)));
+}
+uint32_t water() { return uint32_t(g_water); }
 
 HiresImage hires_for(std::span<const uint32_t> shown, uint32_t width, uint32_t height) {
     return g_core ? g_core->hires_for(shown, width, height) : HiresImage{};

@@ -34,6 +34,7 @@ enum class WindowMode : uint8_t { Windowed, Fullscreen, Borderless };
 enum class Aspect : uint8_t { Original4x3, Wide16x9, Auto };
 enum class Filter : uint8_t { Original, Bilinear, Anisotropic };
 enum class Shadows : uint8_t { Original, Enhanced };
+enum class Water : uint8_t { Original, Enhanced, High };
 // N9.6 fase 1: a qualidade do SSAO (baixa: meia resolucao, 4 direcoes x 3 passos; media: meia resolucao, 8 x 4; alta: o
 // alvo inteiro, 8 x 4). O mesmo numero de native::render::AoQuality
 enum class SsaoQuality : uint8_t { Low, Medium, High };
@@ -48,6 +49,7 @@ struct GraphicsSettings {
     bool       hd_textures = false;  // substituicoes HD por conteudo, quando houver pacote (N9)
     bool       lighting    = false;  // iluminacao aprimorada (so com dados confiaveis)
     Shadows    shadows     = Shadows::Original;
+    Water      water       = Water::Original;  // N9.7: ondulacao so em superficies cadastradas por TextureId
     std::string shader;              // shader de pos-processamento de mod (mods\shaders\<nome>); "" = nenhum
     std::map<std::string, float> shader_params;  // os parametros dele (os ausentes ficam com o padrao do manifesto)
     bool       bloom = false, ssao = false, tonemap = false, crt = false;
@@ -80,10 +82,11 @@ struct Features {
     bool sharpen = false;  // N7c: nitidez
     bool bloom = false;    // N7c: bloom
     bool crt = false;      // N7c: filtro CRT (so com resolucao interna >= kCrtMinHeight)
+    bool water = false;    // N9.7: materiais de agua identificados e ondulacao da Remastered
     bool ssao = false;     // N9.6 fase 1: oclusao ambiente (Remastered com o Vulkan e a apresentacao direta)
     static Features all() {
         Features f{true, true, true, true, true, true, true, true, true, true, true};
-        f.color = f.tonemap = f.sharpen = f.bloom = f.crt = f.ssao = true;
+        f.color = f.tonemap = f.sharpen = f.bloom = f.crt = f.water = f.ssao = true;
         return f;
     }
 };

@@ -59,6 +59,7 @@ BS_TEST(edition_names_and_profiles) {
     BS_CHECK(!ed::parse_edition("Remastered", &e) && !ed::parse_edition("", &e) && e == ed::Edition::Remastered);
     BS_CHECK(!ed::profile_for(ed::Edition::Original).free_camera_required);
     BS_CHECK(ed::profile_for(ed::Edition::Remastered).free_camera_required);
+    BS_CHECK(!ed::profile_for(ed::Edition::Original).enhanced_water && ed::profile_for(ed::Edition::Remastered).enhanced_water);
     BS_CHECK(ed::EditionProfile{} == ed::profile_for(ed::Edition::Original));
     // N9.6 fase 1: a iluminacao aprimorada so na Remastered (a Original fica fiel)
     BS_CHECK(!ed::profile_for(ed::Edition::Original).lighting_effects && ed::profile_for(ed::Edition::Remastered).lighting_effects);

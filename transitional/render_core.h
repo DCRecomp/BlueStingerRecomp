@@ -49,12 +49,13 @@ private:
         uint32_t             w = 0, h = 0;  // o tamanho no dispositivo (o da substituicao, se houver)
         const void*          provider = nullptr;
         uint64_t             gen = 0, pal = 0;  // N8.7 3b: as geracoes da memoria e da paleta quando os bytes foram lidos
+        bool                 water = false;     // N9.7: TextureId cadastrado como agua
         uint32_t             material = 0;      // N9.6 fase 2b: os bits do catalogo dados ao dispositivo
     };
     using TexCache = std::map<std::tuple<uint32_t, uint32_t, uint32_t, uint32_t>, VkTex>;
 
     bool ensure_vk();
-    bool texture_handle(nr::IRenderDevice& dev, TexCache& cache, bool hd, const TextureKey& k, nr::TextureHandle& out);
+    bool texture_handle(nr::IRenderDevice& dev, TexCache& cache, bool hd, const TextureKey& k, nr::TextureHandle& out, bool& water);
     void evict(nr::IRenderDevice& dev, TexCache& cache);
     bool soft_fail(const std::string& why);
     static constexpr uint32_t kRecoveries = 3;

@@ -942,6 +942,8 @@ public:
             if (w || !start) std::fprintf(stderr, "[menu] proporcao: %s\n", w ? "16:9 (quadro largo)" : "4:3");
         }
         if (heightChanged && !heightFirst) sendHeight();
+        if (start || g.vulkan != old.graphics.vulkan || g.water != old.graphics.water)
+            host_.setWaterQuality(g.vulkan ? uint32_t(g.water) : 0);
         // N9.6 fase 1: a oclusao ambiente (clamp_to ja a desliga sem o recurso: a Original e o recuo para o SDL)
         if (start || g.ssao != old.graphics.ssao || g.ssao_quality != old.graphics.ssao_quality || g.vulkan != old.graphics.vulkan)
             host_.setAmbientOcclusion(g.vulkan && g.ssao, uint32_t(g.ssao_quality));
@@ -2198,6 +2200,9 @@ int mainWindow(Args& a) {
         for (const std::string& w : {w1, w2, w3, w4})
             if (!w.empty()) std::fprintf(stderr, "[menu] %s\n", w.c_str());
         persisted        = prefs;
+        // O perfil fornece o padrao sem reescrever a preferencia compartilhada entre edicoes. Um arquivo existente
+        // sempre vence; numa instalacao nova da Remastered, a agua aprimorada ja nasce ligada e continua ajustavel.
+        if (editionProfile().enhanced_water && !fs::exists(prefsDir / st::kGraphicsFile)) prefs.graphics.water = st::Water::Enhanced;
         renderOverride   = a.renderExplicit;
         cameraOverride   = a.cameraMode >= 0;
         if (cameraOverride) prefs.camera.mode = st::CameraMode(a.cameraMode);
@@ -2227,6 +2232,7 @@ int mainWindow(Args& a) {
         if (dev) gpuMaxHeight = simulatedGpuLimit(dev->stats().max_internal_height);
         if (!caps.vulkan) std::fprintf(stderr, "[menu] Vulkan indisponivel (%s): so o renderizador em software\n", vkErr.c_str());
     }
+    caps.features.water = caps.vulkan && editionProfile().enhanced_water;
     caps.max_height = 480, caps.features.window_modes = true, caps.features.vsync = true;
     // N7c: resolucao interna com o Vulkan e a apresentacao direta (pela do SDL a imagem maior nao chega a janela): ate 4K
     // (2160), no maximo o que a GPU comporta (o lado das imagens e a memoria local; VulkanStats::max_internal_height)
@@ -2261,6 +2267,7 @@ int mainWindow(Args& a) {
         std::fprintf(stderr, "[menu] resolucao interna: ate %u, no quadro largo ate %u (GPU: ate %u)\n", caps.max_height,
                      caps.max_height_wide ? caps.max_height_wide : caps.max_height, gpuMaxHeight);
     prefs.graphics = st::clamp_to(prefs.graphics, caps);
+    if (!editionProfile().enhanced_water) prefs.graphics.water = st::Water::Original;
     if (!prefs.graphics.vulkan) a.render = 0;
     std::vector<std::string> languages;  // os idiomas dos pacotes de legendas encontrados
     const auto modPackages = bs::native::localization::ModPackages::discover(modsPath(), "T13001N V1.000");

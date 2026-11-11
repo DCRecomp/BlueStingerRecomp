@@ -1,8 +1,10 @@
-// bs-ir-tela (N9.5 fase 0, so investigacao): le uma IR guardada pelo jogo (BS_RENDER_IR_GUARDAR=<render>:<arquivo>),
-// desenha em software numa largura escolhida e mede a geometria. Nao faz parte do produto.
+// bs-ir-tela (N9.5/N9.7, so investigacao): le uma IR guardada pelo jogo (BS_RENDER_IR_GUARDAR=<render>:<arquivo>),
+// desenha, mede a geometria e audita materiais/agua. Nao faz parte do produto.
 //
 //   bs-ir-tela quadro <ir> <saida.bmp> [--largura W]       desenha a IR (padrao: a largura do quadro)
 //   bs-ir-tela medir <ir> [--largura W]                     resumo: desenhos, vertices e o que cai fora de [0, W)
+//   bs-ir-tela materiais <ir> <pasta>                       exporta texturas e desenhos.tsv para identificacao
+//   bs-ir-tela agua <ir> <saida.bmp> <qualidade 0..2> <quadro> renderiza o material completo da agua no Vulkan
 //   bs-ir-tela comparar <ir_4x3> <ir_larga> <dx> <saida.tsv> pareia os desenhos (pela ordem de envio e, o que sobra, pela
 //        geometria com o mesmo estado de desenho) e da a classe de cada um no TSV:
 //        "cena"     o mesmo desenho com todo vertice andando dx em x e igual no resto (projetado com o cx novo);
@@ -13,6 +15,9 @@
 // Saida 0 = ok, 1 = erro de leitura ou de desenho, 2 = uso.
 #include "render/render.h"
 #include "render/soft/soft_device.h"
+#include "render/texture_replacement.h"
+#include "render/vulkan/vk_device.h"
+#include "render/water.h"
 #include "render_capture.h"
 
 #include <algorithm>
@@ -21,6 +26,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <filesystem>
 #include <string>
 #include <vector>
 
@@ -58,26 +64,51 @@ bool write_bmp(const char* path, const std::vector<uint32_t>& argb, uint32_t w, 
     return o.write(reinterpret_cast<const char*>(b.data()), std::streamsize(b.size())) && o.good();
 }
 
-int draw(const Ir& in, const char* out, uint32_t width) {
-    nr::soft::SoftwareDevice       dev;
-    std::vector<nr::TextureHandle> h;
-    for (const auto& t : in.tex) {
-        auto r = dev.create_texture(t.desc, std::as_bytes(std::span<const uint32_t>(t.argb)));
-        if (!r) return std::fprintf(stderr, "textura recusada\n"), 1;
-        h.push_back(r.value());
+int draw(const Ir& in, const char* out, uint32_t width, nr::WaterQuality water = nr::WaterQuality::Original,
+         uint64_t frame = 0) {
+    auto render = [&](auto& dev, const char* backend) {
+        std::vector<nr::TextureHandle> h;
+        for (const auto& t : in.tex) {
+            auto r = dev.create_texture(t.desc, std::as_bytes(std::span<const uint32_t>(t.argb)));
+            if (!r) return std::fprintf(stderr, "textura recusada por %s\n", backend), 1;
+            h.push_back(r.value());
+        }
+        nr::CommandList c = in.cl;
+        if (width) c.frame.width = width;
+        if (water != nr::WaterQuality::Original) {
+            std::vector<uint8_t> tags(in.tex.size());
+            for (size_t i = 0; i < in.tex.size(); ++i)
+                tags[i] = uint8_t(nr::is_water_surface(nr::texture_id(in.tex[i].desc.width, in.tex[i].desc.height, in.tex[i].argb)));
+            const uint32_t changed = nr::animate_water(c, tags, frame, water);
+            std::printf("agua\tdesenhos\t%u\tqualidade\t%u\tquadro\t%llu\n", changed, unsigned(water),
+                        static_cast<unsigned long long>(frame));
+        }
+        for (auto& d : c.draws)
+            if (d.state.texture) {
+                const nr::WaterQuality q = nr::marked_water_quality(d.state.texture);
+                const uint32_t         source = nr::unmark_water_texture(d.state.texture).value;
+                d.state.texture = nr::mark_water_texture(h[source - 1], q);
+            }
+        if (!dev.submit(c)) return std::fprintf(stderr, "%s recusou a IR\n", backend), 1;
+        std::vector<uint32_t> img;
+        uint32_t              w = 0, hh = 0;
+        if (!dev.read_frame(img, w, hh) || !write_bmp(out, img, w, hh))
+            return std::fprintf(stderr, "nao grava %s\n", out), 1;
+        uint64_t hash = 1469598103934665603ull;
+        for (uint32_t p : img) hash = (hash ^ p) * 1099511628211ull;
+        std::printf("backend\t%s\tquadro\t%ux%u\thash\t%016llx\n", backend, w, hh,
+                    static_cast<unsigned long long>(hash));
+        return 0;
+    };
+    // O material completo da agua existe no Vulkan. O modo quadro/original continua no software como referencia fiel.
+    if (water != nr::WaterQuality::Original) {
+        std::string error;
+        auto        dev = nr::VulkanDevice::create(&error);
+        if (!dev) return std::fprintf(stderr, "Vulkan indisponivel: %s\n", error.c_str()), 1;
+        return render(*dev, "vulkan");
     }
-    nr::CommandList c = in.cl;
-    if (width) c.frame.width = width;
-    for (auto& d : c.draws)
-        if (d.state.texture) d.state.texture = h[d.state.texture.value - 1];
-    if (!dev.submit(c)) return std::fprintf(stderr, "o software recusou a IR\n"), 1;
-    std::vector<uint32_t> img;
-    uint32_t              w = 0, hh = 0;
-    if (!dev.read_frame(img, w, hh) || !write_bmp(out, img, w, hh)) return std::fprintf(stderr, "nao grava %s\n", out), 1;
-    uint64_t hash = 1469598103934665603ull;
-    for (uint32_t p : img) hash = (hash ^ p) * 1099511628211ull;
-    std::printf("quadro\t%ux%u\thash\t%016llx\n", w, hh, static_cast<unsigned long long>(hash));
-    return 0;
+    nr::soft::SoftwareDevice dev;
+    return render(dev, "software");
 }
 
 int measure(const Ir& in, uint32_t width) {
@@ -248,6 +279,69 @@ int compare(const Ir& a, const Ir& b, float dx, const char* tsv) {
     return 0;
 }
 
+// os desenhos que cobrem o quadro inteiro (o retangulo envolvente contem [0, largura] x [0, altura]): fades e filtros
+int full_screen(const Ir& in) {
+    const float W = float(in.cl.frame.width), H = float(in.cl.frame.height);
+    for (size_t i = 0; i < in.cl.draws.size(); ++i) {
+        const nr::Draw& d = in.cl.draws[i];
+        float           x0, x1, y0, y1;
+        bbox(in, d, x0, x1, y0, y1);
+        if (!(x0 <= 0 && y0 <= 0 && x1 >= W && y1 >= H)) continue;
+        std::printf("desenho %zu lista %u vertices %u textura %d clip %u src %u dst %u:", i, unsigned(d.state.list), d.vertex_count,
+                    int(bool(d.state.texture)), unsigned(d.state.clip), unsigned(d.state.src), unsigned(d.state.dst));
+        for (uint32_t k = 0; k < d.vertex_count && k < 6; ++k) {
+            const nr::Vertex& v = in.cl.vertices[d.first_vertex + k];
+            std::printf(" (%.1f,%.1f w%.6g %08X)", v.x, v.y, v.inv_w, v.color);
+        }
+        std::printf("\n");
+    }
+    return 0;
+}
+
+// N9.7: inventario auditavel dos materiais vistos numa area. A identidade e a mesma usada pelas substituicoes HD
+// (dimensoes + hash dos texels decodificados), nunca o endereco mutavel da VRAM. Cada textura sai como BMP para revisao
+// visual e o TSV liga cada desenho a ela e ao estado/retangulo exatos; assim a agua pode ser cadastrada explicitamente,
+// sem heuristica de cor, alfa ou lista translucida que tambem atingiria vidro, fumaca e HUD.
+int materials(const Ir& in, const char* dir) {
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    fs::create_directories(fs::path(dir), ec);
+    if (ec) return std::fprintf(stderr, "nao cria %s: %s\n", dir, ec.message().c_str()), 1;
+    std::vector<std::string> ids(in.tex.size());
+    for (size_t i = 0; i < in.tex.size(); ++i) {
+        const auto& t = in.tex[i];
+        ids[i] = nr::texture_id(t.desc.width, t.desc.height, t.argb).text();
+        const fs::path p = fs::path(dir) / (std::to_string(i + 1) + "-" + ids[i] + ".bmp");
+        if (!write_bmp(p.string().c_str(), t.argb, t.desc.width, t.desc.height))
+            return std::fprintf(stderr, "nao grava %s\n", p.string().c_str()), 1;
+    }
+    const fs::path table = fs::path(dir) / "desenhos.tsv";
+    std::FILE* f = std::fopen(table.string().c_str(), "w");
+    if (!f) return std::fprintf(stderr, "nao grava %s\n", table.string().c_str()), 1;
+    std::fprintf(f, "desenho\ttextura_indice\ttexture_id\tlista\tvertices\tsrc\tdst\tprofundidade\tescreve_z\talfa\t"
+                    "filtro\tenv\tfog\tx0\ty0\tx1\ty1\tu0\tv0\tu1\tv1\n");
+    for (size_t i = 0; i < in.cl.draws.size(); ++i) {
+        const nr::Draw& d = in.cl.draws[i];
+        float x0, x1, y0, y1;
+        bbox(in, d, x0, x1, y0, y1);
+        float u0 = INFINITY, v0 = INFINITY, u1 = -INFINITY, v1 = -INFINITY;
+        for (uint32_t k = 0; k < d.vertex_count; ++k) {
+            const nr::Vertex& v = in.cl.vertices[d.first_vertex + k];
+            u0 = std::min(u0, v.u), v0 = std::min(v0, v.v), u1 = std::max(u1, v.u), v1 = std::max(v1, v.v);
+        }
+        const uint32_t ti = d.state.texture.value;
+        const char* id = ti && ti <= ids.size() ? ids[ti - 1].c_str() : "-";
+        std::fprintf(f, "%zu\t%u\t%s\t%u\t%u\t%u\t%u\t%u\t%d\t%d\t%u\t%u\t%u\t%.3f\t%.3f\t%.3f\t%.3f\t"
+                        "%.6g\t%.6g\t%.6g\t%.6g\n",
+                     i, ti, id, unsigned(d.state.list), d.vertex_count, unsigned(d.state.src), unsigned(d.state.dst),
+                     unsigned(d.state.depth), int(d.state.depth_write), int(d.state.use_alpha), unsigned(d.state.filter),
+                     unsigned(d.state.env), unsigned(d.state.fog), x0, y0, x1, y1, u0, v0, u1, v1);
+    }
+    std::fclose(f);
+    std::printf("texturas\t%zu\tdesenhos\t%zu\ttabela\t%s\n", in.tex.size(), in.cl.draws.size(), table.string().c_str());
+    return 0;
+}
+
 uint32_t opt_width(int argc, char** argv) {
     for (int i = 0; i + 1 < argc; ++i)
         if (std::strcmp(argv[i], "--largura") == 0) return uint32_t(std::strtoul(argv[i + 1], nullptr, 10));
@@ -269,9 +363,23 @@ int main(int argc, char** argv) {
         Ir ir;
         return load(argv[2], ir) ? draw(ir, argv[3], opt_width(argc, argv)) : 1;
     }
+    if (argc == 6 && std::strcmp(argv[1], "agua") == 0) {
+        Ir ir;
+        const uint32_t q = uint32_t(std::strtoul(argv[4], nullptr, 10));
+        const uint64_t f = std::strtoull(argv[5], nullptr, 10);
+        return load(argv[2], ir) ? draw(ir, argv[3], 0, nr::WaterQuality(std::min(q, 2u)), f) : 1;
+    }
+    if (argc >= 3 && std::strcmp(argv[1], "telacheia") == 0) {
+        Ir ir;
+        return load(argv[2], ir) ? full_screen(ir) : 1;
+    }
     if (argc >= 3 && std::strcmp(argv[1], "medir") == 0) {
         Ir ir;
         return load(argv[2], ir) ? measure(ir, opt_width(argc, argv)) : 1;
+    }
+    if (argc == 4 && std::strcmp(argv[1], "materiais") == 0) {
+        Ir ir;
+        return load(argv[2], ir) ? materials(ir, argv[3]) : 1;
     }
     if (argc == 6 && std::strcmp(argv[1], "comparar") == 0) {
         Ir a, b;
@@ -279,6 +387,8 @@ int main(int argc, char** argv) {
         return compare(a, b, std::strtof(argv[4], nullptr), argv[5]);
     }
     std::fprintf(stderr, "uso: bs-ir-tela quadro <ir> <saida.bmp> [--largura W] | medir <ir> [--largura W] |\n"
+                         "      materiais <ir> <pasta> |\n"
+                         "      agua <ir> <saida.bmp> <qualidade 0..2> <quadro> |\n"
                          "      comparar <ir_4x3> <ir_larga> <dx> <saida.tsv> |\n"
                          "      geometria <ir> [--dist D] [--cx X] [--cy Y] [--normais <bmp>] [--tsv <tsv>]\n");
     return 2;

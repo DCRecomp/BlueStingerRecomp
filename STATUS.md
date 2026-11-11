@@ -55,6 +55,17 @@ original vai ser diferente. Vamos saber quando houver suporte a GDI.
 | 2026-10-13 | Fluxo gerado executa corretamente: laço com `bf/s`, slot de `bsr` antes da chamada, switch `braf`, `jsr` via pool, `rts`, preservação de r8/r15/PR | `codegen_exec_0/1`: programa SH-4 sintético → análise → C++ → compila → executa (15 combinações × pool inline/RAM) |
 | 2026-10-13 | Nenhuma instrução PC-relativa (`mova`, `mov.w/mov.l @(disp,PC)`) em delay slot no código alcançado do jogo, então a regra especial do manual não se aplica | Varredura das 430 k instruções alcançadas (`analysis/coverage.bin` + disassembly) |
 
+### N9.7: primeira entrega da água (2026-11-08)
+
+Escopo e provas em `docs/N9-7-AGUA.md`. Foi capturada a IR real do cais RCG00 no passo 2800 e identificado, por conteúdo,
+o material do mar `32x32-7458e3539d31cd8d`: 46 desenhos translúcidos. A Remastered ganhou movimento por três ondas de UV,
+normais por pixel, brilho de crista/especular, refração e reflexo da cena opaca em espaço de tela, com Fresnel e alternativa
+ambiental fora da imagem, somente nesse ID. A qualidade `original`, `aprimorada` ou `alta` fica no menu e em
+`graficos.toml`; instalação nova começa em `aprimorada`. A Original e o recuo software permanecem originais.
+`bs-ir-tela materiais` exporta o inventário e `bs-ir-tela agua` reproduz o material Vulkan numa IR. Testes dirigidos:
+`bs_render_tests` 85/85 e `bs_unit_tests` 341/341. N9.7 continua parcial: outras áreas, superfícies molhadas, avaliação de
+SSR por ray marching, validação em movimento e orçamento ainda estão abertos.
+
 ### M4: testes diferenciais contra o Flycast
 
 Método: `flycast_oracle.py trace` grava cada entrada de função conhecida no

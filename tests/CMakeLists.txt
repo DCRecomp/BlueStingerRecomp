@@ -108,7 +108,7 @@ add_executable(bs_render_tests unit/main.cpp unit/test_render_native.cpp unit/te
                unit/test_render_display_service.cpp unit/test_render_event_status.cpp
                unit/test_render_channel_dma.cpp unit/test_render_area4_entry.cpp
                unit/test_render_pass.cpp unit/test_render_system_block.cpp unit/test_render_parallel.cpp
-               unit/test_widescreen.cpp)  # N9.5 quadro largo
+               unit/test_widescreen.cpp unit/test_water.cpp)  # N9.5 quadro largo; N9.7 agua identificada
 target_include_directories(bs_render_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/unit)
 target_link_libraries(bs_render_tests PRIVATE bs_native_render bs_native_render_vk bs_kamui bs_native)
 add_test(NAME render COMMAND bs_render_tests)

@@ -30,6 +30,9 @@ template <> struct Names<Filter> {
 template <> struct Names<Shadows> {
     static constexpr const char* v[] = {"original", "aprimoradas"};
 };
+template <> struct Names<Water> {
+    static constexpr const char* v[] = {"original", "aprimorada", "alta"};
+};
 template <> struct Names<SsaoQuality> {
     static constexpr const char* v[] = {"baixa", "media", "alta"};
 };
@@ -48,8 +51,10 @@ template <class E> bool parse(const std::string& s, E& out) {
 bool same_quality(const GraphicsSettings& a, const GraphicsSettings& b) {
     return a.resolution == b.resolution && a.scale_pct == b.scale_pct && a.filter == b.filter &&
            (a.filter != Filter::Anisotropic || a.anisotropy == b.anisotropy) && a.msaa == b.msaa &&
-           a.hd_textures == b.hd_textures && a.lighting == b.lighting && a.shadows == b.shadows && a.shader == b.shader &&
-           a.bloom == b.bloom && a.ssao == b.ssao && (!a.ssao || a.ssao_quality == b.ssao_quality) && a.tonemap == b.tonemap && a.crt == b.crt && a.sharpen == b.sharpen &&
+           a.hd_textures == b.hd_textures && a.lighting == b.lighting && a.shadows == b.shadows && a.water == b.water &&
+           a.shader == b.shader &&
+           a.bloom == b.bloom && a.ssao == b.ssao && (!a.ssao || a.ssao_quality == b.ssao_quality) && a.tonemap == b.tonemap &&
+           a.crt == b.crt && a.sharpen == b.sharpen &&
            a.gamma == b.gamma && a.saturation == b.saturation && a.color == b.color && a.brightness == b.brightness &&
            a.contrast == b.contrast && a.shader_params == b.shader_params && a.exposure == b.exposure &&
            a.highlights == b.highlights && a.tone_shadows == b.tone_shadows && a.bloom_threshold == b.bloom_threshold &&
@@ -64,6 +69,7 @@ GraphicsSettings preset(Preset p) {
     switch (p) {
     case Preset::Balanced:
         s.resolution = Resolution::P1080, s.filter = Filter::Bilinear, s.msaa = 2, s.hd_textures = true;
+        s.water = Water::Enhanced;
         s.color = true, s.contrast = 1.05f, s.saturation = 1.10f;  // aprimorado: um pouco mais de contraste e cor
         break;
     case Preset::High:
@@ -71,6 +77,7 @@ GraphicsSettings preset(Preset p) {
         // N9.6 (mantenedor, 2026-11-11): as sombras originais tambem no Alto; as aprimoradas (borda suave e sombras de contato),
         // a luz das fontes e o SSAO ficam so na escolha manual (na GPU integrada em 1080, as aprimoradas dobram o custo)
         s.hd_textures = true, s.sharpen = 0.25f;
+        s.water = Water::High;
         s.color = true, s.contrast = 1.10f, s.saturation = 1.15f;
         break;
     default: break;
@@ -153,6 +160,7 @@ GraphicsSettings clamp_to(const GraphicsSettings& in, const Capabilities& caps, 
     off(f.hd_textures, s.hd_textures, [&] { s.hd_textures = false; }, "texturas HD");
     off(f.lighting, s.lighting, [&] { s.lighting = false; }, "iluminacao");
     off(f.shadows, s.shadows != Shadows::Original, [&] { s.shadows = Shadows::Original; }, "sombras");
+    off(f.water, s.water != Water::Original, [&] { s.water = Water::Original; }, "agua aprimorada");
     off(f.shaders, !s.shader.empty(), [&] { s.shader.clear(); }, "shaders");
     off(f.color, s.color || s.brightness != 0 || s.contrast != 1.0f || s.gamma != 1.0f || s.saturation != 1.0f,
         [&] { s.color = false, s.brightness = 0, s.contrast = 1.0f, s.gamma = 1.0f, s.saturation = 1.0f; }, "correcao de cor");
@@ -247,6 +255,7 @@ std::string to_toml(const GraphicsSettings& s) {
       << "texturas_hd = " << (s.hd_textures ? "true" : "false") << "\n"
       << "iluminacao = " << (s.lighting ? "true" : "false") << "\n"
       << "sombras = \"" << name(s.shadows) << "\"\n"
+      << "agua = \"" << name(s.water) << "\"\n"
       << "shader = \"" << s.shader << "\"\n\n[efeitos]\n"
       << "bloom = " << (s.bloom ? "true" : "false") << "\n"
       << "ssao = " << (s.ssao ? "true" : "false") << "\n"
@@ -312,7 +321,7 @@ GraphicsSettings from_toml(const std::string& text, std::string* warning) {
     }
     str("imagem", "resolucao", s.resolution), num("imagem", "escala", s.scale_pct), str("imagem", "filtragem", s.filter);
     num("imagem", "anisotropia", s.anisotropy), num("imagem", "msaa", s.msaa), bln("imagem", "texturas_hd", s.hd_textures);
-    bln("imagem", "iluminacao", s.lighting), str("imagem", "sombras", s.shadows);
+    bln("imagem", "iluminacao", s.lighting), str("imagem", "sombras", s.shadows), str("imagem", "agua", s.water);
     if (auto v = doc["imagem"]["shader"].value<std::string>()) s.shader = *v;
     bln("efeitos", "bloom", s.bloom), bln("efeitos", "ssao", s.ssao), bln("efeitos", "tonemap", s.tonemap);
     str("efeitos", "ssao_qualidade", s.ssao_quality);
