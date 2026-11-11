@@ -4326,6 +4326,30 @@ não por uma única bateria contínua** (decisão do mantenedor, 2026-11-02).
 - **Pendências:** H9; D-N8-4 no gate pós-N9; ressalva do 7.1 e D-K1(a); limite de 3 h de `n6_h` no executor, defeito a
   corrigir antes de uma futura integral, sem enfraquecer os testes. N9 e N10 não iniciados.
 
+### N9.6: o ajuste final dos presets e a preparação do N9.7 (2026-11-11)
+
+Detalhes em `docs/N9-6-AUDITORIA.md`, seção 14, e `docs/N9-7-PLANO.md`. O mantenedor aprovou o fechamento técnico do N9.6 no
+`c81e274` e decidiu manter as sombras originais no preset Alto, com as melhorias disponíveis por escolha manual.
+- **Método:** `preset(Preset::High)` sem `shadows = Enhanced`, e nada mais muda no Alto. Unitários novos
+  (`graphics_presets_safe_defaults`, `settings_menu_high_preset_manual_effects`) e a suíte da janela `tools/dev/n96_presets.py`
+  (Q1–Q6), que confere o estado entregue ao renderizador e o `graficos.toml`.
+- **Resultado:** Q1–Q7 20 ok, 0 falhas. Os três presets chegam sem nenhum efeito ao renderizador. No Q7, pelos contadores do
+  Vulkan na rota até o corredor: o Alto com AO, luz e borda suave em 0 renders; com as três escolhas, 2 163, 1 017 e 1 017; a
+  Original, 0 em tudo. As sombras aprimoradas, a luz
+  e o SSAO ligam pelo menu, viram `personalizado`, ficam na reabertura e se desfazem. A Original não recebe nenhum. Unitários
+  378/0, render 101/0, ui 25/0, remaster 5/0; ctest 30/30 e 23/23, com os do disco aprovados; SPIR-V 39/39; P1–P5 0 falhas.
+- **Revisão Codex `20261111-073225`:** dois achados BAIXA, os dois aceitos: o Q7 com os contadores do Vulkan, porque as linhas
+  `[render]` só provam o pedido, e a marca do menu inicial exigida no Q3.
+- **Não repetido (impacto):** a bateria integral do N9.6 e o N87. Só o preset `alta` mudou, e o caminho sem janela das
+  referências não lê o `graficos.toml`.
+- **Registrado:** o menu grava o Alto ajustado pelo `clamp_to` (MSAA, filtragem e texturas HD "em breve" no produto), então o
+  Alto gravado fica `personalizado` (regra do N7c, sem mudança).
+- **Sem aprovação:** `boot_trace` (sem os snapshots do Flycast); o visual na janela (V1, F3-5, F4-5) com o mantenedor.
+- **Desempenho:** sem números novos. Na RTX 5080, os três efeitos são viáveis nas condições medidas. Na AMD integrada em 1080,
+  as sombras aprimoradas levam a GPU de 26,0 a 53,5 ms. O SSAO fica desligado por padrão. O orçamento continua no N9.12.
+- **N9.7:** só a preparação (`docs/N9-7-PLANO.md`), sem mudança na água. O protótipo segue na branch `n9-7-agua-prototipo`
+  (`8cf3971`) e na árvore principal, intacto.
+
 ### N9.6: a bateria final (2026-11-11)
 
 Detalhes em `docs/N9-6-AUDITORIA.md`, seção 13; a lista em `docs/N9-6-TESTES-FINAIS.md`.

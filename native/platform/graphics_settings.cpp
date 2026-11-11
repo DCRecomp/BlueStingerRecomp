@@ -68,7 +68,9 @@ GraphicsSettings preset(Preset p) {
         break;
     case Preset::High:
         s.resolution = Resolution::P1440, s.filter = Filter::Anisotropic, s.anisotropy = 16, s.msaa = 4;
-        s.hd_textures = true, s.shadows = Shadows::Enhanced, s.sharpen = 0.25f;
+        // N9.6 (mantenedor, 2026-11-11): as sombras originais tambem no Alto; as aprimoradas (borda suave e sombras de contato),
+        // a luz das fontes e o SSAO ficam so na escolha manual (na GPU integrada em 1080, as aprimoradas dobram o custo)
+        s.hd_textures = true, s.sharpen = 0.25f;
         s.color = true, s.contrast = 1.10f, s.saturation = 1.15f;
         break;
     default: break;

@@ -86,6 +86,51 @@ BS_TEST(graphics_ssao_quality) {
     BS_CHECK(st::classify(a) == st::Preset::Custom && !(a == b));  // ligado: o SSAO ja e uma escolha do jogador
 }
 
+// N9.6 (mantenedor, 2026-11-11): os tres presets com as sombras originais, sem SSAO e sem a luz das fontes; o Alto com o
+// resto como antes (resolucao, filtro, MSAA, texturas HD, nitidez, cor). As melhorias ficam na escolha manual: sobre o Alto,
+// cada uma vira "personalizado", vai para o arquivo e volta na reabertura; desfeita, o Alto volta. Sem o recurso (a
+// Original, o software), clamp_to leva tudo ao original.
+BS_TEST(graphics_presets_safe_defaults) {
+    for (st::Preset p : {st::Preset::Original, st::Preset::Balanced, st::Preset::High}) {
+        const st::GraphicsSettings s = st::preset(p);
+        BS_CHECK(s.shadows == st::Shadows::Original && !s.ssao && !s.lighting);
+        BS_CHECK(st::from_toml(std::string("preset = \"") + st::preset_name(p) + "\"\n") == s);  // o nome no arquivo
+    }
+    const st::GraphicsSettings hi = st::preset(st::Preset::High);  // o resto do Alto nao mudou
+    BS_CHECK(hi.resolution == st::Resolution::P1440 && hi.filter == st::Filter::Anisotropic && hi.anisotropy == 16 && hi.msaa == 4 &&
+             hi.hd_textures && hi.sharpen == 0.25f && hi.color && hi.contrast == 1.10f && hi.saturation == 1.15f);
+    st::Capabilities gpu;
+    gpu.vulkan = true, gpu.max_msaa = 8, gpu.max_anisotropy = 16, gpu.max_height = 2160, gpu.features = st::Features::all();
+    const fs::path dir = fs::temp_directory_path() / "bs_graficos_presets";
+    fs::remove_all(dir);
+    fs::create_directories(dir);
+    for (int which = 0; which < 3; ++which) {  // sombras aprimoradas, luz, SSAO: cada uma sozinha sobre o Alto
+        st::GraphicsSettings m = hi;
+        if (which == 0) m.shadows = st::Shadows::Enhanced;
+        if (which == 1) m.lighting = true;
+        if (which == 2) m.ssao = true, m.ssao_quality = st::SsaoQuality::Low;
+        BS_CHECK(st::classify(m) == st::Preset::Custom);
+        BS_CHECK(st::to_toml(m).find("preset = \"personalizado\"") != std::string::npos);
+        const st::GraphicsSettings kept = st::clamp_to(m, gpu);  // a Remastered com o Vulkan: a escolha fica
+        BS_CHECK(kept == m);
+        BS_CHECK(st::write_graphics(dir, m));
+        const st::GraphicsSettings back = st::read_graphics(dir);  // a reabertura
+        BS_CHECK(back == m && st::classify(back) == st::Preset::Custom);
+        st::Capabilities orig = gpu;  // a Original (main_sdl: os recursos so com editionProfile().lighting_effects)
+        orig.features.shadows = orig.features.lighting = orig.features.ssao = false;
+        const st::GraphicsSettings o = st::clamp_to(back, orig);
+        BS_CHECK(o.shadows == st::Shadows::Original && !o.lighting && !o.ssao && st::classify(o) == st::Preset::High);
+        st::GraphicsSettings undo = back;  // desfeita a escolha: o Alto de novo
+        undo.shadows = st::Shadows::Original, undo.lighting = false, undo.ssao = false;
+        BS_CHECK(st::classify(undo) == st::Preset::High);
+        BS_CHECK(st::write_graphics(dir, undo) && st::to_toml(st::read_graphics(dir)).find("preset = \"alta\"") != std::string::npos);
+    }
+    // um arquivo com o Alto e a escolha explicita: a escolha vale sobre o preset (personalizado)
+    const st::GraphicsSettings f = st::from_toml("preset = \"alta\"\n[imagem]\nsombras = \"aprimoradas\"\n");
+    BS_CHECK(f.shadows == st::Shadows::Enhanced && f.resolution == st::Resolution::P1440 && st::classify(f) == st::Preset::Custom);
+    fs::remove_all(dir);
+}
+
 // O que o renderizador ainda nao implementa volta ao original (o menu o mostra indisponivel), com o motivo
 BS_TEST(graphics_unimplemented_features_fall_back) {
     st::GraphicsSettings s = st::preset(st::Preset::High);

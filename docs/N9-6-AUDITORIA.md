@@ -586,3 +586,91 @@ sombras (4 B/px) nem a imagem do AO sob as translúcidas, e o AO medido fica em 
 - A estimativa de VRAM do limite da resolução interna (13.3).
 - O custo das sombras aprimoradas em GPU integrada em 1080, que pesa na decisão do preset "Alto" (F5-4).
 - Os riscos das seções 10.4 e 11.3 (o espaço de tela da sombra de contato, a penumbra de volumes pequenos, o raio da luz).
+
+## 14. O ajuste final dos presets (2026-11-11)
+
+**Decisão do mantenedor (2026-11-11, F5-4):** "manter as sombras originais como padrão do preset Alto, deixando as melhorias
+avançadas de iluminação e sombras disponíveis para ativação manual". Aprovado também o fechamento técnico do N9.6 no
+`c81e274`.
+
+### 14.1 A configuração
+
+| Preset (`graficos.toml`) | Sombras | SSAO | Luz das fontes |
+|---|---|---|---|
+| `original` (o mais baixo) | originais | desligado | desligada |
+| `equilibrado` | originais | desligado | desligada |
+| `alta` | **originais** (antes: aprimoradas, do N7c) | desligado | desligada |
+| `personalizado` | originais ou aprimoradas | desligado ou ligado, com a qualidade | desligada ou ligada |
+
+- A mudança é uma linha (`preset(Preset::High)` em `native/platform/graphics_settings.cpp`): sai `shadows = Enhanced`. O resto
+  do Alto fica: 1440p, anisotrópica 16×, MSAA 4×, texturas HD, nitidez 0,25, correção de cor (contraste 1,10, saturação 1,15).
+- O menu do jogo não tem seletor de preset desde 2026-10-23: cada opção é individual, e o preset existe no `graficos.toml`
+  (`preset = "..."` como base; as chaves explícitas valem sobre ele) e na classificação que o arquivo grava. Os nomes no
+  arquivo são `original`, `equilibrado` e `alta` (o Baixo, o Médio e o Alto da decisão).
+- As sombras aprimoradas (a borda suave dos volumes e as sombras de contato), a luz das fontes e o SSAO continuam no menu e
+  no `graficos.toml`, só na Remastered com o Vulkan. Ligar qualquer um sobre um preset o torna `personalizado`. Desligar
+  volta à classificação anterior.
+- **Regra existente (N7c), registrada:** o menu grava os valores já ajustados aos recursos (`clamp_to`). No produto, o MSAA,
+  a filtragem e as texturas HD ainda são "em breve" e voltam ao original. Por isso, o Alto gravado pelo menu fica
+  `personalizado` mesmo sem nenhuma escolha. Não foi mudado.
+- Um `graficos.toml` antigo com `preset = "alta"` e `sombras = "aprimoradas"` explícito (o menu grava as chaves todas) mantém
+  as aprimoradas: é a escolha gravada do jogador, e o arquivo passa a ser `personalizado`.
+- **Desempenho (sem números novos; seção 13.3):** na RTX 5080, os três efeitos juntos cabem nas condições medidas. Na AMD
+  integrada em 1080, as sombras aprimoradas levam a GPU de 26,0 a 53,5 ms. O SSAO continua desligado por padrão. Sem detecção
+  automática de GPU nem redução dinâmica de qualidade. O orçamento de memória e de desempenho continua no N9.12.
+
+### 14.2 Impacto
+
+- Só a tabela do preset `alta` mudou. `preset()` só é usado dentro de `graphics_settings.cpp` (`from_toml`, `classify`), e o
+  `mainHeadless` não lê o `graficos.toml`. As rotas das referências do N8.7, o modo fiel e os shaders não passam por ele.
+  Por isso a bateria integral do N9.6 e o N87 não foram repetidos.
+- A Original: os recursos (`Features::shadows`, `::lighting`, `::ssao`) só com `editionProfile().lighting_effects`, e o
+  `clamp_to` leva tudo ao original. Nada disso mudou.
+
+### 14.3 Testes (binários da worktree sobre o `c81e274` com o ajuste)
+
+- **Unitários novos:**
+  - `graphics_presets_safe_defaults`: os três presets com as sombras originais, sem SSAO nem luz; o resto do Alto igual; cada
+    melhoria sozinha sobre o Alto vira `personalizado`, fica no `clamp_to` da Remastered, vai ao arquivo e volta na
+    reabertura (`write_graphics`/`read_graphics`); a Original a leva ao original; desfeita, o Alto volta; um arquivo com
+    `alta` e as aprimoradas explícitas fica com elas.
+  - `settings_menu_high_preset_manual_effects`: no menu, a partir do Alto, as sombras aparecem originais; as três ligadas à
+    mão viram `personalizado` com o resto do Alto; desfeitas, o Alto. Na Original, as linhas ficam inativas e nada muda.
+- **`tools/dev/n96_presets.py`** (nova, na janela com o controle virtual, sem entrada global nem captura da área de trabalho).
+  No Q1–Q6, confere o pedido aceito pelo `render_capture` (as linhas `[render] ...` do `game_host` ao entregar cada efeito) e o
+  arquivo; no Q7, o que o Vulkan aplicou:
+  - Q1: os três presets na Remastered, com o Vulkan e nenhum efeito no renderizador, e o arquivo intacto.
+  - Q2: no menu, sobre o Alto, os três chegam ao renderizador; o arquivo fica `personalizado` com as três escolhas e cada chave
+    do Alto pela regra existente.
+  - Q3: na reabertura, os três chegam ao renderizador já no início.
+  - Q4: desfeitos no menu, os três chegam desligados ao renderizador; o arquivo fica igual ao do Q2, menos as três escolhas.
+  - Q5: na reabertura, nenhum efeito.
+  - Q6: a Original com o Alto e as três escolhas no arquivo, nenhuma no renderizador, e o arquivo intacto.
+  - Q7: a rota `passo_load_slot1` no modo espectador até o corredor, fechada pelo `sair` do controle virtual, com os contadores
+    do dispositivo no resumo `[render-vk]`:
+    - o Alto: AO, luz e borda suave em 0 renders (2 779 quadros, catálogo com 5 envios);
+    - o Alto com as três escolhas no arquivo: AO em 2 163 renders, luz em 1 017 (até 8 luzes), borda suave em 1 017;
+    - a Original com as três no arquivo: 0 em tudo, inclusive no catálogo.
+  - Resultado: 20 ok, 0 falhas. A primeira execução reprovou o Q2 e o Q4 por um critério errado meu (o arquivo com o MSAA 4× e
+    a volta a `alta`). A regra existente do `clamp_to` explica os dois, e o critério ficou mais estrito: cada chave no Q2 e o
+    arquivo inteiro no Q4.
+- `bs_unit_tests` 378/0, `bs_render_tests` 101/0, `bs_ui_tests` 25/0, `bs_remaster_tests` 5/0; ctest 30/30 e 23/23;
+  `real_disc`, `runtime_data`, `analysis_real` e `movie_manifest` com o disco e a Preview; `gera_spirv -Conferir` 39/39;
+  P1–P5 (`n95_persistencia.py`) 22 ok, 0 falhas.
+- **Sem aprovação:** `boot_trace` (os snapshots do Flycast não existem nesta máquina); a conferência visual na janela (V1,
+  F3-5, F4-5) com o mantenedor.
+
+### 14.4 Revisão Codex (`reviews/codex-20261111-073225.md`)
+
+Dois achados BAIXA, os dois aceitos:
+- As linhas `[render]` provam o pedido aceito pelo `render_capture`, não a aplicação pelo Vulkan. Os rótulos do Q1–Q6 passaram
+  a dizer isso, e entrou o Q7 com os contadores do dispositivo.
+- O Q3 aprovaria sem a marca do menu inicial. Agora a marca é exigida, e a conferência usa só o trecho antes dela.
+
+A revisão confirmou sem problema: o único valor removido do Alto, os padrões dos três presets, o arquivo antigo com as
+aprimoradas explícitas, a Original sem os recursos, os efeitos condicionados ao Vulkan e o Alto gravado como `personalizado`
+pela regra do `clamp_to`.
+
+### 14.5 O N9.7
+
+A preparação (só análise, sem mudança na água) ficou em `docs/N9-7-PLANO.md`.

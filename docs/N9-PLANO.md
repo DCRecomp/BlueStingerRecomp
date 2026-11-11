@@ -329,6 +329,11 @@ só como histórico:
   sombras de contato da luz das fontes; `[imagem] sombras = "aprimoradas"`.
 - **Fase 5 (2026-11-11, commit local, só nível 1; auditoria seção 12):** as entradas do menu (Sombras, Iluminação
   aprimorada, SSAO e a qualidade) e a matriz com os sufixos; a bateria final pela lista dos testes finais.
+- **Fechamento técnico (2026-11-11, aprovado pelo mantenedor no `c81e274`):** a bateria final sem falhas (auditoria seção
+  13); o visual na janela continua com o mantenedor; o `boot_trace` sem aprovação (sem os snapshots do Flycast).
+- **Os presets (mantenedor, 2026-11-11; auditoria seção 14):** as sombras originais também no Alto. SSAO e luz das fontes
+  desligados nos três. As sombras aprimoradas, a luz e o SSAO ficam na escolha manual (menu e `graficos.toml`, só na
+  Remastered com o Vulkan). Na AMD integrada em 1080, as sombras aprimoradas dobram o custo da GPU.
 
 ### N9.7 — Água e reflexos (R, G)
 
@@ -341,6 +346,9 @@ só como histórico:
   cais RCG00, uma textura por `TextureId`, ondas de UV, normais, reflexo e refração em espaço de tela). Ele fica **fora dos
   commits**, preservado na árvore de trabalho para avaliação no N9.7, na ordem oficial (depois do N9.6). Avaliação e
   compatibilidade com o N9.5 na seção 12.9 de `docs/N9-5-AUDITORIA.md`.
+- **Preparação (2026-11-11, só análise):** `docs/N9-7-PLANO.md`, com o protótipo analisado (catálogo, descritores, shaders,
+  imagens sob demanda, VRAM, widescreen, SSAO, Original), o plano incremental A0–A7 com os gates e as decisões pendentes (os
+  padrões da água, a unificação no catálogo, a variante do shader). A implementação oficial espera a autorização.
 
 ### N9.8 — Texturas HD, antialiasing e pós-processamento (E para texturas e AA; R para o resto; G)
 
@@ -393,6 +401,12 @@ pelas subetapas (decisão do mantenedor, 2026-11-10). Não começa sem autoriza�
 - **Do N9.6 fase 1** (`docs/N9-6-AUDITORIA.md` 7.6): o AO inviável na AMD integrada em 1080; a cobertura da cena (paredes
   de frente para a câmera, translúcidas; 56 % no quarto do VBlank 4640); a distância de projeção fixa em 500; a
   estimativa de VRAM agora 96 + 4 B/px; os artefatos da qualidade baixa.
+- **Do N9.6 fases 3–5 e da bateria final** (`docs/N9-6-AUDITORIA.md` 13.5): a estimativa de VRAM sem a máscara das sombras (4
+  B/px) nem a imagem do AO das translúcidas (o AO medido em ~8 B/px); as sombras aprimoradas na AMD integrada em 1080 (26,0 →
+  53,5 ms de GPU); o espaço de tela da sombra de contato; a penumbra de volumes pequenos; o `boot_trace` sem os snapshots do
+  Flycast.
+- **Do N9.7 (protótipo, `docs/N9-7-PLANO.md`):** a imagem da cena para a água (4 B/px) criada em todo alvo, também na
+  Original.
 - O mesmo para os riscos que as subetapas seguintes registrarem.
 - **Aceitação:** cada risco registrado resolvido ou aceito pelo mantenedor com evidência; as baterias do N9.5 em diante
   (H, R, P, J, Original × `referencias_n87`) sem falhas na árvore integrada.

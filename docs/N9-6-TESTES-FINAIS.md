@@ -80,7 +80,7 @@ Legenda: **[P]** produto (`msvc-release`), **[V]** validação (`msvc-validacao`
 | F5-1 | `n95_janela.py` J1–J7 com as entradas novas do menu [J] (R6) | 0 falhas |
 | F5-2 | `n95_persistencia.py` P1–P5 com `ssao`, `ssao_qualidade`, `iluminacao` e `sombras` no `graficos.toml` (R4) | 0 falhas; a Original volta tudo a desligado |
 | F5-3 | A matriz completa (C1) com os sufixos combinados | medida e registrada |
-| F5-4 | **Decisão do mantenedor:** o preset "Alto" com `sombras = "aprimoradas"` | decidido e registrado |
+| F5-4 | **Decisão do mantenedor:** o preset "Alto" com `sombras = "aprimoradas"` | decidido e registrado: **originais** (2026-11-11, auditoria seção 14) |
 | F5-5 | Revisão Codex da fase 5 (menu e ligações) | achados tratados |
 | F5-6 | Uma Preview nova pelo Builder (`tools/dist/make_preview.ps1 -Disc`, saída e cache em `tmp/`) e `test_edicao.ps1 -Preview` nela (R5) | rc 0; 0 falhas |
 
@@ -95,8 +95,10 @@ Legenda: **[P]** produto (`msvc-release`), **[V]** validação (`msvc-validacao`
 
 Em `docs/N9-6-AUDITORIA.md`, seção 13. Aprovados: 1.1–1.4, R1–R6, L1–L7, F3-1–F3-3, F3-6, F4-1–F4-3, F4-6, F5-1–F5-3, F5-6.
 Medidos e registrados: C1–C3, F3-4, F4-4. Revisões: X1, X2, F3-7, F4-7, F5-5. **Sem aprovação:** o `boot_trace` do ctest
-(precisa dos snapshots do Flycast, que não existem nesta máquina), V1, F3-5 e F4-5 (com o mantenedor), F5-4 (a decisão do
-mantenedor).
+(precisa dos snapshots do Flycast, que não existem nesta máquina), V1, F3-5 e F4-5 (com o mantenedor).
+
+**F5-4 decidido (mantenedor, 2026-11-11):** as sombras originais também no Alto, e as melhorias por escolha manual. Ajuste e
+testes (`tools/dev/n96_presets.py` Q1–Q7) em `docs/N9-6-AUDITORIA.md`, seção 14.
 
 ## 6. Depois da bateria
 

@@ -425,6 +425,42 @@ BS_TEST(settings_menu_lighting_options) {
     }
 }
 
+// N9.6 (mantenedor, 2026-11-11): o Alto com as sombras originais no menu; as aprimoradas, a luz e o SSAO ligados a mao
+// sobre ele (personalizado) e desligados de novo (o Alto); na Original (sem os recursos) as linhas ficam inativas e nada
+// muda.
+BS_TEST(settings_menu_high_preset_manual_effects) {
+    for (const bool remaster : {true, false}) {
+        st::Capabilities caps;
+        caps.vulkan = true, caps.max_height = 2160, caps.max_msaa = 8, caps.max_anisotropy = 16;
+        caps.features = st::Features::all();
+        caps.features.shadows = caps.features.lighting = caps.features.ssao = remaster;
+        bs::Preferences start = pt();
+        start.graphics        = st::preset(st::Preset::High);
+        bs::SettingsMenu m(start, caps, {"en-US"});
+        m.open();
+        go(m, "Gráficos"), m.input(MenuAction::Confirm, 0);
+        bs::MenuView v = m.view();
+        BS_CHECK(v.items[size_t(find(v, "Sombras"))].value.rfind("original", 0) == 0);  // o Alto: as originais
+        bs::Preferences p;
+        go(m, "Sombras"), m.input(MenuAction::Right, 0);
+        go(m, "Iluminação aprimorada"), m.input(MenuAction::Confirm, 0);
+        go(m, "Efeitos de imagem"), m.input(MenuAction::Confirm, 0);
+        if (remaster) go(m, "SSAO"), m.input(MenuAction::Confirm, 0);
+        if (!remaster) {
+            BS_CHECK(!m.take_changes(p));  // nada mudou
+            continue;
+        }
+        BS_CHECK(m.take_changes(p) && p.graphics.shadows == st::Shadows::Enhanced && p.graphics.lighting && p.graphics.ssao);
+        BS_CHECK(st::classify(p.graphics) == st::Preset::Custom);
+        BS_CHECK(p.graphics.resolution == st::Resolution::P1440 && p.graphics.msaa == 4);  // o resto do Alto fica
+        m.input(MenuAction::Confirm, 0);  // o SSAO de novo: desligado
+        go(m, "Voltar"), m.input(MenuAction::Confirm, 0);
+        go(m, "Sombras"), m.input(MenuAction::Left, 0);
+        go(m, "Iluminação aprimorada"), m.input(MenuAction::Confirm, 0);
+        BS_CHECK(m.take_changes(p) && st::classify(p.graphics) == st::Preset::High);
+    }
+}
+
 // N7c (secao 23): Configuracoes > Controles > Camera. Original deixa as opcoes inativas; Voltar volta a Controles.
 BS_TEST(settings_menu_camera_page) {
     bs::SettingsMenu m(pt(), {}, {"en-US"});
