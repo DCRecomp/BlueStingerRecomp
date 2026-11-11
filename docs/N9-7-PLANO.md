@@ -1,7 +1,7 @@
 # N9.7: a preparação (água e reflexos)
 
-**Situação (2026-11-11): só análise, para aprovação. O N9.7 não começou oficialmente** (mantenedor, 2026-11-11: "Não
-autorizo ainda a implementação oficial do N9.7"). Nada do sistema de água foi alterado.
+**Situação:** a análise abaixo foi feita em 2026-11-11 antes da autorização. O N9.7 foi autorizado no mesmo dia com as
+decisões D7-1, D7-2 e D7-3 (seção 4) e executado em A0–A7 na branch `n9-7`; o resultado está em `docs/N9-7-AGUA.md`.
 
 O protótipo do Codex (2026-11-08) está em dois lugares, os dois preservados:
 - a branch local `n9-7-agua-prototipo` (`8cf3971`, sobre o `17963bb` do N9.5 fase 4), 32 arquivos;

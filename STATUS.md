@@ -4337,6 +4337,36 @@ não por uma única bateria contínua** (decisão do mantenedor, 2026-11-02).
 - **Pendências:** H9; D-N8-4 no gate pós-N9; ressalva do 7.1 e D-K1(a); limite de 3 h de `n6_h` no executor, defeito a
   corrigir antes de uma futura integral, sem enfraquecer os testes. N9 e N10 não iniciados.
 
+### N9.7: água e reflexos (2026-11-11, commits locais na branch `n9-7`)
+
+Detalhes em `docs/N9-7-AGUA.md`; o plano e os gates em `docs/N9-7-PLANO.md`. Autorizado pelo mantenedor em 2026-11-11 com
+D7-1 (a água original por padrão, inclusive no Alto), D7-2 (o catálogo de materiais) e D7-3 (o shader próprio).
+- **Método:**
+  - o protótipo do Codex recuperado numa worktree isolada (`tmp/wt-n97`, branch `n9-7`, A0 `c9a6367`) e corrigido (A1–A6);
+  - a água como `kMaterialWater` no catálogo; a variante `-DWATER` do fragmento, com os SPIR-V fiéis iguais aos do
+    `f690ecb`; a imagem da cena sob demanda; as ondas no fragmento; a fase pelo número do render;
+  - `[imagem] agua`, o menu e `--agua` só na execução; a Original recusa.
+- **A5:** o jogo anima o mar trocando a textura (oito quadros); o catálogo do protótipo tinha um e a água piscava. Agora os
+  oito, com a prova nas IRs do cais.
+- **Resultado (A7, binários do `cec9842`):**
+  - SPIR-V 45/45; unitários 379/0, render 107/0 (também sob a camada de validação, 0 erros), ui 25/0, remaster 5/0;
+  - ctest 30/30 e 23/23, com os do disco;
+  - `n97_agua.py` W1–W6 89 ok, 0 falhas; N9.6 L1–L7, H1–H7, R1–R4, P1–P5 e J1–J7 0 falhas;
+  - a Original igual às 10 referências do N8.7; a Preview nova e `test_edicao` 11/0; a varredura 0 achados.
+- **Custo (`n95_desempenho`, trecho do mar):** RTX 5080 +0,1–0,2 ms; AMD integrada +0,3 ms em 480 e +2 ms em 1080 (sobre
+  ~56 ms). Na janela, RTX 16:9@2160 59,98 → 59,96 fps; AMD 16:9@1080 46,5 → 45,3 fps.
+- **Revisão Codex `20261111-121354`:** quatro achados aceitos e corrigidos (os contadores, a prova da cena copiada, o tamanho
+  alocado, a camada de validação). A camada achou um erro antigo do N9.6 (`aoSurf_` em `UNDEFINED`), corrigido no `17e1105`.
+- **Sem aprovação:**
+  - `n96_presets` Q4/Q5 nesta rodada: o dispositivo Vulkan foi perdido e recriado no meio da sequência do menu;
+  - `boot_trace` (sem os snapshots do Flycast);
+  - a conferência visual (com o mantenedor).
+- **Achado antigo, para o N9.12:** com o preset Alto (1440p), o Vulkan perde o dispositivo perto do render 680, logo depois do
+  menu inicial nativo, e se recupera. Reproduzido também no binário do N9.6 `f690ecb` (3 de 4 execuções); não é da água.
+- **Master:** não avançado. A árvore principal ainda guarda o protótipo sem commit; a integração no master substituiria esses
+  arquivos pela versão oficial e espera a autorização do mantenedor. O protótipo está preservado no `c9a6367` e na branch
+  `n9-7-agua-prototipo` (`8cf3971`).
+
 ### N9.6: o ajuste final dos presets e a preparação do N9.7 (2026-11-11)
 
 Detalhes em `docs/N9-6-AUDITORIA.md`, seção 14, e `docs/N9-7-PLANO.md`. O mantenedor aprovou o fechamento técnico do N9.6 no
