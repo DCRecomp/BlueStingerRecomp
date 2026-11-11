@@ -256,3 +256,38 @@ ruído (o exterior em 1080 desligado deu mais que ligado).
   medições de 7.4.
 - **N9.12:** a AMD integrada em 1080 sem AO viável; a cobertura da cena (frontais, translúcidas); dist fixa em 500 (o zoom
   do jogo muda o raio em poucos por cento); a constante de VRAM (agora 96 + 4 B/px); os artefatos da baixa.
+
+## 8. Fase 2a: a marca de cena pela proveniência, medida antes de implementar (2026-11-10)
+
+Autorizada pelo mantenedor ("Continuar para a fase 2"; arquitetura aprovada com condições em 2026-11-10). Antes de
+instrumentar o produto, a pergunta foi medida, só com leitura e uma captura de validação.
+
+- **Dados:** os 22 TSVs de proveniência da fase 3B do N9.5 (`tmp/sessao-20261109/fase3/c9`: corredor, combate, cais,
+  exterior, inventário, menus de pausa, terminal ESER, título e C-GATE), com a cadeia de chamadas, a lista, o 1/w mínimo e
+  máximo e a marca da validação de cada desenho; e a IR do quadro exato da L no quarto (render 2318 do `passo_load_slot1`,
+  Remastered 4:3, exe de validação; o quadro do `bs-ir-tela` difere da captura do VBlank 4640 em 0,76 nível em média).
+  Scripts locais `tmp/sessao-20261110/n96/f2_medir.py` e `f2_mascara.py`.
+- **As entradas 3D do Ninja** (`8C15F856`, `8C15F8B8`, `8C161738`, `8C160C12`, `8C1601FE`) aparecem em 12 927 desenhos, todos
+  com a marca **cena**; nenhum de tela, menu ou inventário. A identificação pelas rotinas é segura.
+- **A lacuna da revisão Codex não ocorre nos dados:** os 10 180 desenhos opacos e punch-through de cena têm todos o 1/w
+  variando; os 128 opacos com 1/w constante são todos HUD (`8C1736A0`/`8C07B4E0` e `8C16CED8`/`8C0899D6`). No quadro do quarto,
+  os 1 003 desenhos opacos variam em profundidade e nenhum tem 1/w constante. A marca pela proveniência não acrescentaria
+  nenhum pixel ao AO nas cenas medidas.
+- **De onde vem a cobertura de 56 %:** dos pixels do quarto, 79,2 % são de opacos 3D (já marcados) e recebem o AO no passe
+  A; 22,9 % deles ficam **cobertos por uma camada translúcida** desenhada depois, no passe B, que esconde a cena por baixo
+  (os racks da parede direita, o piso de grade, o cabelo); os 20,8 % restantes são o fundo e o HUD. A falta de AO ali é da
+  ordem dos passes (o AO antes das translúcidas), não da classificação.
+- **Custo da marca:** com ela ligada, toda escrita da CPU na RAM anota o papel do bloco (`cpu/hud_scope.h`); hoje isso só
+  liga na Remastered 16:9. Ligá-la também no 4:3 para o AO custaria CPU sem nenhum ganho medido.
+
+### 8.1 Decisões do mantenedor (2026-11-10)
+
+- **A marca de cena não entra no produto.** O critério do 1/w (fase 1) fica. No lugar dela, um **alarme só de validação**:
+  `tools/dev/n96_cena.py <pastas>` lê os TSVs de proveniência (`*.ir.origem.tsv`) e falha se algum desenho opaco ou
+  punch-through das entradas 3D do Ninja tiver 1/w constante; as entradas são conferidas contra as linhas de cena do
+  `runtime/kamui/hud_table.h`. Nas 22 cenas: 10 180 desenhos, 0 alarmes (rc 0); negativo (um desenho do `8C15F856` com o
+  1/w forçado constante): 1 alarme, rc 1; sem TSV: rc 1. Se o alarme tocar, a marca volta a ser avaliada. A revisão Codex
+  20261110-113738 (MÉDIA) fica respondida por medição: o caso não ocorre nas cenas capturadas.
+- **As translúcidas que cobrem a cena entram na 2b, pelo catálogo:** só texturas identificadas por `TextureId` que funcionam
+  como superfície (alfa cheio), uma a uma e com prova; nada genérico.
+- Os modelos 3D dos menus continuam sem AO (decisão anterior).

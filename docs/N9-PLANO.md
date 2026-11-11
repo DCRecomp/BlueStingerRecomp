@@ -315,6 +315,9 @@ só como histórico:
   ligada) e baixa; custo medido na RTX 5080 e na AMD integrada (inviável ali em 1080). Decisões de 2026-11-10: a marca de
   cena pela proveniência (rotinas comprovadas, sem instrumentação pesada, partículas/HUD/ambíguos preservados) fica na
   fase 2; os modelos 3D dos menus não recebem AO.
+- **Fase 2a (2026-11-10, commit local; auditoria seção 8):** a marca de cena medida antes de implementar: nenhum desenho
+  opaco de cena com 1/w constante nas 22 cenas; a falta de AO vem das translúcidas por cima. Decisão do mantenedor: a
+  marca não entra no produto, alarme só de validação `tools/dev/n96_cena.py`; as translúcidas vão para a 2b (catálogo).
 
 ### N9.7 — Água e reflexos (R, G)
 

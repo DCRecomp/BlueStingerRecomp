@@ -4326,6 +4326,21 @@ não por uma única bateria contínua** (decisão do mantenedor, 2026-11-02).
 - **Pendências:** H9; D-N8-4 no gate pós-N9; ressalva do 7.1 e D-K1(a); limite de 3 h de `n6_h` no executor, defeito a
   corrigir antes de uma futura integral, sem enfraquecer os testes. N9 e N10 não iniciados.
 
+### N9.6 fase 2a: a marca de cena medida, não implementada no produto (2026-11-10, commit local)
+
+Detalhes em `docs/N9-6-AUDITORIA.md`, seção 8. Autorizada pelo mantenedor ("Continuar para a fase 2").
+- **Método:** os 22 TSVs de proveniência da fase 3B do N9.5 (`tmp/sessao-20261109/fase3/c9`: corredor, combate, cais,
+  exterior, inventário, menus, terminal, título, C-GATE) e a IR do quadro exato da L no quarto (render 2318 do
+  `passo_load_slot1`, Remastered 4:3, exe de validação de `30e25cd`; o `bs-ir-tela quadro` difere da captura do VBlank 4640
+  em 0,76 nível em média); máscaras da L (cena preta × branca) contra as normais reconstruídas.
+- **Resultado:** as entradas 3D do Ninja só aparecem em desenhos de cena (12 927; nenhum de HUD, menu ou inventário); os
+  10 180 desenhos opacos e punch-through de cena têm todos o 1/w variando; os 128 opacos de 1/w constante são HUD. No quarto,
+  79,2 % dos pixels são de opacos 3D (com AO), 22,9 % deles cobertos por translúcidas do passe B (racks, piso de grade,
+  cabelo) e 20,8 % são fundo e HUD: a cobertura de 56 % vem da ordem dos passes, não da classificação.
+- **Decisão do mantenedor (2026-11-10):** a marca não entra no produto; alarme só de validação `tools/dev/n96_cena.py`
+  (22 cenas: 0 alarmes, rc 0; negativo forçado: 1 alarme, rc 1; sem TSV: rc 1). As translúcidas que cobrem a cena vão para
+  a 2b (catálogo por `TextureId`, uma a uma, com prova). O produto não mudou nesta parte.
+
 ### N9.6 fase 1: oclusão ambiente, meia resolução e qualidades (2026-11-10, commit local)
 
 Detalhes em `docs/N9-6-AUDITORIA.md`, seção 7. Só a Remastered com o Vulkan; **o SSAO fica desligado por padrão em todos os
