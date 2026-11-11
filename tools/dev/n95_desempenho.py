@@ -185,7 +185,8 @@ def rodar(a, cfg, rota, de):
     t0 = time.time()
     with open(os.path.join(d, "saida.txt"), "w", encoding="utf-8") as out:
         p = subprocess.Popen(cmd, stdout=out, stderr=subprocess.STDOUT, env=env, cwd=d)
-        limite = t0 + (vblanks / 60.0 + 120 if a.janela else 3600)
+        # N9.7: na GPU integrada em 1080 o jogo anda mais devagar que o tempo real; o limite e so contra travamento
+        limite = t0 + (vblanks / 60.0 * 1.5 + 120 if a.janela else 3600)
         completo = False
         while p.poll() is None and time.time() < limite:
             # o jogo grava o resumo no BS_TELEMETRIA_ATE (revisao Codex 20261110-014042: so depois dele a janela e encerrada)
