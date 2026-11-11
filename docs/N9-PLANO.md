@@ -325,6 +325,8 @@ só como histórico:
   lista `docs/N9-6-TESTES-FINAIS.md`, atualizada a cada fase.
 - **Fase 3 (2026-11-11, commit local, só nível 1; auditoria seção 10):** a luz das fontes do catálogo (as faixas do
   teto, as placas acesas, a faixa do quarto) somada à cena 3D por um passe de luzes pontuais; `[imagem] iluminacao`.
+- **Fase 4 (2026-11-11, commit local, só nível 1; auditoria seção 11):** os volumes originais com a borda suave e as
+  sombras de contato da luz das fontes; `[imagem] sombras = "aprimoradas"`.
 
 ### N9.7 — Água e reflexos (R, G)
 

@@ -152,8 +152,9 @@ std::vector<SettingsMenu::Entry> SettingsMenu::entries() const {
                          int            i   = int(std::find(v, v + 4, p.graphics.msaa) - v);
                          p.graphics.msaa    = v[std::clamp(i + d, 0, 3)];
                      }});
-        e.push_back({L("Sombras", "Shadows"), soon(f.shadows, g.shadows == st::Shadows::Original ? "original" : L("aprimoradas", "enhanced")),
-                     f.shadows, [](Preferences& p, int d) { p.graphics.shadows = cycle(p.graphics.shadows, d, 2); }});
+        // N9.6 fase 4: as sombras aprimoradas ja existem (graficos.toml, --sombras), mas a entrada do menu fica para a fase 5
+        e.push_back({L("Sombras", "Shadows"),
+                     soon(false, g.shadows == st::Shadows::Original ? "original" : L("aprimoradas", "enhanced")), false, nullptr});
         // N9.6 fase 3: a luz das fontes do catalogo ja existe (graficos.toml, --iluminacao), mas a entrada do menu fica para a
         // fase 5, como a do SSAO
         e.push_back({L("Iluminação aprimorada", "Enhanced lighting"), soon(false, onoff(g.lighting)), false, nullptr});

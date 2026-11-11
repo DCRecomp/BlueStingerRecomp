@@ -20,7 +20,7 @@ cada caso (telemetria.csv, saida.txt).
          --saida tmp/<pasta> [--janela] [--trechos corredor,cais,exterior] [--configs 4:3@480,16:9@2160] [--gpu <nome>]
 N9.6 fase 1: uma configuracao com o sufixo +ao (ex.: 16:9@1080+ao) liga a oclusao ambiente na qualidade media (meia
 resolucao); +ao-alta (o alvo inteiro, a primeira versao), +ao-media e +ao-baixa escolhem a qualidade. Fase 3: +luz liga a
-luz das fontes do catalogo (combinavel: 16:9@1080+ao-media+luz).
+luz das fontes do catalogo (combinavel: 16:9@1080+ao-media+luz). Fase 4: +sombras liga as sombras aprimoradas.
 """
 import argparse
 import csv
@@ -117,13 +117,15 @@ def rodar(a, cfg, rota, de):
     # N9.6 fase 1: o sufixo "+ao[-qualidade]" liga a oclusao ambiente (graficos.toml na janela, --ssao ligado sem janela);
     # fase 3: "+luz" liga a luz das fontes do catalogo ([imagem] iluminacao, --iluminacao ligado); os dois se combinam
     base, *sufs = cfg.split("+")
-    ao = luz = False
+    ao = luz = sombras = False
     qual = "media"
     for suf in sufs:
         if suf == "ao" or suf.startswith("ao-"):
             ao, qual = True, suf[3:] if suf.startswith("ao-") else "media"
         elif suf == "luz":
             luz = True
+        elif suf == "sombras":  # N9.6 fase 4
+            sombras = True
         else:
             raise SystemExit("configuracao invalida: %s" % cfg)
     if qual not in ("baixa", "media", "alta"):
@@ -131,7 +133,8 @@ def rodar(a, cfg, rota, de):
     prop, alt = base.split("@")
     alt = int(alt)
     roteiro, cartao, vblanks = ROTAS[rota]
-    nome = "%s_%s_%d%s%s" % (rota, prop.replace(":", "x"), alt, "_ao_" + qual if ao else "", "_luz" if luz else "")
+    nome = "%s_%s_%d%s%s%s" % (rota, prop.replace(":", "x"), alt, "_ao_" + qual if ao else "", "_luz" if luz else "",
+                               "_sombras" if sombras else "")
     d = os.path.join(a.saida, nome)
     if os.path.isdir(d):
         shutil.rmtree(d)
@@ -142,6 +145,8 @@ def rodar(a, cfg, rota, de):
     graf = GRAFICOS.format(res=RES[alt], prop=prop)
     if luz:  # a chave fica na secao [imagem], a primeira do modelo
         graf = graf.replace("[imagem]\n", "[imagem]\niluminacao = true\n", 1)
+    if sombras:
+        graf = graf.replace("[imagem]\n", "[imagem]\nsombras = \"aprimoradas\"\n", 1)
     open(os.path.join(d, "graficos.toml"), "w").write(graf + ("[efeitos]\nssao = true\nssao_qualidade = \"%s\"\n" % qual
                                                               if ao else ""))
     saves = os.path.join(d, "saves")
@@ -166,6 +171,8 @@ def rodar(a, cfg, rota, de):
             cmd += ["--ssao", "ligado", "--ssao-qualidade", qual]
         if luz:
             cmd += ["--iluminacao", "ligado"]
+        if sombras:
+            cmd += ["--sombras", "aprimoradas"]
     t0 = time.time()
     with open(os.path.join(d, "saida.txt"), "w", encoding="utf-8") as out:
         p = subprocess.Popen(cmd, stdout=out, stderr=subprocess.STDOUT, env=env, cwd=d)

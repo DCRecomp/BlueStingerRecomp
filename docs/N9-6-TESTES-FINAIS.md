@@ -63,7 +63,15 @@ Legenda: **[P]** produto (`msvc-release`), **[V]** validação (`msvc-validacao`
 
 ### Fase 4 (sombras: volumes com borda suave e sombras de contato)
 
-(preenchido ao implementar)
+| # | Teste | Critério |
+|---|---|---|
+| F4-1 | `n96_luz.py --casos L6` [P] | 0 falhas: a Original recusa `--sombras aprimoradas`; estado e efeitos iguais; a borda suave só nas aprimoradas; o HUD do canto igual |
+| F4-2 | As rotas com volumes de sombra (a sombra do personagem; o cais e o exterior): a contagem `borda suave dos volumes em N renders` e a caixa do que muda | N > 0 onde houver volume; mudanças só nas bordas das sombras e nos pontos com sombra de contato |
+| F4-3 | O caminho fiel dos volumes intacto: Original × `referencias_n87` (R1) e as cenas de fidelidade (`bs_render_tests`) | 10 iguais; 0 falhas |
+| F4-4 | Custo: `n95_desempenho.py` com `+sombras` e `+ao-media+luz+sombras` (RTX 5080 @1080 e @2160; AMD @480 e @1080) [P] | medido e registrado |
+| F4-5 | Visual na janela: a largura da penumbra, as sombras de contato das faixas do teto [J] | com o mantenedor |
+| F4-6 | `graficos.toml` com `sombras = "aprimoradas"` (P1–P5; a Original volta a `original`) | 0 falhas |
+| F4-7 | Revisão Codex da fase 4 (`volumes.comp -DMASK`, `soft_shadows.comp`, `softObjects`/`writeSoftSets`, `occluded` no `lights.comp`) | achados tratados |
 
 ### Fase 5 (menu, `graficos.toml`, matriz de desempenho)
 

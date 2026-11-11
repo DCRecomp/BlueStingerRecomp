@@ -415,3 +415,40 @@ para a bateria final do N9.6 (`docs/N9-6-TESTES-FINAIS.md`, seção 4).
   claras saturam; o raio, a intensidade e a força (400, 1, 0,6) são valores de partida, a conferir na janela.
 - A luz não tem sombra (a fase 4 trata as sombras); paredes entre a luz e o ponto não bloqueiam.
 - As fontes são só as do corredor e do quarto; as outras áreas pedem inventário.
+
+## 11. Fase 4: as sombras (volumes originais com a borda suave e sombras de contato) (2026-11-11)
+
+D6-4 a + b. **Só nível 1**; a validação vai para a bateria final (`docs/N9-6-TESTES-FINAIS.md`, seção 4).
+
+### 11.1 Método
+
+- **(a) A borda suave dos volumes originais.** Com as sombras aprimoradas, os volumes modificadores da lista 1 rodam pela
+  variante `volumes.comp -DMASK` (as três variantes do ambiente FP, a mesma cobertura do caminho fiel), que grava a máscara
+  "dentro do volume" dos pixels com o bit de sombra em vez de escalar a cor. O passe `soft_shadows.comp` faz, por pixel com o
+  bit de sombra, a média da máscara numa vizinhança de 2 pixels do jogo (pesos gaussiano e de profundidade: a penumbra não
+  atravessa bordas de profundidade). Média 1, o interior: a conta inteira do original (cor × FPU_SHAD_SCALE / 256). Entre 0
+  e 1, a borda: a mistura. Média 0: nada. A máscara e os seus conjuntos têm layout próprio: o layout, o conjunto e o
+  pipeline fiéis dos volumes não mudam (o SPIR-V fiel de `volumes.comp` ficou igual).
+- **(b) As sombras de contato da luz das fontes.** No passe de luz (fase 3), cada luz percorre em 12 passos o caminho do
+  ponto até ela, cada passo projetado na tela. Se a profundidade ali mostra algo à frente do caminho (até 24 unidades de
+  espessura), a luz daquela fonte não chega ao ponto. A espessura começou em 60 e caiu para 24 porque, no teste, um painel
+  na frente da luz bloqueava um ponto sem obstáculo (a limitação clássica do espaço de tela).
+- **Onde liga:** `[imagem] sombras = "aprimoradas"` (já existia; `Features.shadows` só na Remastered) ou `--sombras
+  aprimoradas` (só na execução, não gravado; a Original e o software recusam com 2). Desligadas, o modo fiel. A entrada do
+  menu fica "em breve" até a fase 5. A máscara (RGBA8 no alvo, 4 B/px) nasce sob demanda e sai ao desligar.
+
+### 11.2 Nível 1 (2026-11-11)
+
+- Os três presets; `bs_unit_tests` 375/0; `bs_render_tests` 100/0, com dois testes novos:
+  - `render_vulkan_soft_shadows`: o fundo do volume e o lado de fora iguais ao fiel; a borda uma rampa monótona de 127 a 255
+    em 4 pixels; desligadas, igual ao software;
+  - `render_vulkan_contact_shadows`: o ponto atrás do painel com 0,800 da luz; o ponto sem obstáculo igual.
+- ctest 30/30 e 23/23; `gera_spirv.ps1 -Conferir` 39/39; `n0_native_limpo` ok.
+- A suíte ganhou o L6 (`n96_luz.py`) e a matriz o sufixo `+sombras`, para a bateria final. **Nada disso rodou ainda.**
+
+### 11.3 Riscos
+
+- A sombra de contato só vê o que está na tela: luz atrás da câmera ou um obstáculo fora do quadro não bloqueiam; um objeto
+  fino à frente do caminho pode faltar ou sobrar.
+- A borda suave tem 2 pixels do jogo: é a conferir na janela; um volume pequeno (a sombra sob o personagem) pode ficar mais
+  claro no centro se for menor que a penumbra.

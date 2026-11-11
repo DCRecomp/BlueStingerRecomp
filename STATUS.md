@@ -4326,6 +4326,16 @@ não por uma única bateria contínua** (decisão do mantenedor, 2026-11-02).
 - **Pendências:** H9; D-N8-4 no gate pós-N9; ressalva do 7.1 e D-K1(a); limite de 3 h de `n6_h` no executor, defeito a
   corrigir antes de uma futura integral, sem enfraquecer os testes. N9 e N10 não iniciados.
 
+### N9.6 fase 4: as sombras aprimoradas (2026-11-11, commit local, só nível 1)
+
+Detalhes em `docs/N9-6-AUDITORIA.md`, seção 11. D6-4 a + b.
+- **Método:** os volumes originais com a borda suave (`volumes.comp -DMASK` grava a máscara, `soft_shadows.comp` aplica a
+  escala do original pela máscara média da vizinhança, com peso pela profundidade; o caminho fiel não muda) e as sombras de
+  contato da luz das fontes (12 passos em espaço de tela no `lights.comp`). `[imagem] sombras = "aprimoradas"` ou
+  `--sombras aprimoradas`, só na Remastered com o Vulkan; desligadas por padrão.
+- **Nível 1:** os três presets; unitários 375/0; render 100/0 (`render_vulkan_soft_shadows`, `render_vulkan_contact_shadows`);
+  ctest 30/30 e 23/23; SPIR-V 39/39 (o de `volumes.comp` fiel igual). **A bateria não rodou:** está na lista final.
+
 ### N9.6 fase 3: a luz das fontes do catálogo (2026-11-11, commit local, só nível 1)
 
 Detalhes em `docs/N9-6-AUDITORIA.md`, seção 10. **Decisão do mantenedor (2026-11-11): as fases seguintes do N9.6 levam só o

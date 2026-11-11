@@ -16,6 +16,9 @@ de teste, roteiro passo_load_slot1: LOAD do slot 1 e o corredor RCG02; capturas 
   L4 Remastered 16:9 em 1080 linhas desligado x ligado: idem na imagem larga em alta resolucao.
   L5 (N9.6 fase 3) a luz das fontes do catalogo: a Original com --iluminacao ligado sai com 2; Remastered 4:3 desligada x
      ligada: estado por passo e efeitos identicos; "luz das fontes em N renders" > 0 so na ligada; a luz so clareia.
+  L6 (N9.6 fase 4) as sombras aprimoradas: a Original com --sombras aprimoradas sai com 2; Remastered 4:3 originais x
+     aprimoradas (com a luz ligada nas duas, para as sombras de contato): estado e efeitos identicos; a borda suave so nas
+     aprimoradas; nenhum pixel fora da cena 3D muda (o HUD).
 
   python tools/dev/n96_luz.py --exe <produto> --exe-validacao <validacao> --data <data> --cartao <pasta de saves sintetica>
                               [--casos L1,L2,L3,L4] [--qualidade baixa|media|alta] [--manter]
@@ -44,7 +47,7 @@ def main():
     ap.add_argument("--exe-validacao", required=True)
     ap.add_argument("--data", required=True)
     ap.add_argument("--cartao", required=True)
-    ap.add_argument("--casos", default="L1,L2,L3,L4,L5")
+    ap.add_argument("--casos", default="L1,L2,L3,L4,L5,L6")
     ap.add_argument("--manter", action="store_true")
     ap.add_argument("--qualidade", default="media", choices=("baixa", "media", "alta"))
     a = ap.parse_args()
@@ -85,6 +88,10 @@ def main():
             r["l5o"] = Corrida(base, "l5o", a, "original", nat + ["--iluminacao", "ligado"], False)
             r["l5_off"] = Corrida(base, "l5_off", a, "remastered", nat)
             r["l5_on"] = Corrida(base, "l5_on", a, "remastered", nat + ["--iluminacao", "ligado"])
+        if "L6" in casos:  # N9.6 fase 4: as sombras aprimoradas
+            r["l6o"] = Corrida(base, "l6o", a, "original", nat + ["--sombras", "aprimoradas"], False)
+            r["l6_off"] = Corrida(base, "l6_off", a, "remastered", nat + ["--iluminacao", "ligado"])
+            r["l6_on"] = Corrida(base, "l6_on", a, "remastered", nat + ["--iluminacao", "ligado", "--sombras", "aprimoradas"])
         with ThreadPoolExecutor(3) as ex:
             list(ex.map(lambda c: c.rodar(), r.values()))
 
@@ -187,6 +194,25 @@ def main():
                 menos = int((g1 < g0).any(axis=2).sum())
                 mudou = float((g1 != g0).any(axis=2).mean())
                 check("L5 %s: a luz so clareia" % v, menos == 0, "%d pixels mais escuros; %.1f %% mudaram" % (menos, 100 * mudou))
+        if "L6" in casos:
+            import re
+            def borda(c):
+                m = re.search(r"borda suave dos volumes em (\d+) renders", c.log)
+                return int(m.group(1)) if m else -1
+            check("L6 Original com --sombras aprimoradas recusada", r["l6o"].rc == 2, "rc %d" % r["l6o"].rc)
+            off6, on6 = r["l6_off"], r["l6_on"]
+            igual_estado(off6, on6, "L6 4:3 sombras originais x aprimoradas")
+            check("L6 borda suave so nas aprimoradas", borda(off6) == 0 and borda(on6) >= 0,
+                  "originais %d, aprimoradas %d renders" % (borda(off6), borda(on6)))
+            check("L6 log da troca", "[render] sombras aprimoradas: ligadas" in on6.log)
+            for v in VBS:
+                g0, g1 = off6.img("v%s.bmp" % v), on6.img("v%s.bmp" % v)
+                if g0 is None or g1 is None or g0.shape != g1.shape:
+                    check("L6 %s: capturas" % v, False, "ausente ou de outro tamanho")
+                    continue
+                hud = (g1[400:450, 20:340] != g0[400:450, 20:340]).any(axis=2).sum()
+                check("L6 %s: o HUD do canto igual" % v, int(hud) == 0, "%d pixels; %.1f %% da imagem mudou" % (
+                    int(hud), 100 * float((g1 != g0).any(axis=2).mean())))
         if "L4" in casos:
             igual_estado(r["h_off"], r["h_on"], "L4 16:9 1080 desligado x ligado")
             escurece(r["h_off"], r["h_on"], "L4", "_hd")

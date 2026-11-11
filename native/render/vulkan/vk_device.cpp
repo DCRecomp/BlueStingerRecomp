@@ -17,6 +17,10 @@
 #include "render/vulkan/spirv/ao_up_comp.h"
 #include "render/vulkan/spirv/ao_up_surf_comp.h"
 #include "render/vulkan/spirv/lights_comp.h"
+#include "render/vulkan/spirv/soft_shadows_comp.h"
+#include "render/vulkan/spirv/volumes_mask_comp.h"
+#include "render/vulkan/spirv/volumes_mask_comp_fc.h"
+#include "render/vulkan/spirv/volumes_mask_comp_fcd.h"
 #include "render/vulkan/spirv/volumes_comp.h"
 #include "render/vulkan/spirv/volumes_comp_fc.h"
 #include "render/vulkan/spirv/volumes_comp_fcd.h"
@@ -45,6 +49,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <tuple>
 #include <map>
 #include <unordered_map>
 
@@ -314,6 +319,7 @@ public:
     void  set_ambient_occlusion(bool on) override { aoOn_.store(on, std::memory_order_relaxed); }
     void  set_ambient_occlusion_quality(AoQuality q) override { aoQuality_.store(uint8_t(q), std::memory_order_relaxed); }
     void  set_lighting(bool on) override { lightOn_.store(on, std::memory_order_relaxed); }  // N9.6 fase 3
+    void  set_shadows(bool on) override { shadowsOn_.store(on, std::memory_order_relaxed); }  // N9.6 fase 4
     void  set_texture_light(TextureHandle t, uint32_t rgb) override {  // N9.6 fase 3
         if (auto it = texs_.find(t.value); it != texs_.end()) it->second.light = rgb;
     }
@@ -642,6 +648,17 @@ private:
     VkPipeline            lightPipe_ = VK_NULL_HANDLE;
     bool                  lightSetValid_ = false, lightFailed_ = false;
     std::atomic<bool>     lightOn_{false};
+    // N9.6 fase 4: as sombras aprimoradas: a mascara dos volumes (volumes.comp -DMASK, com o seu proprio conjunto: o layout
+    // fiel dos volumes nao muda) e a borda suave (soft_shadows.comp); as sombras de contato ficam no passe de luz
+    std::atomic<bool>     shadowsOn_{false};
+    Image                 shadowMask_;
+    VkDescriptorSetLayout vmLayout_ = VK_NULL_HANDLE, softLayout_ = VK_NULL_HANDLE;
+    VkDescriptorPool      vmPool_ = VK_NULL_HANDLE;
+    VkDescriptorSet       vmSet_ = VK_NULL_HANDLE, softSet_ = VK_NULL_HANDLE;
+    VkPipelineLayout      vmPipeLayout_ = VK_NULL_HANDLE, softPipeLayout_ = VK_NULL_HANDLE;
+    VkShaderModule        vmMod_ = VK_NULL_HANDLE, softMod_ = VK_NULL_HANDLE;
+    VkPipeline            vmPipe_ = VK_NULL_HANDLE, softPipe_ = VK_NULL_HANDLE;
+    bool                  vmSetValid_ = false, softSetValid_ = false, softFailed_ = false;
     Image                 aoSurf_;  // N9.6 fase 2b: o fator e o 1/w do opaco por pixel (rgba8 no alvo) para o catalogo
     bool                  aoSurfBound_ = false, aoSurfWanted_ = false, aoSurfFrame_ = false;
     Image                 aoImg_, aoHalf_;  // a alta usa aoImg_ (rgba8 no alvo); a media e a baixa, aoHalf_ (rgba32f, 1/4)
@@ -1116,6 +1133,101 @@ private:
     // N8.7: o conjunto dos volumes (volumes.comp). Regravado sempre que um buffer dele ou o alvo muda (o handle novo pode
     // ser igual ao liberado: nunca comparar handles)
     bool volSetValid_ = false;
+    // N9.6 fase 4: os objetos das sombras aprimoradas nascem na primeira vez que ha volume com elas ligadas; uma falha
+    // desliga so a borda suave (os volumes seguem pelo caminho fiel)
+    bool softObjects() {
+        if (vmPipe_ && softPipe_) return true;
+        if (softFailed_) return false;
+        std::string err;
+        auto fail_s = [&](const std::string& why) {
+            softFailed_ = true;
+            std::fprintf(stderr, "[render-vk] sombras aprimoradas desligadas: %s\n", why.c_str());
+            return false;
+        };
+        VkDescriptorSetLayoutBinding vb[8] = {
+            {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+            {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+            {2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+            {3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+            {4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+            {5, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+            {6, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+            {7, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr}};
+        VkDescriptorSetLayoutCreateInfo li{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
+        li.bindingCount = 8, li.pBindings = vb;
+        if (!ok(f_.vkCreateDescriptorSetLayout(dev_, &li, nullptr, &vmLayout_), "layout da mascara", &err)) return fail_s(err);
+        ++g_live;
+        VkDescriptorSetLayoutBinding sb[4] = {
+            {0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+            {1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+            {2, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+            {3, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr}};
+        li.bindingCount = 4, li.pBindings = sb;
+        if (!ok(f_.vkCreateDescriptorSetLayout(dev_, &li, nullptr, &softLayout_), "layout da borda", &err)) return fail_s(err);
+        ++g_live;
+        VkDescriptorPoolSize       ps[3] = {{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 4}, {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4},
+                                            {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 4}};
+        VkDescriptorPoolCreateInfo pi{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
+        pi.maxSets = 2, pi.poolSizeCount = 3, pi.pPoolSizes = ps;
+        if (!ok(f_.vkCreateDescriptorPool(dev_, &pi, nullptr, &vmPool_), "pool das sombras", &err)) return fail_s(err);
+        ++g_live;
+        VkDescriptorSetLayout       sl[2] = {vmLayout_, softLayout_};
+        VkDescriptorSet             ss[2] = {};
+        VkDescriptorSetAllocateInfo ai{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
+        ai.descriptorPool = vmPool_, ai.descriptorSetCount = 2, ai.pSetLayouts = sl;
+        if (!ok(f_.vkAllocateDescriptorSets(dev_, &ai, ss), "conjuntos das sombras", &err)) return fail_s(err);
+        vmSet_ = ss[0], softSet_ = ss[1];
+        VkPushConstantRange        vpr{VK_SHADER_STAGE_COMPUTE_BIT, 0, 36}, spr{VK_SHADER_STAGE_COMPUTE_BIT, 0, 32};
+        VkPipelineLayoutCreateInfo pl{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+        pl.setLayoutCount = 1, pl.pSetLayouts = &vmLayout_, pl.pushConstantRangeCount = 1, pl.pPushConstantRanges = &vpr;
+        if (!ok(f_.vkCreatePipelineLayout(dev_, &pl, nullptr, &vmPipeLayout_), "layout da mascara", &err)) return fail_s(err);
+        ++g_live;
+        pl.pSetLayouts = &softLayout_, pl.pPushConstantRanges = &spr;
+        if (!ok(f_.vkCreatePipelineLayout(dev_, &pl, nullptr, &softPipeLayout_), "layout da borda", &err)) return fail_s(err);
+        ++g_live;
+        // o mesmo ambiente FP do caminho fiel (a cobertura dos volumes e a mesma)
+        vmMod_ = floatControls_ && denormPreserve_ ? module(kVolumesMaskCompFcd, sizeof kVolumesMaskCompFcd)
+                 : floatControls_                  ? module(kVolumesMaskCompFc, sizeof kVolumesMaskCompFc)
+                                                   : module(kVolumesMaskComp, sizeof kVolumesMaskComp);
+        softMod_ = module(kSoftShadowsComp, sizeof kSoftShadowsComp);
+        if (!vmMod_ || !softMod_) return fail_s("shaders das sombras");
+        for (auto [mod, lay, pipe] : {std::tuple{vmMod_, vmPipeLayout_, &vmPipe_}, std::tuple{softMod_, softPipeLayout_, &softPipe_}}) {
+            VkComputePipelineCreateInfo cp{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
+            cp.stage  = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_COMPUTE_BIT, mod, "main", nullptr};
+            cp.layout = lay;
+            if (!ok(f_.vkCreateComputePipelines(dev_, VK_NULL_HANDLE, 1, &cp, nullptr, pipe), "pipeline das sombras", &err))
+                return fail_s(err);
+            ++g_live;
+        }
+        return true;
+    }
+
+    void writeSoftSets() {
+        VkDescriptorBufferInfo b[4] = {{volVols_.buf, 0, VK_WHOLE_SIZE}, {volTris_.buf, 0, VK_WHOLE_SIZE},
+                                       {volTiles_.buf, 0, VK_WHOLE_SIZE}, {volEnt_.buf, 0, VK_WHOLE_SIZE}};
+        VkDescriptorImageInfo  di{sampler_, depth_.view, VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL};
+        VkDescriptorImageInfo  si{sampler_, shadow_.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+        VkDescriptorImageInfo  ci{VK_NULL_HANDLE, color_.view, VK_IMAGE_LAYOUT_GENERAL};
+        VkDescriptorImageInfo  mi{VK_NULL_HANDLE, shadowMask_.view, VK_IMAGE_LAYOUT_GENERAL};
+        VkWriteDescriptorSet   w[12] = {};
+        for (uint32_t i = 0; i < 12; ++i) w[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, w[i].descriptorCount = 1;
+        for (uint32_t i = 0; i < 8; ++i) {
+            w[i].dstSet = vmSet_, w[i].dstBinding = i;
+            if (i < 4) w[i].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, w[i].pBufferInfo = &b[i];
+        }
+        w[4].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, w[4].pImageInfo = &di;
+        w[5].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, w[5].pImageInfo = &si;
+        w[6].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, w[6].pImageInfo = &ci;
+        w[7].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, w[7].pImageInfo = &mi;
+        for (uint32_t i = 0; i < 4; ++i) w[8 + i].dstSet = softSet_, w[8 + i].dstBinding = i;
+        w[8].descriptorType = w[9].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        w[8].pImageInfo = &di, w[9].pImageInfo = &si;
+        w[10].descriptorType = w[11].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+        w[10].pImageInfo = &ci, w[11].pImageInfo = &mi;
+        f_.vkUpdateDescriptorSets(dev_, 12, w, 0, nullptr);
+        vmSetValid_ = softSetValid_ = true;
+    }
+
     void writeVolSet() {
         VkDescriptorBufferInfo b[4] = {{volVols_.buf, 0, VK_WHOLE_SIZE}, {volTris_.buf, 0, VK_WHOLE_SIZE},
                                        {volTiles_.buf, 0, VK_WHOLE_SIZE}, {volEnt_.buf, 0, VK_WHOLE_SIZE}};
@@ -1318,7 +1430,7 @@ private:
             float    strength;
             uint32_t pad;
         } pc{w_, h_, 1.f / scale_, float(fr.width) / 2.f, float(fr.height) / 2.f, 500.f, rawDepth_ ? 1u : 0u, prep_.depth_bias,
-             prep_.depth_scale, uint32_t(lights_.size()), 0.6f, 0};
+             prep_.depth_scale, uint32_t(lights_.size()), 0.6f, shadowsOn_.load(std::memory_order_relaxed) ? 1u : 0u};
         static_assert(sizeof pc == 48);
         f_.vkCmdBindDescriptorSets(cmd_, VK_PIPELINE_BIND_POINT_COMPUTE, lightPipeLayout_, 0, 1, &lightSet_, 0, nullptr);
         f_.vkCmdPushConstants(cmd_, lightPipeLayout_, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof pc, &pc);
@@ -1460,7 +1572,8 @@ private:
         if (fbB_) f_.vkDestroyFramebuffer(dev_, fbB_, nullptr), --g_live, fbB_ = VK_NULL_HANDLE;
         if (passB_) f_.vkDestroyRenderPass(dev_, passB_, nullptr), --g_live, passB_ = VK_NULL_HANDLE;
         freeImage(color_), freeImage(depth_), freeImage(shadow_), freeImage(aoImg_), freeImage(aoHalf_), freeImage(aoSurf_);
-        st_.ao_image_bytes = 0, aoSurfBound_ = false, lightSetValid_ = false;
+        freeImage(shadowMask_);
+        st_.ao_image_bytes = 0, aoSurfBound_ = false, lightSetValid_ = false, vmSetValid_ = softSetValid_ = false;
         aoSetValid_ = false;
         freeBuffer(heads_), freeBuffer(frags_), freeBuffer(readback_), freeBuffer(headerRead_);
     }
@@ -1612,6 +1725,9 @@ private:
     // rasterizador em software. Os volumes da lista 3 (sobre as translucidas) nao sao aplicados (contados).
     bool volumes(const CommandList& cl) {
         const FrameParams& fr = cl.frame;
+        // N9.6 fase 4: desligadas, a memoria da mascara volta (os conjuntos dela nao estao vinculados neste quadro)
+        if (!shadowsOn_.load(std::memory_order_relaxed) && shadowMask_.img)
+            freeImage(shadowMask_), vmSetValid_ = softSetValid_ = false;
         bool               any = false;
         for (const ModifierVolume& m : cl.modifiers) {
             if (m.list == ListType::TranslucentModifier) ++st_.translucent_volumes_ignored;
@@ -1669,8 +1785,22 @@ private:
             !put(volTiles_, tiles.data(), tiles.size() * 4) || !put(volEnt_, ent.data(), ent.size() * 4))
             return false;
         if (rewrite) writeVolSet();
-        f_.vkCmdBindPipeline(cmd_, VK_PIPELINE_BIND_POINT_COMPUTE, volPipe_);
-        f_.vkCmdBindDescriptorSets(cmd_, VK_PIPELINE_BIND_POINT_COMPUTE, volPipeLayout_, 0, 1, &volSet_, 0, nullptr);
+        // N9.6 fase 4: com as sombras aprimoradas (a Remastered, o render do framebuffer), a mascara e a borda suave
+        bool soft = shadowsOn_.load(std::memory_order_relaxed) && fr.height == 480 && fr.width >= 640 && softObjects();
+        if (soft && !shadowMask_.img) {
+            MemScope mc(telemetry::Mem::Targets);
+            shadowMask_ = makeImage(w_, h_, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_STORAGE_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
+            vmSetValid_ = softSetValid_ = false;
+            if (!shadowMask_.img) soft = false;  // sem memoria: o caminho fiel
+        }
+        if (soft) {
+            if (rewrite || !vmSetValid_ || !softSetValid_) writeSoftSets();
+            imageBarrier(shadowMask_.img, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 0,
+                         VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT);
+        }
+        f_.vkCmdBindPipeline(cmd_, VK_PIPELINE_BIND_POINT_COMPUTE, soft ? vmPipe_ : volPipe_);
+        f_.vkCmdBindDescriptorSets(cmd_, VK_PIPELINE_BIND_POINT_COMPUTE, soft ? vmPipeLayout_ : volPipeLayout_, 0, 1,
+                                   soft ? &vmSet_ : &volSet_, 0, nullptr);
         struct {
             uint32_t w, h, tilesX, scale;
             float    invScale, fpuOff;
@@ -1679,8 +1809,26 @@ private:
         } pc{w_, h_, tilesX, fr.shadow_scale & 0xFF, 1.f / scale_, fr.sample_center ? 0.5f : 0.f, rawDepth_ ? 1u : 0u,
              prep_.depth_bias, prep_.depth_scale};
         static_assert(sizeof pc == 36);
-        f_.vkCmdPushConstants(cmd_, volPipeLayout_, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof pc, &pc);
+        f_.vkCmdPushConstants(cmd_, soft ? vmPipeLayout_ : volPipeLayout_, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof pc, &pc);
         f_.vkCmdDispatch(cmd_, (w_ + 7) / 8, (h_ + 7) / 8, 1);
+        if (soft) {  // a borda suave: a mascara media da vizinhanca escolhe a escala (o interior fica com a conta do original)
+            imageBarrier(shadowMask_.img, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                         VK_ACCESS_SHADER_WRITE_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_READ_BIT);
+            const int radius = std::max(1, int(std::lround(2.0f * scale_)));  // 2 pixels do jogo
+            struct {
+                uint32_t w, h, scale;
+                int32_t  radius, stride;
+                uint32_t raw;
+                float    bias, depthScale;
+            } sp{w_, h_, fr.shadow_scale & 0xFF, radius, std::max(1, radius / 4), rawDepth_ ? 1u : 0u, prep_.depth_bias,
+                 prep_.depth_scale};
+            static_assert(sizeof sp == 32);
+            f_.vkCmdBindPipeline(cmd_, VK_PIPELINE_BIND_POINT_COMPUTE, softPipe_);
+            f_.vkCmdBindDescriptorSets(cmd_, VK_PIPELINE_BIND_POINT_COMPUTE, softPipeLayout_, 0, 1, &softSet_, 0, nullptr);
+            f_.vkCmdPushConstants(cmd_, softPipeLayout_, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof sp, &sp);
+            f_.vkCmdDispatch(cmd_, (w_ + 7) / 8, (h_ + 7) / 8, 1);
+            ++st_.soft_shadow_frames;
+        }
         // a cor escrita pelo compute: lida e escrita pelo passe B e pelas copias
         imageBarrier(color_.img, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
                      VK_ACCESS_SHADER_WRITE_BIT,
@@ -2029,6 +2177,16 @@ private:
             if (aoPipeLayout_) f_.vkDestroyPipelineLayout(dev_, aoPipeLayout_, nullptr), --g_live, aoPipeLayout_ = VK_NULL_HANDLE;
             if (aoPool_) f_.vkDestroyDescriptorPool(dev_, aoPool_, nullptr), --g_live, aoPool_ = VK_NULL_HANDLE;
             if (aoLayout_) f_.vkDestroyDescriptorSetLayout(dev_, aoLayout_, nullptr), --g_live, aoLayout_ = VK_NULL_HANDLE;
+            // N9.6 fase 4: as sombras aprimoradas
+            for (VkPipeline* p : {&vmPipe_, &softPipe_})
+                if (*p) f_.vkDestroyPipeline(dev_, *p, nullptr), --g_live, *p = VK_NULL_HANDLE;
+            for (VkPipelineLayout* l : {&vmPipeLayout_, &softPipeLayout_})
+                if (*l) f_.vkDestroyPipelineLayout(dev_, *l, nullptr), --g_live, *l = VK_NULL_HANDLE;
+            if (vmPool_) f_.vkDestroyDescriptorPool(dev_, vmPool_, nullptr), --g_live, vmPool_ = VK_NULL_HANDLE;
+            for (VkDescriptorSetLayout* l : {&vmLayout_, &softLayout_})
+                if (*l) f_.vkDestroyDescriptorSetLayout(dev_, *l, nullptr), --g_live, *l = VK_NULL_HANDLE;
+            for (VkShaderModule* m : {&vmMod_, &softMod_})
+                if (*m) f_.vkDestroyShaderModule(dev_, *m, nullptr), --g_live, *m = VK_NULL_HANDLE;
             // N9.6 fase 3: a luz
             if (lightPipe_) f_.vkDestroyPipeline(dev_, lightPipe_, nullptr), --g_live, lightPipe_ = VK_NULL_HANDLE;
             if (lightPipeLayout_) f_.vkDestroyPipelineLayout(dev_, lightPipeLayout_, nullptr), --g_live, lightPipeLayout_ = VK_NULL_HANDLE;

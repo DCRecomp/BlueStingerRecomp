@@ -44,6 +44,11 @@ $jobs = @(
     @("ao_up_surf_comp.h", "ao.comp", "kAoUpSurfComp", @("-DHALF", "-DBLUR", "-DSURF")),
     # N9.6 fase 3: a luz das fontes do catalogo de materiais
     @("lights_comp.h", "lights.comp", "kLightsComp", @()),
+    # N9.6 fase 4: a mascara dos volumes (as tres variantes do ambiente FP) e a borda suave
+    @("volumes_mask_comp.h", "volumes.comp", "kVolumesMaskComp", @("-DMASK")),
+    @("volumes_mask_comp_fc.h", "volumes.comp", "kVolumesMaskCompFc", @("-DMASK", "-DFLOAT_CONTROLS")),
+    @("volumes_mask_comp_fcd.h", "volumes.comp", "kVolumesMaskCompFcd", @("-DMASK", "-DFLOAT_CONTROLS", "-DDENORM_PRESERVE")),
+    @("soft_shadows_comp.h", "soft_shadows.comp", "kSoftShadowsComp", @()),
     # N7c: apresentacao direta e reducao da resolucao interna
     @("present_vert.h", "present.vert", "kPresentVert", @()),
     @("present_frag.h", "present.frag", "kPresentFrag", @()),

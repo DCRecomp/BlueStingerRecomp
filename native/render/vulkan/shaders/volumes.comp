@@ -21,6 +21,11 @@ layout(std430, set = 0, binding = 3) readonly buffer Entries { uvec2 ent[]; };  
 layout(set = 0, binding = 4) uniform sampler2D depthTex;                           // o aspecto de profundidade
 layout(set = 0, binding = 5) uniform usampler2D stencilTex;                        // o aspecto de stencil (bit de sombra)
 layout(set = 0, binding = 6, rgba8) uniform image2D color;
+#ifdef MASK
+// N9.6 fase 4 (-DMASK, so a Remastered com as sombras aprimoradas): em vez de escalar a cor, grava a mascara "dentro do
+// volume" (1/0) dos pixels com o bit de sombra; soft_shadows.comp aplica a escala com a borda suave
+layout(set = 0, binding = 7, rgba8) uniform writeonly image2D maskImg;
+#endif
 
 layout(push_constant) uniform P {
     uvec2 size;       // o alvo
@@ -97,6 +102,10 @@ void main() {
         }
         i = j;
     }
+#ifdef MASK
+    imageStore(maskImg, ivec2(p), vec4((st & 1u) != 0u ? 1.0 : 0.0));
+    return;
+#endif
     if ((st & 1u) == 0u) return;
     const uvec4 c = min(uvec4(floor(imageLoad(color, ivec2(p)) * 255.0 + 0.5)), uvec4(255u));  // RGBA
     const uvec3 s = (c.rgb * pc.scale) >> 8u;

@@ -196,6 +196,8 @@ public:
     void           setAmbientOcclusion(bool on, uint32_t quality = 1);
     // N9.6 fase 3: a luz das fontes do catalogo (render_capture::set_lighting). So o Vulkan.
     void           setLighting(bool on);
+    // N9.6 fase 4: as sombras aprimoradas (render_capture::set_shadows). So o Vulkan.
+    void           setShadows(bool on);
     void           setCamera(const native::settings::CameraSettings& s);  // N7c: camera livre (modo e opcoes)
     RenderProvider renderer() const { return RenderProvider(renderer_.load()); }
 
@@ -250,6 +252,7 @@ private:
     std::atomic<int64_t>                           widePending_{-1};           // N9.5: -1 = nenhum pedido
     std::atomic<int>                               aoPending_{-1};             // N9.6: -1 = nenhum pedido; bit 0 + qualidade
     std::atomic<int>                               lightPending_{-1};          // N9.6 fase 3: -1 = nenhum pedido, 0/1
+    std::atomic<int>                               shadowPending_{-1};         // N9.6 fase 4: -1 = nenhum pedido, 0/1
     bool                                           cameraPending_ = false;     // protegido por reqMutex_
     native::settings::CameraSettings               camera_;
     void                                           notifyRequest();

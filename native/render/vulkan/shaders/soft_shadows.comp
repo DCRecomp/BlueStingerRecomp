@@ -1,0 +1,57 @@
+#version 450
+#extension GL_GOOGLE_include_directive : require
+// N9.6 fase 4 (docs/N9-6-AUDITORIA.md secao 11, D6-4 a): as sombras originais (volumes modificadores da lista 1) com a borda
+// suave, so na Remastered com as sombras aprimoradas. volumes.comp -DMASK grava a mascara "dentro do volume" dos pixels com
+// o bit de sombra (sem escalar a cor); aqui, por pixel com o bit de sombra, a mascara media da vizinhanca (pixels com o bit e
+// de profundidade parecida: a penumbra nao atravessa bordas de profundidade) escolhe a escala: m = 1 (o interior) aplica a
+// conta inteira do original (cor x FPU_SHAD_SCALE / 256, a mesma de volumes.comp), 0 < m < 1 (a borda) a mistura, m = 0 nada.
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(set = 0, binding = 0) uniform sampler2D depthTex;
+layout(set = 0, binding = 1) uniform usampler2D stencilTex;  // bit 0 sombra
+layout(set = 0, binding = 2, rgba8) uniform image2D color;
+layout(set = 0, binding = 3, rgba8) uniform readonly image2D maskImg;
+
+layout(push_constant) uniform P {
+    uvec2 size;
+    uint  scale;     // FPU_SHAD_SCALE bits 7-0
+    int   radius;    // a penumbra em pixels do alvo
+    int   stride;    // o passo das amostras (o raio grande fica com ~ 9 x 9 amostras)
+    uint  rawDepth;
+    float depthBias, depthScale;
+} pc;
+
+#include "exact.glsl"
+
+bool shadowBit(ivec2 q) { return (texelFetch(stencilTex, q, 0).r & 1u) != 0u; }
+
+float invw(ivec2 q) {
+    const float d = texelFetch(depthTex, q, 0).r;
+    return pc.rawDepth != 0u ? d : d / pc.depthScale + pc.depthBias;
+}
+
+void main() {
+    const ivec2 p = ivec2(gl_GlobalInvocationID.xy);
+    if (p.x >= int(pc.size.x) || p.y >= int(pc.size.y) || !shadowBit(p)) return;
+    const float z0 = invw(p);
+    const ivec2 mx = ivec2(int(pc.size.x) - 1, int(pc.size.y) - 1);
+    float       sum = 0.0, wsum = 0.0;
+    for (int y = -pc.radius; y <= pc.radius; y += pc.stride)
+        for (int x = -pc.radius; x <= pc.radius; x += pc.stride) {
+            const ivec2 q = p + ivec2(x, y);
+            if (q.x < 0 || q.y < 0 || q.x > mx.x || q.y > mx.y || !shadowBit(q)) continue;
+            const float z = invw(q);
+            const float w = z0 > 0.0 ? exp(-abs(z - z0) / (0.03 * z0)) : (q == p ? 1.0 : 0.0);
+            const float r = float(x * x + y * y) / float(pc.radius * pc.radius + 1);
+            const float g = w * exp(-2.0 * r);
+            sum += imageLoad(maskImg, q).r * g, wsum += g;
+        }
+    const float m = wsum > 0.0 ? sum / wsum : imageLoad(maskImg, p).r;
+    if (!(m > 0.002)) return;  // fora de qualquer volume: a cor do jogo
+    const uvec4 c = min(uvec4(floor(imageLoad(color, p) * 255.0 + 0.5)), uvec4(255u));
+    const uvec3 s = (c.rgb * pc.scale) >> 8u;
+    const vec3  full = vec3(k255[s.r], k255[s.g], k255[s.b]);  // a conta do original (volumes.comp)
+    vec4        o    = imageLoad(color, p);
+    o.rgb            = m >= 0.998 ? full : mix(o.rgb, full, m);
+    imageStore(color, p, o);
+}

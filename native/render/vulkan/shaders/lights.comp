@@ -6,6 +6,9 @@
 // normal saem da profundidade como no AO (ao.comp); cada luz soma cor x (1 - d/R)^2 x max(0, n.l); a cor da cena (a luz
 // original e o material juntos, que a IR nao separa: secao 2.4) e multiplicada por (1 + forca x soma). Fora da cena (HUD,
 // telas 2D, fundo) e fora do raio de todas as luzes, a cor nao muda.
+// N9.6 fase 4 (D6-4 b): com as sombras aprimoradas, a sombra de contato de cada luz em espaco de tela: o caminho do ponto
+// ate a luz em 12 passos, cada passo projetado na tela; se a profundidade ali mostra algo a frente do caminho (ate kThick
+// de espessura), a luz daquela fonte nao chega ao ponto.
 layout(local_size_x = 8, local_size_y = 8) in;
 
 layout(set = 0, binding = 0) uniform sampler2D depthTex;
@@ -25,7 +28,7 @@ layout(push_constant) uniform P {
     float depthBias, depthScale;
     uint  count;     // luzes no quadro
     float strength;  // forca geral
-    uint  pad;
+    uint  flags;     // bit 0: as sombras de contato (fase 4)
 } pc;
 
 bool scene(ivec2 q) { return (texelFetch(stencilTex, q, 0).r & 2u) != 0u; }
@@ -41,6 +44,23 @@ vec3 viewPos(ivec2 q) {
     const float z = 1.0 / iw;
     const vec2  g = (vec2(q) + 0.5) * pc.invScale;
     return vec3((g.x - pc.cx) * z / pc.dist, (g.y - pc.cy) * z / pc.dist, z);
+}
+
+// N9.6 fase 4: algo da cena entre o ponto P e a luz L (na camera), pela profundidade na tela
+bool occluded(vec3 P, vec3 L) {
+    const float kThick = 24.0;  // fino: um objeto bem a frente do caminho (na tela, diante da luz) nao bloqueia
+    const ivec2 mx     = ivec2(int(pc.size.x) - 1, int(pc.size.y) - 1);
+    for (int s = 1; s <= 12; ++s) {
+        const vec3 X = mix(P, L, float(s) / 13.0);
+        if (!(X.z > 1.5)) break;
+        const vec2  g = vec2(pc.cx + pc.dist * X.x / X.z, pc.cy + pc.dist * X.y / X.z);  // coordenadas do jogo
+        const ivec2 q = ivec2(floor(g / pc.invScale));
+        if (q.x < 0 || q.y < 0 || q.x > mx.x || q.y > mx.y) break;
+        if (!scene(q)) continue;
+        const float qz = viewPos(q).z;
+        if (qz > 1.5 && qz < X.z - 4.0 && X.z - qz < kThick) return true;
+    }
+    return false;
 }
 
 void main() {
@@ -65,6 +85,7 @@ void main() {
         const float R  = lights[i].pos.w;
         if (!(dl < R) || dl <= 1e-3) continue;
         const float att = (1.0 - dl / R) * (1.0 - dl / R);
+        if ((pc.flags & 1u) != 0u && occluded(P, lights[i].pos.xyz)) continue;  // N9.6 fase 4: a sombra de contato
         add += lights[i].col.rgb * (lights[i].col.w * att * max(0.0, dot(n, L / dl)));
     }
     if (!(max(add.r, max(add.g, add.b)) > 0.0)) return;  // fora do raio de todas: a cor do jogo

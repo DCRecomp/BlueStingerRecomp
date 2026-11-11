@@ -125,6 +125,7 @@ struct Stats {
     uint64_t    vk_ao_surface_frames = 0;                          // N9.6 fase 2b: renders com o AO nas translucidas dele
     uint64_t    vk_light_frames = 0;                               // N9.6 fase 3: renders com a luz das fontes
     uint32_t    vk_lights_max = 0;                                 // o maior numero de luzes num render
+    uint64_t    vk_soft_shadow_frames = 0;                         // N9.6 fase 4: renders com a borda suave dos volumes
     uint64_t    cmp_frames = 0, cmp_pixels = 0, cmp_diff = 0, cmp_diff8 = 0, cmp_worst_render = 0;
     uint32_t    cmp_max = 0;
     double      cmp_worst_fraction = 0;
@@ -183,6 +184,11 @@ bool materials();
 // desligada (o padrao; a Original nunca liga) = a imagem de antes. Thread do jogo.
 void set_lighting(bool on);
 bool lighting();
+// N9.6 fase 4: as sombras aprimoradas (os volumes originais com a borda suave e as sombras de contato da luz das fontes),
+// so no Mode::Native com o Vulkan e no render do framebuffer; desligadas (o padrao; a Original nunca liga) = a imagem de
+// antes. Thread do jogo.
+void set_shadows(bool on);
+bool shadows();
 uint32_t ambient_occlusion_quality();
 // N9.5 fase 4: o pilar dinamico de cada faixa no ultimo render largo (diagnostico das capturas, tools/dev/n95_headless.py H6)
 struct PillarSides {
