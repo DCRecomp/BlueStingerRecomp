@@ -194,6 +194,8 @@ public:
     // N9.6 fase 1: oclusao ambiente da Remastered (render_capture::set_ambient_occlusion). So o Vulkan.
     // quality: 0 baixa, 1 media, 2 alta (render_capture::set_ambient_occlusion_quality)
     void           setAmbientOcclusion(bool on, uint32_t quality = 1);
+    // N9.6 fase 3: a luz das fontes do catalogo (render_capture::set_lighting). So o Vulkan.
+    void           setLighting(bool on);
     void           setCamera(const native::settings::CameraSettings& s);  // N7c: camera livre (modo e opcoes)
     RenderProvider renderer() const { return RenderProvider(renderer_.load()); }
 
@@ -247,6 +249,7 @@ private:
     std::atomic<float>                             scalePending_{0.f};         // 0 = nenhum pedido
     std::atomic<int64_t>                           widePending_{-1};           // N9.5: -1 = nenhum pedido
     std::atomic<int>                               aoPending_{-1};             // N9.6: -1 = nenhum pedido; bit 0 + qualidade
+    std::atomic<int>                               lightPending_{-1};          // N9.6 fase 3: -1 = nenhum pedido, 0/1
     bool                                           cameraPending_ = false;     // protegido por reqMutex_
     native::settings::CameraSettings               camera_;
     void                                           notifyRequest();

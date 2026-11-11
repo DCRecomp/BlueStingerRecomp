@@ -14,6 +14,8 @@ de teste, roteiro passo_load_slot1: LOAD do slot 1 e o corredor RCG02; capturas 
      Remastered e o AO so chega a elas com o AO ligado;
   L3 Remastered 16:9 desligado x ligado: estado e efeitos identicos; a imagem larga (slot) so escurece e muda;
   L4 Remastered 16:9 em 1080 linhas desligado x ligado: idem na imagem larga em alta resolucao.
+  L5 (N9.6 fase 3) a luz das fontes do catalogo: a Original com --iluminacao ligado sai com 2; Remastered 4:3 desligada x
+     ligada: estado por passo e efeitos identicos; "luz das fontes em N renders" > 0 so na ligada; a luz so clareia.
 
   python tools/dev/n96_luz.py --exe <produto> --exe-validacao <validacao> --data <data> --cartao <pasta de saves sintetica>
                               [--casos L1,L2,L3,L4] [--qualidade baixa|media|alta] [--manter]
@@ -42,7 +44,7 @@ def main():
     ap.add_argument("--exe-validacao", required=True)
     ap.add_argument("--data", required=True)
     ap.add_argument("--cartao", required=True)
-    ap.add_argument("--casos", default="L1,L2,L3,L4")
+    ap.add_argument("--casos", default="L1,L2,L3,L4,L5")
     ap.add_argument("--manter", action="store_true")
     ap.add_argument("--qualidade", default="media", choices=("baixa", "media", "alta"))
     a = ap.parse_args()
@@ -79,6 +81,10 @@ def main():
             hi = ["--proporcao", "16:9", "--resolucao-interna", "1080"]
             r["h_off"] = Corrida(base, "h_off", a, "remastered", nat + hi)
             r["h_on"] = Corrida(base, "h_on", a, "remastered", nat + hi + lig)
+        if "L5" in casos:  # N9.6 fase 3: a luz das fontes
+            r["l5o"] = Corrida(base, "l5o", a, "original", nat + ["--iluminacao", "ligado"], False)
+            r["l5_off"] = Corrida(base, "l5_off", a, "remastered", nat)
+            r["l5_on"] = Corrida(base, "l5_on", a, "remastered", nat + ["--iluminacao", "ligado"])
         with ThreadPoolExecutor(3) as ex:
             list(ex.map(lambda c: c.rodar(), r.values()))
 
@@ -161,6 +167,26 @@ def main():
             igual_estado(r["w_off"], r["w_on"], "L3 16:9 desligado x ligado")
             escurece(r["w_off"], r["w_on"], "L3", "_hd")
             qualidade_certa(r["w_on"], "L3")
+        if "L5" in casos:
+            import re
+            def luzes(c):
+                m = re.search(r"luz das fontes em (\d+) renders \(ate (\d+) luzes\)", c.log)
+                return (int(m.group(1)), int(m.group(2))) if m else (-1, -1)
+            check("L5 Original com --iluminacao ligado recusada", r["l5o"].rc == 2, "rc %d" % r["l5o"].rc)
+            off5, on5 = r["l5_off"], r["l5_on"]
+            igual_estado(off5, on5, "L5 4:3 luz desligada x ligada")
+            lo, ln = luzes(off5), luzes(on5)
+            check("L5 luz das fontes so na ligada", lo[0] == 0 and ln[0] > 0 and ln[1] >= 1,
+                  "desligada %d, ligada %d renders (ate %d luzes)" % (lo[0], ln[0], ln[1]))
+            check("L5 log da troca", "[render] luz das fontes: ligada" in on5.log and "luz das fontes: ligada" not in off5.log)
+            for v in VBS:
+                g0, g1 = off5.img("v%s.bmp" % v), on5.img("v%s.bmp" % v)
+                if g0 is None or g1 is None or g0.shape != g1.shape:
+                    check("L5 %s: capturas" % v, False, "ausente ou de outro tamanho")
+                    continue
+                menos = int((g1 < g0).any(axis=2).sum())
+                mudou = float((g1 != g0).any(axis=2).mean())
+                check("L5 %s: a luz so clareia" % v, menos == 0, "%d pixels mais escuros; %.1f %% mudaram" % (menos, 100 * mudou))
         if "L4" in casos:
             igual_estado(r["h_off"], r["h_on"], "L4 16:9 1080 desligado x ligado")
             escurece(r["h_off"], r["h_on"], "L4", "_hd")

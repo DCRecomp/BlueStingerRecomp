@@ -366,3 +366,52 @@ translúcidas que cobrem a cena (seção 8).
   das translúcidas do catálogo), fora desta fase.
 - O inventário das outras áreas (só o quarto do `load` foi medido) e os materiais seguintes do plano (especular, relevo,
   molhado, emissivos).
+
+## 10. Fase 3: a luz das fontes (emissivos e luzes pontuais dinâmicas) (2026-11-11)
+
+Autorizada com as fases seguintes ("Vai para as próximas fases", 2026-11-11). **Só nível 1 nesta fase**; a validação vai
+para a bateria final do N9.6 (`docs/N9-6-TESTES-FINAIS.md`, seção 4).
+
+### 10.1 Inventário das fontes
+
+- O brilho da textura sozinho não acha as lâmpadas: as texturas mais claras das salas são pele, olho, fonte e placa (a cor
+  final vem da textura vezes a cor do vértice). As fontes foram achadas pelos **desenhos sob as luzes visíveis** dos quadros
+  (`bs-ir-tela texturas` nas IRs do corredor RCG02, do quarto, do cais e do exterior; `tmp/sessao-20261110/n96/f3`) e
+  conferidas pela textura exportada.
+- **Entraram (kMaterialEmissive):** `64x64-ea09b01a84c2c4aa` (o brilho azul das faixas de luz do teto do corredor,
+  translúcida One/Zero), `64x16-10b0adb7ecfefb45` (a placa EXIT, opaca), `64x32-14cb38a2d38b4ed9` (a placa HEIGHT LIMIT,
+  opaca), `64x64-e6aa04e85bbde090` (o brilho laranja da faixa do chão do quarto). **Ficou de fora:** o fogo do cais
+  (`256x256-ab9ef1baad7940ad`), um atlas com fogo e fumaça juntos (a fumaça não é fonte).
+- A cor de cada luz sai dos texels (`emissive_color`: a média pesada pelo brilho e pelo alfa, normalizada no maior canal),
+  calculada no envio da textura; o catálogo continua só com identidades.
+
+### 10.2 Método
+
+- **Na CPU, antes de gravar os comandos** (`vk_device` `gatherLights`): cada desenho de uma fonte no quadro vira uma luz
+  pontual no centro dos vértices, na câmera pela projeção do Ninja (z = 1/(1/w), dist 500, cx e cy no centro do quadro do
+  jogo); as que ficam a menos de 80 unidades viram uma (as partes de uma lâmpada); no máximo 16; raio 400, intensidade 1.
+- **Passe de luz** (`lights.comp`, depois do AO e antes dos volumes, só com luz no quadro): por pixel da cena 3D, a posição e
+  a normal como no AO; cada luz soma cor × (1 − d/R)² × max(0, n·l); a cor da cena (luz original e material juntos, 2.4) é
+  multiplicada por (1 + 0,6 × soma), limitada a 1. Fora da cena e do raio, nada muda (D6-2 i: a luz original fica e a nova
+  soma).
+- **Onde liga:** só na Remastered com o Vulkan, no render do framebuffer; a chave `[imagem] iluminacao` do `graficos.toml`
+  (desligada por padrão; `Features.lighting` só na Remastered) e `--iluminacao ligado|desligado` (só na execução, não
+  gravado; a Original e o software recusam com 2). A entrada do menu continua "em breve" até a fase 5, como a do SSAO.
+- Recursos sob demanda: os objetos do passe e o buffer das luzes (16 × 32 bytes) nascem na primeira vez que há luz; uma
+  falha desliga só a luz.
+
+### 10.3 Nível 1 (2026-11-11)
+
+- Os três presets compilados; `bs_unit_tests` 375/0; `bs_render_tests` 98/0: `render_vulkan_lighting_emissive` (o chão junto
+  da lâmpada clareia 1,25×; a parede fora do raio e o HUD bit a bit; a luz só soma; as duas partes da lâmpada viram uma luz;
+  sem a fonte no quadro, nenhuma luz; desligada igual ao software) e `material_emissive_color`; ctest 30/30 e 23/23;
+  `gera_spirv.ps1 -Conferir` 35/35.
+- A suíte ganhou o L5 (`n96_luz.py`: a recusa da Original, o estado igual, a luz só na ligada, só clareia) e a matriz o
+  sufixo `+luz` (`n95_desempenho.py`), para a bateria final. **Nada disso rodou ainda.**
+
+### 10.4 Riscos
+
+- A luz multiplica a cor final (o material não se separa da luz original pela IR): superfícies escuras clareiam pouco, as
+  claras saturam; o raio, a intensidade e a força (400, 1, 0,6) são valores de partida, a conferir na janela.
+- A luz não tem sombra (a fase 4 trata as sombras); paredes entre a luz e o ponto não bloqueiam.
+- As fontes são só as do corredor e do quarto; as outras áreas pedem inventário.

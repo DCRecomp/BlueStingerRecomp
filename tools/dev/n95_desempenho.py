@@ -19,7 +19,8 @@ cada caso (telemetria.csv, saida.txt).
   python tools/dev/n95_desempenho.py --exe build/msvc-release/app/bluestinger.exe --data <data> --cartao <cartao>
          --saida tmp/<pasta> [--janela] [--trechos corredor,cais,exterior] [--configs 4:3@480,16:9@2160] [--gpu <nome>]
 N9.6 fase 1: uma configuracao com o sufixo +ao (ex.: 16:9@1080+ao) liga a oclusao ambiente na qualidade media (meia
-resolucao); +ao-alta (o alvo inteiro, a primeira versao), +ao-media e +ao-baixa escolhem a qualidade.
+resolucao); +ao-alta (o alvo inteiro, a primeira versao), +ao-media e +ao-baixa escolhem a qualidade. Fase 3: +luz liga a
+luz das fontes do catalogo (combinavel: 16:9@1080+ao-media+luz).
 """
 import argparse
 import csv
@@ -113,16 +114,24 @@ def resumir(linhas, de, ate, inicio):
 
 
 def rodar(a, cfg, rota, de):
-    # N9.6 fase 1: o sufixo "+ao[-qualidade]" liga a oclusao ambiente (graficos.toml na janela, --ssao ligado sem janela)
-    base, _, suf = cfg.partition("+")
-    ao = suf == "ao" or suf.startswith("ao-")
-    qual = suf[3:] if suf.startswith("ao-") else "media"
-    if suf and (not ao or qual not in ("baixa", "media", "alta")):
+    # N9.6 fase 1: o sufixo "+ao[-qualidade]" liga a oclusao ambiente (graficos.toml na janela, --ssao ligado sem janela);
+    # fase 3: "+luz" liga a luz das fontes do catalogo ([imagem] iluminacao, --iluminacao ligado); os dois se combinam
+    base, *sufs = cfg.split("+")
+    ao = luz = False
+    qual = "media"
+    for suf in sufs:
+        if suf == "ao" or suf.startswith("ao-"):
+            ao, qual = True, suf[3:] if suf.startswith("ao-") else "media"
+        elif suf == "luz":
+            luz = True
+        else:
+            raise SystemExit("configuracao invalida: %s" % cfg)
+    if qual not in ("baixa", "media", "alta"):
         raise SystemExit("configuracao invalida: %s" % cfg)
     prop, alt = base.split("@")
     alt = int(alt)
     roteiro, cartao, vblanks = ROTAS[rota]
-    nome = "%s_%s_%d%s" % (rota, prop.replace(":", "x"), alt, "_ao_" + qual if ao else "")
+    nome = "%s_%s_%d%s%s" % (rota, prop.replace(":", "x"), alt, "_ao_" + qual if ao else "", "_luz" if luz else "")
     d = os.path.join(a.saida, nome)
     if os.path.isdir(d):
         shutil.rmtree(d)
@@ -130,9 +139,11 @@ def rodar(a, cfg, rota, de):
     exe = os.path.join(d, os.path.basename(a.exe))
     shutil.copy2(a.exe, exe)
     open(os.path.join(d, "instalacao.toml"), "w").write('[edicao]\nperfil = "remastered"\n')
-    open(os.path.join(d, "graficos.toml"), "w").write(GRAFICOS.format(res=RES[alt], prop=prop) +
-                                                     ("[efeitos]\nssao = true\nssao_qualidade = \"%s\"\n" % qual
-                                                      if ao else ""))
+    graf = GRAFICOS.format(res=RES[alt], prop=prop)
+    if luz:  # a chave fica na secao [imagem], a primeira do modelo
+        graf = graf.replace("[imagem]\n", "[imagem]\niluminacao = true\n", 1)
+    open(os.path.join(d, "graficos.toml"), "w").write(graf + ("[efeitos]\nssao = true\nssao_qualidade = \"%s\"\n" % qual
+                                                              if ao else ""))
     saves = os.path.join(d, "saves")
     if cartao:
         shutil.copytree(a.cartao, saves)
@@ -153,6 +164,8 @@ def rodar(a, cfg, rota, de):
             cmd += ["--resolucao-interna", str(alt)]
         if ao:
             cmd += ["--ssao", "ligado", "--ssao-qualidade", qual]
+        if luz:
+            cmd += ["--iluminacao", "ligado"]
     t0 = time.time()
     with open(os.path.join(d, "saida.txt"), "w", encoding="utf-8") as out:
         p = subprocess.Popen(cmd, stdout=out, stderr=subprocess.STDOUT, env=env, cwd=d)

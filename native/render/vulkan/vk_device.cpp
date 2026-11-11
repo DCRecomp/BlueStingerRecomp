@@ -16,6 +16,7 @@
 #include "render/vulkan/spirv/ao_half_comp.h"
 #include "render/vulkan/spirv/ao_up_comp.h"
 #include "render/vulkan/spirv/ao_up_surf_comp.h"
+#include "render/vulkan/spirv/lights_comp.h"
 #include "render/vulkan/spirv/volumes_comp.h"
 #include "render/vulkan/spirv/volumes_comp_fc.h"
 #include "render/vulkan/spirv/volumes_comp_fcd.h"
@@ -82,6 +83,7 @@ struct Tex {
     VkDescriptorSet set = VK_NULL_HANDLE;
     bool            ready = false;  // ja recebeu dados (layout de leitura)
     uint32_t        material = 0;   // N9.6 fase 2b: os bits do catalogo de materiais (set_texture_material)
+    uint32_t        light = 0xFFFFFF;  // N9.6 fase 3: a cor da luz de uma fonte (set_texture_light)
 };
 
 class VkDev final : public VulkanDevice, public VkBase, public SlotSource {
@@ -311,6 +313,10 @@ public:
     void  set_always_slot(bool on) override { alwaysSlot_ = on; }
     void  set_ambient_occlusion(bool on) override { aoOn_.store(on, std::memory_order_relaxed); }
     void  set_ambient_occlusion_quality(AoQuality q) override { aoQuality_.store(uint8_t(q), std::memory_order_relaxed); }
+    void  set_lighting(bool on) override { lightOn_.store(on, std::memory_order_relaxed); }  // N9.6 fase 3
+    void  set_texture_light(TextureHandle t, uint32_t rgb) override {  // N9.6 fase 3
+        if (auto it = texs_.find(t.value); it != texs_.end()) it->second.light = rgb;
+    }
     void  set_texture_material(TextureHandle t, uint32_t flags) override {  // N9.6 fase 2b
         if (auto it = texs_.find(t.value); it != texs_.end()) it->second.material = flags;
     }
@@ -622,6 +628,20 @@ private:
     VkPipeline            volPipe_ = VK_NULL_HANDLE;
     // N9.6 fase 1: oclusao ambiente (ao.comp): o AO do quadro (RGBA8, criado na primeira vez que liga), o conjunto e os
     // dois computes (o calculo e a media com a multiplicacao da cor)
+    // N9.6 fase 3: a luz das fontes do catalogo (lights.comp): as luzes do quadro (na CPU), o buffer delas e os objetos do
+    // passe, criados na primeira vez que ha luz
+    struct LightGpu { float pos[4], col[4]; };
+    static constexpr uint32_t kMaxLights = 16;
+    std::vector<LightGpu> lights_;
+    Buffer                lightBuf_;
+    VkDescriptorSetLayout lightLayout_ = VK_NULL_HANDLE;
+    VkDescriptorPool      lightPool_ = VK_NULL_HANDLE;
+    VkDescriptorSet       lightSet_ = VK_NULL_HANDLE;
+    VkPipelineLayout      lightPipeLayout_ = VK_NULL_HANDLE;
+    VkShaderModule        lightMod_ = VK_NULL_HANDLE;
+    VkPipeline            lightPipe_ = VK_NULL_HANDLE;
+    bool                  lightSetValid_ = false, lightFailed_ = false;
+    std::atomic<bool>     lightOn_{false};
     Image                 aoSurf_;  // N9.6 fase 2b: o fator e o 1/w do opaco por pixel (rgba8 no alvo) para o catalogo
     bool                  aoSurfBound_ = false, aoSurfWanted_ = false, aoSurfFrame_ = false;
     Image                 aoImg_, aoHalf_;  // a alta usa aoImg_ (rgba8 no alvo); a media e a baixa, aoHalf_ (rgba32f, 1/4)
@@ -1170,6 +1190,149 @@ private:
         return true;
     }
 
+    // N9.6 fase 3: os objetos da luz nascem na primeira vez que ha luz; uma falha desliga so a luz (fica no log uma vez)
+    bool lightObjects() {
+        if (lightPipe_) return true;
+        if (lightFailed_) return false;
+        std::string err;
+        auto fail_l = [&](const std::string& why) {
+            lightFailed_ = true;
+            std::fprintf(stderr, "[render-vk] luz das fontes desligada: %s\n", why.c_str());
+            return false;
+        };
+        VkDescriptorSetLayoutBinding lb[4] = {
+            {0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+            {1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+            {2, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+            {3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr}};
+        VkDescriptorSetLayoutCreateInfo li{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
+        li.bindingCount = 4, li.pBindings = lb;
+        if (!ok(f_.vkCreateDescriptorSetLayout(dev_, &li, nullptr, &lightLayout_), "layout da luz", &err)) return fail_l(err);
+        ++g_live;
+        VkDescriptorPoolSize       ps[3] = {{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2}, {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1},
+                                            {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1}};
+        VkDescriptorPoolCreateInfo pi{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
+        pi.maxSets = 1, pi.poolSizeCount = 3, pi.pPoolSizes = ps;
+        if (!ok(f_.vkCreateDescriptorPool(dev_, &pi, nullptr, &lightPool_), "pool da luz", &err)) return fail_l(err);
+        ++g_live;
+        VkDescriptorSetAllocateInfo ai{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
+        ai.descriptorPool = lightPool_, ai.descriptorSetCount = 1, ai.pSetLayouts = &lightLayout_;
+        if (!ok(f_.vkAllocateDescriptorSets(dev_, &ai, &lightSet_), "conjunto da luz", &err)) return fail_l(err);
+        VkPushConstantRange        pr{VK_SHADER_STAGE_COMPUTE_BIT, 0, 48};
+        VkPipelineLayoutCreateInfo pl{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+        pl.setLayoutCount = 1, pl.pSetLayouts = &lightLayout_, pl.pushConstantRangeCount = 1, pl.pPushConstantRanges = &pr;
+        if (!ok(f_.vkCreatePipelineLayout(dev_, &pl, nullptr, &lightPipeLayout_), "layout da luz", &err)) return fail_l(err);
+        ++g_live;
+        lightMod_ = module(kLightsComp, sizeof kLightsComp);
+        if (!lightMod_) return fail_l("shader da luz");
+        VkComputePipelineCreateInfo cp{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
+        cp.stage  = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_COMPUTE_BIT, lightMod_, "main", nullptr};
+        cp.layout = lightPipeLayout_;
+        if (!ok(f_.vkCreateComputePipelines(dev_, VK_NULL_HANDLE, 1, &cp, nullptr, &lightPipe_), "pipeline da luz", &err))
+            return fail_l(err);
+        ++g_live;
+        return true;
+    }
+
+    void writeLightSet() {
+        VkDescriptorImageInfo  di{sampler_, depth_.view, VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL};
+        VkDescriptorImageInfo  si{sampler_, shadow_.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+        VkDescriptorImageInfo  ci{VK_NULL_HANDLE, color_.view, VK_IMAGE_LAYOUT_GENERAL};
+        VkDescriptorBufferInfo bi{lightBuf_.buf, 0, VK_WHOLE_SIZE};
+        VkWriteDescriptorSet   w[4] = {};
+        for (uint32_t i = 0; i < 4; ++i)
+            w[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, w[i].dstSet = lightSet_, w[i].dstBinding = i, w[i].descriptorCount = 1;
+        w[0].descriptorType = w[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        w[0].pImageInfo = &di, w[1].pImageInfo = &si;
+        w[2].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, w[2].pImageInfo = &ci;
+        w[3].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, w[3].pBufferInfo = &bi;
+        f_.vkUpdateDescriptorSets(dev_, 4, w, 0, nullptr);
+        lightSetValid_ = true;
+    }
+
+    // N9.6 fase 3: as luzes do quadro, antes de gravar os comandos: cada desenho de uma fonte do catalogo vira uma luz no
+    // centro dele, na camera pela projecao do Ninja (cx, cy no centro do quadro do jogo, dist 500, z = 1 / (1/w)); as que
+    // ficam a menos de kMerge uma da outra viram uma (a media pesada pelos vertices); no maximo kMaxLights
+    void gatherLights(const CommandList& cl) {
+        lights_.clear();
+        const FrameParams& fr = cl.frame;
+        if (!lightOn_.load(std::memory_order_relaxed) || fr.height != 480 || fr.width < 640 || lightFailed_) return;
+        constexpr float kRadius = 400.f, kIntensity = 1.f, kMerge = 80.f;
+        std::vector<float> weight;
+        const float        cx = float(fr.width) / 2.f, cy = float(fr.height) / 2.f, dist = 500.f;
+        for (const Draw& d : cl.draws) {
+            if (!d.state.texture || d.first_vertex > cl.vertices.size() || d.vertex_count > cl.vertices.size() - d.first_vertex)
+                continue;
+            auto it = texs_.find(d.state.texture.value);
+            if (it == texs_.end() || !(it->second.material & kMaterialEmissive)) continue;
+            double sx = 0, sy = 0, sz = 0;
+            uint32_t n = 0;
+            for (uint32_t k = 0; k < d.vertex_count; ++k) {
+                const Vertex& v = cl.vertices[d.first_vertex + k];
+                if (!std::isfinite(v.inv_w) || !(v.inv_w > 0) || !std::isfinite(v.x) || !std::isfinite(v.y)) continue;
+                const double z = 1.0 / double(v.inv_w);
+                if (!(z > 1.5)) continue;  // o plano proximo (fase 0, 2.3): sem posicao confiavel
+                sx += (v.x - cx) * z / dist, sy += (v.y - cy) * z / dist, sz += z, ++n;
+            }
+            if (!n) continue;
+            const float    px = float(sx / n), py = float(sy / n), pz = float(sz / n);
+            const uint32_t rgb = it->second.light;
+            size_t         j   = 0;
+            for (; j < lights_.size(); ++j) {
+                const float dx = lights_[j].pos[0] - px, dy = lights_[j].pos[1] - py, dz = lights_[j].pos[2] - pz;
+                if (dx * dx + dy * dy + dz * dz < kMerge * kMerge) break;
+            }
+            if (j < lights_.size()) {  // a mesma luz (as partes de uma lampada): a media pesada pelos vertices
+                const float w0 = weight[j], w1 = float(n), t = w1 / (w0 + w1);
+                for (int c = 0; c < 3; ++c) lights_[j].pos[c] += (c == 0 ? px : c == 1 ? py : pz) * t - lights_[j].pos[c] * t;
+                weight[j] = w0 + w1;
+                continue;
+            }
+            if (lights_.size() >= kMaxLights) continue;
+            LightGpu l{{px, py, pz, kRadius},
+                       {float((rgb >> 16) & 0xFF) / 255.f, float((rgb >> 8) & 0xFF) / 255.f, float(rgb & 0xFF) / 255.f, kIntensity}};
+            lights_.push_back(l), weight.push_back(float(n));
+        }
+        if (lights_.empty()) return;
+        if (!lightBuf_.buf) {
+            if (!ensureHost(lightBuf_, sizeof(LightGpu) * kMaxLights, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT)) {
+                lights_.clear();
+                return;
+            }
+            lightSetValid_ = false;
+        }
+        std::memcpy(lightBuf_.map, lights_.data(), lights_.size() * sizeof(LightGpu));
+    }
+
+    // N9.6 fase 3: o passe da luz das fontes, depois do AO e antes dos volumes (so com luz no quadro)
+    bool lighting(const CommandList& cl) {
+        if (lights_.empty() || !lightObjects()) return true;
+        if (!lightSetValid_) writeLightSet();
+        const FrameParams& fr = cl.frame;
+        struct {
+            uint32_t w, h;
+            float    invScale, cx, cy, dist;
+            uint32_t raw;
+            float    bias, depthScale;
+            uint32_t count;
+            float    strength;
+            uint32_t pad;
+        } pc{w_, h_, 1.f / scale_, float(fr.width) / 2.f, float(fr.height) / 2.f, 500.f, rawDepth_ ? 1u : 0u, prep_.depth_bias,
+             prep_.depth_scale, uint32_t(lights_.size()), 0.6f, 0};
+        static_assert(sizeof pc == 48);
+        f_.vkCmdBindDescriptorSets(cmd_, VK_PIPELINE_BIND_POINT_COMPUTE, lightPipeLayout_, 0, 1, &lightSet_, 0, nullptr);
+        f_.vkCmdPushConstants(cmd_, lightPipeLayout_, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof pc, &pc);
+        f_.vkCmdBindPipeline(cmd_, VK_PIPELINE_BIND_POINT_COMPUTE, lightPipe_);
+        f_.vkCmdDispatch(cmd_, (w_ + 7) / 8, (h_ + 7) / 8, 1);
+        imageBarrier(color_.img, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                     VK_ACCESS_SHADER_WRITE_BIT,
+                     VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                     VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_TRANSFER_READ_BIT |
+                         VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT);
+        ++st_.light_frames, st_.lights_max = std::max(st_.lights_max, uint32_t(lights_.size()));
+        return true;
+    }
+
     void writeAoSet() {
         VkDescriptorImageInfo di{sampler_, depth_.view, VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL};
         VkDescriptorImageInfo si{sampler_, shadow_.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
@@ -1297,7 +1460,7 @@ private:
         if (fbB_) f_.vkDestroyFramebuffer(dev_, fbB_, nullptr), --g_live, fbB_ = VK_NULL_HANDLE;
         if (passB_) f_.vkDestroyRenderPass(dev_, passB_, nullptr), --g_live, passB_ = VK_NULL_HANDLE;
         freeImage(color_), freeImage(depth_), freeImage(shadow_), freeImage(aoImg_), freeImage(aoHalf_), freeImage(aoSurf_);
-        st_.ao_image_bytes = 0, aoSurfBound_ = false;
+        st_.ao_image_bytes = 0, aoSurfBound_ = false, lightSetValid_ = false;
         aoSetValid_ = false;
         freeBuffer(heads_), freeBuffer(frags_), freeBuffer(readback_), freeBuffer(headerRead_);
     }
@@ -1578,6 +1741,7 @@ private:
         }
         if (!aoOn_.load(std::memory_order_relaxed) && aoSurf_.img) freeImage(aoSurf_), aoSetValid_ = false;
         if (bool(aoSurf_.img) != aoSurfBound_) writeFrameSets();
+        gatherLights(cl);  // N9.6 fase 3
 
         f_.vkResetCommandBuffer(cmd_, 0);
         VkCommandBufferBeginInfo bi{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
@@ -1638,7 +1802,7 @@ private:
         // N8.7: o fim do passe A (opacas e punch-through), os volumes e o comeco do passe B (translucidas)
         auto toB = [&]() -> bool {
             f_.vkCmdEndRenderPass(cmd_);
-            if (!ambientOcclusion(cl) || !volumes(cl)) return false;
+            if (!ambientOcclusion(cl) || !lighting(cl) || !volumes(cl)) return false;
             VkRenderPassBeginInfo rbB{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
             rbB.renderPass = passB_, rbB.framebuffer = fbB_, rbB.renderArea = {{0, 0}, {w_, h_}};
             f_.vkCmdBeginRenderPass(cmd_, &rbB, VK_SUBPASS_CONTENTS_INLINE);
@@ -1676,7 +1840,7 @@ private:
         }
         if (!inB) {  // sem translucidas: so o passe A (e os volumes)
             f_.vkCmdEndRenderPass(cmd_);
-            if (!ambientOcclusion(cl) || !volumes(cl)) return fail("AO ou volumes");
+            if (!ambientOcclusion(cl) || !lighting(cl) || !volumes(cl)) return fail("AO, luz ou volumes");
         } else {
             if (!second) f_.vkCmdNextSubpass(cmd_, VK_SUBPASS_CONTENTS_INLINE);
             f_.vkCmdEndRenderPass(cmd_);  // cor em GENERAL (dependencia externa: compute e transferencia)
@@ -1865,6 +2029,13 @@ private:
             if (aoPipeLayout_) f_.vkDestroyPipelineLayout(dev_, aoPipeLayout_, nullptr), --g_live, aoPipeLayout_ = VK_NULL_HANDLE;
             if (aoPool_) f_.vkDestroyDescriptorPool(dev_, aoPool_, nullptr), --g_live, aoPool_ = VK_NULL_HANDLE;
             if (aoLayout_) f_.vkDestroyDescriptorSetLayout(dev_, aoLayout_, nullptr), --g_live, aoLayout_ = VK_NULL_HANDLE;
+            // N9.6 fase 3: a luz
+            if (lightPipe_) f_.vkDestroyPipeline(dev_, lightPipe_, nullptr), --g_live, lightPipe_ = VK_NULL_HANDLE;
+            if (lightPipeLayout_) f_.vkDestroyPipelineLayout(dev_, lightPipeLayout_, nullptr), --g_live, lightPipeLayout_ = VK_NULL_HANDLE;
+            if (lightPool_) f_.vkDestroyDescriptorPool(dev_, lightPool_, nullptr), --g_live, lightPool_ = VK_NULL_HANDLE;
+            if (lightLayout_) f_.vkDestroyDescriptorSetLayout(dev_, lightLayout_, nullptr), --g_live, lightLayout_ = VK_NULL_HANDLE;
+            if (lightMod_) f_.vkDestroyShaderModule(dev_, lightMod_, nullptr), --g_live, lightMod_ = VK_NULL_HANDLE;
+            freeBuffer(lightBuf_);
             for (VkShaderModule* m : {&aoMod_, &aoBlurMod_, &aoHalfMod_, &aoUpMod_, &aoBlurSurfMod_, &aoUpSurfMod_})
                 if (*m) f_.vkDestroyShaderModule(dev_, *m, nullptr), --g_live, *m = VK_NULL_HANDLE;
             if (resolve_) f_.vkDestroyPipeline(dev_, resolve_, nullptr), --g_live;

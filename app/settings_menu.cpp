@@ -154,8 +154,9 @@ std::vector<SettingsMenu::Entry> SettingsMenu::entries() const {
                      }});
         e.push_back({L("Sombras", "Shadows"), soon(f.shadows, g.shadows == st::Shadows::Original ? "original" : L("aprimoradas", "enhanced")),
                      f.shadows, [](Preferences& p, int d) { p.graphics.shadows = cycle(p.graphics.shadows, d, 2); }});
-        e.push_back({L("Iluminação aprimorada", "Enhanced lighting"), soon(f.lighting, onoff(g.lighting)), f.lighting,
-                     [](Preferences& p, int) { p.graphics.lighting = !p.graphics.lighting; }});
+        // N9.6 fase 3: a luz das fontes do catalogo ja existe (graficos.toml, --iluminacao), mas a entrada do menu fica para a
+        // fase 5, como a do SSAO
+        e.push_back({L("Iluminação aprimorada", "Enhanced lighting"), soon(false, onoff(g.lighting)), false, nullptr});
         e.push_back({L("Texturas HD", "HD textures"), soon(f.hd_textures, onoff(g.hd_textures)), f.hd_textures,
                      [](Preferences& p, int) { p.graphics.hd_textures = !p.graphics.hd_textures; }});
         {  // N7c (secao 21): os efeitos de imagem numa pagina propria (submenu: sem valor; "em breve" sem nenhum efeito)

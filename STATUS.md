@@ -4326,6 +4326,17 @@ não por uma única bateria contínua** (decisão do mantenedor, 2026-11-02).
 - **Pendências:** H9; D-N8-4 no gate pós-N9; ressalva do 7.1 e D-K1(a); limite de 3 h de `n6_h` no executor, defeito a
   corrigir antes de uma futura integral, sem enfraquecer os testes. N9 e N10 não iniciados.
 
+### N9.6 fase 3: a luz das fontes do catálogo (2026-11-11, commit local, só nível 1)
+
+Detalhes em `docs/N9-6-AUDITORIA.md`, seção 10. **Decisão do mantenedor (2026-11-11): as fases seguintes do N9.6 levam só o
+nível 1 e a validação vai para o fim, pela lista `docs/N9-6-TESTES-FINAIS.md`.**
+- **Método:** quatro fontes no catálogo (`kMaterialEmissive`: o brilho das faixas do teto do corredor, as placas EXIT e
+  HEIGHT LIMIT, a faixa laranja do quarto), achadas pelos desenhos sob as luzes dos quadros; cada desenho delas vira uma luz
+  pontual (CPU, no máximo 16, as partes agrupadas) e o passe `lights.comp` soma a luz na cena 3D depois do AO. Só na
+  Remastered com o Vulkan; `[imagem] iluminacao` desligada por padrão; `--iluminacao ligado` só na execução.
+- **Nível 1:** os três presets; unitários 375/0; render 98/0 (`render_vulkan_lighting_emissive`, `material_emissive_color`);
+  ctest 30/30 e 23/23; SPIR-V 35/35. **A bateria (L5, custos, janela, H, R, N87, Codex) não rodou:** está na lista final.
+
 ### N9.6 fase 2b: o catálogo de materiais e o AO sob as translúcidas (2026-11-11, commit local)
 
 Detalhes em `docs/N9-6-AUDITORIA.md`, seção 9. Escolha do mantenedor: o núcleo do catálogo e, como primeiro material, o AO

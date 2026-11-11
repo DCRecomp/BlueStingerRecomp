@@ -321,6 +321,10 @@ só como histórico:
 - **Fase 2b (2026-11-11, commit local; auditoria seção 9):** o catálogo de materiais por `TextureId`
   (`native/render/material_catalog`, um só para o N9.6, o N9.7 e o N9.8) e o primeiro material, o AO sob as translúcidas
   que são decalques (a até 1 % de 1/w do opaco); entrou os racks do quarto, o piso de grade ficou de fora (um fosso).
+- **Testes no final (mantenedor, 2026-11-11):** as fases 3–5 levam só o nível 1; a bateria roda uma vez no fim, pela
+  lista `docs/N9-6-TESTES-FINAIS.md`, atualizada a cada fase.
+- **Fase 3 (2026-11-11, commit local, só nível 1; auditoria seção 10):** a luz das fontes do catálogo (as faixas do
+  teto, as placas acesas, a faixa do quarto) somada à cena 3D por um passe de luzes pontuais; `[imagem] iluminacao`.
 
 ### N9.7 — Água e reflexos (R, G)
 

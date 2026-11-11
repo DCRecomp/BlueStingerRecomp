@@ -423,6 +423,11 @@ void GameHost::setWideWidth(uint32_t width) {
     notifyRequest();
 }
 
+void GameHost::setLighting(bool on) {  // N9.6 fase 3
+    lightPending_.store(on ? 1 : 0);
+    notifyRequest();
+}
+
 void GameHost::setAmbientOcclusion(bool on, uint32_t quality) {
     aoPending_.store((on ? 1 : 0) | int(std::min<uint32_t>(quality, 2) << 1));  // bit 0 ligado; bits 1-2 a qualidade
     notifyRequest();
@@ -493,6 +498,10 @@ void GameHost::applyRequests() {
         transitional::render_capture::set_ambient_occlusion((ao & 1) != 0);
         if (ao & 1) std::fprintf(stderr, "[render] oclusao ambiente: ligada (qualidade %s)\n", kQ[std::min(ao >> 1, 2)]);  // N9.6
         else std::fprintf(stderr, "[render] oclusao ambiente: desligada\n");
+    }
+    if (const int li = lightPending_.exchange(-1); li >= 0 && (li != 0) != transitional::render_capture::lighting()) {
+        transitional::render_capture::set_lighting(li != 0);
+        std::fprintf(stderr, "[render] luz das fontes: %s\n", li ? "ligada" : "desligada");  // N9.6 fase 3
     }
     if (const float s = scalePending_.exchange(0.f); s > 0 && s != transitional::render_capture::scale()) {
         transitional::render_capture::set_scale(s);

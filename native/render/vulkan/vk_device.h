@@ -38,6 +38,8 @@ struct VulkanStats {
     // resolucao (arredondada para cima) na media e na baixa; o AO desligado devolve a memoria no proximo submit
     uint64_t    ao_image_bytes = 0;
     uint64_t    ao_surface_frames = 0;  // N9.6 fase 2b: renders com o AO escrito para as translucidas do catalogo
+    uint64_t    light_frames = 0;       // N9.6 fase 3: renders com a luz das fontes do catalogo aplicada
+    uint32_t    lights_max = 0;         // o maior numero de luzes num render
     uint64_t    negative_depth_frames = 0;  // quadros com 1/w negativo (profundidade deslocada, ver frame_prep)
     // garantias do modo fiel (igualdade bit a bit com o software): ambiente FP do software nos shaders
     // (VK_KHR_shader_float_controls) e profundidade crua (VK_EXT_depth_range_unrestricted)
@@ -135,6 +137,9 @@ public:
     // N9.6 fase 1: oclusao ambiente no proximo submit (so a Remastered liga; desligada = a imagem de antes do N9.6). So
     // age no render do framebuffer (altura 480, largura >= 640) e nos pixels da cena 3D.
     virtual void     set_ambient_occlusion(bool on) = 0;
+    // N9.6 fase 3: a luz das fontes do catalogo (kMaterialEmissive) no proximo submit: cada desenho delas vira uma luz
+    // pontual somada a cena 3D (so no render do framebuffer). Desligada = a imagem de antes
+    virtual void     set_lighting(bool on) = 0;
     // N9.6 fase 1: a qualidade do AO (alta: o alvo inteiro, 8 direcoes x 4 passos, a primeira versao e o padrao do
     // dispositivo; media: meia resolucao com a reconstrucao pela profundidade, 8 x 4; baixa: meia resolucao, 4 x 3)
     virtual void     set_ambient_occlusion_quality(AoQuality q) = 0;

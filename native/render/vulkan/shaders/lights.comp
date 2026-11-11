@@ -1,0 +1,74 @@
+#version 450
+// N9.6 fase 3 (docs/N9-6-AUDITORIA.md secao 10, D6-2 i, D6-6): a luz das fontes do catalogo de materiais (kMaterialEmissive)
+// somada a cena 3D, so na Remastered com o Vulkan, depois do AO e antes dos volumes. Cada desenho de uma fonte no quadro vira
+// uma luz pontual no centro dele (vk_device, na CPU: a posicao na camera pela projecao do Ninja, as proximas agrupadas, no
+// maximo kMaxLights), na cor dos texels dela (emissive_color). Por pixel da cena 3D (bit 1 do anexo de sombra): a posicao e a
+// normal saem da profundidade como no AO (ao.comp); cada luz soma cor x (1 - d/R)^2 x max(0, n.l); a cor da cena (a luz
+// original e o material juntos, que a IR nao separa: secao 2.4) e multiplicada por (1 + forca x soma). Fora da cena (HUD,
+// telas 2D, fundo) e fora do raio de todas as luzes, a cor nao muda.
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(set = 0, binding = 0) uniform sampler2D depthTex;
+layout(set = 0, binding = 1) uniform usampler2D stencilTex;  // bit 0 sombra, bit 1 cena 3D
+layout(set = 0, binding = 2, rgba8) uniform image2D color;
+struct Light {
+    vec4 pos;  // posicao na camera; w = raio
+    vec4 col;  // cor (0 a 1); w = intensidade
+};
+layout(std430, set = 0, binding = 3) readonly buffer Lights { Light lights[]; };
+
+layout(push_constant) uniform P {
+    uvec2 size;
+    float invScale;
+    float cx, cy, dist;
+    uint  rawDepth;
+    float depthBias, depthScale;
+    uint  count;     // luzes no quadro
+    float strength;  // forca geral
+    uint  pad;
+} pc;
+
+bool scene(ivec2 q) { return (texelFetch(stencilTex, q, 0).r & 2u) != 0u; }
+
+float invw(ivec2 q) {
+    const float d = texelFetch(depthTex, q, 0).r;
+    return pc.rawDepth != 0u ? d : d / pc.depthScale + pc.depthBias;
+}
+
+vec3 viewPos(ivec2 q) {
+    const float iw = invw(q);
+    if (!(iw > 0.0)) return vec3(0.0);
+    const float z = 1.0 / iw;
+    const vec2  g = (vec2(q) + 0.5) * pc.invScale;
+    return vec3((g.x - pc.cx) * z / pc.dist, (g.y - pc.cy) * z / pc.dist, z);
+}
+
+void main() {
+    const ivec2 p = ivec2(gl_GlobalInvocationID.xy);
+    if (p.x >= int(pc.size.x) || p.y >= int(pc.size.y) || !scene(p)) return;
+    const vec3 P = viewPos(p);
+    if (!(P.z > 1.5)) return;
+    const ivec2 mx = ivec2(int(pc.size.x) - 1, int(pc.size.y) - 1);
+    const vec3  l = viewPos(clamp(p - ivec2(1, 0), ivec2(0), mx)), r = viewPos(clamp(p + ivec2(1, 0), ivec2(0), mx));
+    const vec3  u = viewPos(clamp(p - ivec2(0, 1), ivec2(0), mx)), d = viewPos(clamp(p + ivec2(0, 1), ivec2(0), mx));
+    const vec3  dx = abs(r.z - P.z) < abs(P.z - l.z) ? r - P : P - l;
+    const vec3  dy = abs(d.z - P.z) < abs(P.z - u.z) ? d - P : P - u;
+    vec3        n  = cross(dx, dy);
+    const float ln = length(n);
+    if (!(ln > 0.0)) return;
+    n /= ln;
+    if (dot(n, P) > 0.0) n = -n;  // para a camera
+    vec3 add = vec3(0.0);
+    for (uint i = 0u; i < pc.count; ++i) {
+        const vec3  L  = lights[i].pos.xyz - P;
+        const float dl = length(L);
+        const float R  = lights[i].pos.w;
+        if (!(dl < R) || dl <= 1e-3) continue;
+        const float att = (1.0 - dl / R) * (1.0 - dl / R);
+        add += lights[i].col.rgb * (lights[i].col.w * att * max(0.0, dot(n, L / dl)));
+    }
+    if (!(max(add.r, max(add.g, add.b)) > 0.0)) return;  // fora do raio de todas: a cor do jogo
+    vec4 c = imageLoad(color, p);
+    c.rgb  = min(c.rgb * (vec3(1.0) + pc.strength * add), vec3(1.0));
+    imageStore(color, p, c);
+}

@@ -636,3 +636,95 @@ BS_TEST(material_catalog_lookup) {
     BS_CHECK(nr::material_flags(nr::TextureId{128, 128, 0x563c7fcc146c1f60ull}) == 0);  // o piso de grade: medido e recusado
     BS_CHECK(nr::material_flags(nr::TextureId{}) == 0);
 }
+
+// N9.6 fase 3 (docs/N9-6-AUDITORIA.md secao 10): a luz das fontes do catalogo. A quina (ao_scene) com duas partes de uma
+// lampada cadastrada (kMaterialEmissive) perto do chao, a direita (x 300, y 60, z 560), e uma placa NAO cadastrada a esquerda.
+// Ligada: o chao junto da lampada clareia; a parede longe (fora do raio) e o HUD ficam bit a bit; as duas partes viram uma luz
+// so; a placa sem cadastro nao acende nada. Desligada: igual ao software.
+BS_TEST(render_vulkan_lighting_emissive) {
+    std::string err;
+    {
+        auto d = nr::VulkanDevice::create(&err);
+        if (!d) BS_SKIP("dispositivo Vulkan");
+        nr::soft::SoftwareDevice sw;
+        nr::TextureDesc          td;
+        td.width = td.height = 8;
+        const std::vector<uint32_t> white(64, 0xFFFFFFFFu);
+        const auto                  bytes = std::as_bytes(std::span<const uint32_t>(white));
+        const nr::TextureHandle vL = d->create_texture(td, bytes).value(), vU = d->create_texture(td, bytes).value();
+        const nr::TextureHandle sL = sw.create_texture(td, bytes).value(), sU = sw.create_texture(td, bytes).value();
+        auto scene = [&](nr::TextureHandle lamp, nr::TextureHandle plain) {
+            nr::CommandList cl   = ao_scene();
+            auto            proj = [&](float x, float y, float z) {
+                nr::Vertex vx;
+                vx.x = 320.f + 500.f * x / z, vx.y = 240.f + 500.f * y / z, vx.inv_w = 1.f / z, vx.color = 0xFFFFFFFF;
+                return vx;
+            };
+            auto quad = [&](nr::TextureHandle t, float x, float y, float z, float r) {
+                nr::Draw dr;
+                dr.state.list = nr::ListType::Translucent, dr.state.texture = t;
+                dr.state.src = nr::Blend::SrcAlpha, dr.state.dst = nr::Blend::InvSrcAlpha, dr.state.use_alpha = true;
+                dr.first_vertex = uint32_t(cl.vertices.size()), dr.vertex_count = 4;
+                for (auto [a, b] : {std::pair{-r, -r}, {r, -r}, {-r, r}, {r, r}}) cl.vertices.push_back(proj(x + a, y + b, z));
+                cl.draws.push_back(dr);
+            };
+            quad(lamp, 295, 60, 560, 6), quad(lamp, 305, 60, 560, 6);  // duas partes da mesma lampada
+            quad(plain, -200, -150, 560, 6);                           // uma placa sem cadastro
+            return cl;
+        };
+        const nr::CommandList vk = scene(vL, vU), soft = scene(sL, sU);
+        std::vector<uint32_t> s_img, off, on, again;
+        uint32_t              w = 0, h = 0;
+        BS_CHECK(sw.submit(soft).ok() && sw.read_frame(s_img, w, h).ok());
+        d->set_texture_material(vL, nr::kMaterialEmissive), d->set_texture_light(vL, 0xFFFFFF);
+        BS_CHECK(d->submit(vk).ok() && d->read_frame(off, w, h).ok() && off == s_img && !off.empty());  // desligada: o fiel
+        const uint64_t f0 = d->stats().light_frames;
+        d->set_lighting(true);
+        BS_CHECK(d->submit(vk).ok() && d->read_frame(on, w, h).ok() && on.size() == off.size());
+        BS_CHECK(d->submit(vk).ok() && d->read_frame(again, w, h).ok() && again == on);  // determinismo
+        BS_CHECK(d->stats().light_frames == f0 + 2 && d->stats().lights_max == 1);    // as duas partes: uma luz
+        if (on.size() != size_t(640) * 480) return;
+        auto at  = [](const std::vector<uint32_t>& img, int x, int y) { return img[size_t(y) * 640 + x]; };
+        auto px  = [](float x, float y, float z) { return std::pair{int(320.f + 500.f * x / z), int(240.f + 500.f * y / z)}; };
+        const auto [nx, ny] = px(250, 100, 540);   // o chao junto da lampada
+        const auto [fx, fy] = px(-250, -200, 580);  // a parede longe (fora do raio de 400)
+        const double nearR = lum(at(on, nx, ny)) / std::max(1.0, lum(at(off, nx, ny)));
+        std::fprintf(stderr, "  luz das fontes: chao junto da lampada %.3f\n", nearR);
+        BS_CHECK(nearR > 1.05);
+        BS_CHECK(at(on, fx, fy) == at(off, fx, fy));
+        bool darker = false;
+        for (size_t i = 0; i < on.size(); ++i) {
+            const uint32_t p = on[i], o = off[i];
+            darker = darker || ((p >> 16) & 0xFF) < ((o >> 16) & 0xFF) || ((p >> 8) & 0xFF) < ((o >> 8) & 0xFF) || (p & 0xFF) < (o & 0xFF);
+        }
+        BS_CHECK(!darker);  // a luz so soma
+        for (int y = 20; y < 60; ++y)
+            for (int x = 20; x < 120; ++x) BS_CHECK(at(on, x, y) == at(off, x, y));  // o HUD fica bit a bit
+        // a placa sem cadastro: sem a lampada no quadro, nenhuma luz
+        d->set_texture_material(vL, 0);
+        std::vector<uint32_t> none;
+        const uint64_t        f1 = d->stats().light_frames;
+        BS_CHECK(d->submit(vk).ok() && d->read_frame(none, w, h).ok() && none == off && d->stats().light_frames == f1);
+        d->set_texture_material(vL, nr::kMaterialEmissive);
+        d->set_lighting(false);
+        std::vector<uint32_t> back;
+        BS_CHECK(d->submit(vk).ok() && d->read_frame(back, w, h).ok() && back == s_img);  // desligada de novo = o fiel
+        for (nr::TextureHandle t : {vL, vU}) d->destroy_texture(t);
+    }
+    BS_CHECK(nr::vulkan_live_objects() == 0);
+}
+
+// N9.6 fase 3: a cor da luz de uma fonte, pelos texels claros e visiveis
+BS_TEST(material_emissive_color) {
+    BS_CHECK(nr::emissive_color(std::vector<uint32_t>(16, 0xFFFFFFFFu)) == 0xFFFFFF);
+    BS_CHECK(nr::emissive_color(std::vector<uint32_t>(16, 0xFF800000u)) == 0xFF0000);  // o tom, normalizado
+    BS_CHECK(nr::emissive_color(std::vector<uint32_t>(16, 0x00FF0000u)) == 0xFFFFFF);  // alfa zero: sem brilho, branco
+    BS_CHECK(nr::emissive_color(std::vector<uint32_t>{}) == 0xFFFFFF);
+    // os escuros pesam pouco: muito preto e um pouco de azul claro dao azul
+    std::vector<uint32_t> t(64, 0xFF000000u);
+    for (int i = 0; i < 8; ++i) t[i] = 0xFF4080FFu;
+    BS_CHECK(nr::emissive_color(t) == 0x4080FF);
+    int fontes = 0;
+    for (const nr::MaterialEntry& e : nr::material_table()) fontes += (e.flags & nr::kMaterialEmissive) != 0;
+    BS_CHECK(fontes == 4);
+}

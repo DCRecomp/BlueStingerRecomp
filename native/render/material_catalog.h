@@ -19,6 +19,9 @@ enum MaterialFlag : uint32_t {
     // translucida que funciona como superficie (alfa cheio na maior parte): recebe o AO do opaco de baixo onde esta a ate
     // 1 % de 1/w dele (um decalque); mais longe, nada (o AO nao tem a geometria dela)
     kMaterialAoSurface = 1u << 0,
+    // N9.6 fase 3: fonte de luz (uma lampada, uma placa acesa, um brilho): cada desenho dela no quadro vira uma luz pontual
+    // no centro dele, na cor dos texels (emissive_color), somada a luz original da cena (D6-2 i)
+    kMaterialEmissive = 1u << 1,
 };
 
 struct MaterialEntry {
@@ -31,5 +34,9 @@ std::span<const MaterialEntry> material_table();
 
 // os bits do material da textura (0 = fora do catalogo)
 uint32_t material_flags(const TextureId& id);
+
+// N9.6 fase 3: a cor da luz de uma textura emissiva (0x00RRGGBB): a media dos texels pesada pelo brilho e pelo alfa,
+// normalizada para o maior canal valer 255 (so o tom; a intensidade e do renderizador). Textura sem brilho: branco.
+uint32_t emissive_color(std::span<const uint32_t> argb);
 
 } // namespace bs::native::render

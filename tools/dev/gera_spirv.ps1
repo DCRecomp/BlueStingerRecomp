@@ -42,6 +42,8 @@ $jobs = @(
     # N9.6 fase 2b: o passe final gravando o fator e o 1/w do opaco para as translucidas do catalogo de materiais
     @("ao_blur_surf_comp.h", "ao.comp", "kAoBlurSurfComp", @("-DBLUR", "-DSURF")),
     @("ao_up_surf_comp.h", "ao.comp", "kAoUpSurfComp", @("-DHALF", "-DBLUR", "-DSURF")),
+    # N9.6 fase 3: a luz das fontes do catalogo de materiais
+    @("lights_comp.h", "lights.comp", "kLightsComp", @()),
     # N7c: apresentacao direta e reducao da resolucao interna
     @("present_vert.h", "present.vert", "kPresentVert", @()),
     @("present_frag.h", "present.frag", "kPresentFrag", @()),

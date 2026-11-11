@@ -42,6 +42,7 @@ uint32_t                  g_wide         = 0;               // N9.5 fase 1: larg
 bool                      g_ao           = false;           // N9.6 fase 1: oclusao ambiente (set_ambient_occlusion)
 nr::AoQuality             g_aoQuality    = nr::AoQuality::Medium;  // a qualidade dela (set_ambient_occlusion_quality)
 bool                      g_materials    = false;  // N9.6 fase 2b: o catalogo de materiais (set_materials; so a Remastered)
+bool                      g_lighting     = false;  // N9.6 fase 3: a luz das fontes do catalogo (set_lighting)
 
 std::unique_ptr<Renderer> g_core;
 
@@ -276,6 +277,7 @@ bool Renderer::texture_handle(nr::IRenderDevice& dev, TexCache& cache, bool hd, 
     }
     e.w = tw, e.h = th, e.provider = repl;
     if (mats || e.material) dev.set_texture_material(e.handle, mat), e.material = mat;  // N9.6 fase 2b
+    if (mat & nr::kMaterialEmissive) dev.set_texture_light(e.handle, nr::emissive_color(argb_));  // N9.6 fase 3
     // revisao Codex 20261029-013355: os bytes e as geracoes so valem depois do envio que deu certo
     e.raw = raw_, e.gen = gen, e.pal = pal;
     ++st.tex_uploads;
@@ -390,6 +392,7 @@ bool Renderer::vk_attempt(uint32_t w, uint32_t h, std::vector<uint32_t>& out, st
     // N9.6 fase 1: o AO so no nativo e no render do framebuffer (o desenho em textura fica como esta)
     vk_->set_ambient_occlusion(mode == Mode::Native && g_ao && w == 640 && h == 480);
     vk_->set_ambient_occlusion_quality(g_aoQuality);
+    vk_->set_lighting(mode == Mode::Native && g_lighting && w == 640 && h == 480);  // N9.6 fase 3
     bs::native::telemetry::set_image(uint32_t(480 * sc + 0.5f), wideW != 0);  // N9.5 fase 5C (so le um bool sem a telemetria)
     if (sc == 1.f && !wideW) hires_.clear();
     const nr::CommandList* cl = &frame.cl;
@@ -469,6 +472,7 @@ bool Renderer::vk_attempt(uint32_t w, uint32_t h, std::vector<uint32_t>& out, st
         st.vk_ao_frames    = vk_->stats().ao_frames;  // N9.6 fase 1
         st.vk_ao_half_frames = vk_->stats().ao_half_frames;
         st.vk_ao_surface_frames = vk_->stats().ao_surface_frames;  // N9.6 fase 2b
+        st.vk_light_frames = vk_->stats().light_frames, st.vk_lights_max = vk_->stats().lights_max;  // N9.6 fase 3
         return true;
     }
     *why = injected                           ? std::string("falha injetada")
@@ -698,6 +702,8 @@ float scale() { return g_scale; }
 void     set_wide(uint32_t width) { g_wide = width; }
 void     set_ambient_occlusion(bool on) { g_ao = on; }
 void     set_materials(bool on) { g_materials = on; }
+void     set_lighting(bool on) { g_lighting = on; }
+bool     lighting() { return g_lighting; }
 bool     materials() { return g_materials; }
 void     set_ambient_occlusion_quality(uint32_t q) {
     g_aoQuality = nr::AoQuality(std::min<uint32_t>(q, uint32_t(nr::AoQuality::High)));
@@ -911,7 +917,7 @@ std::string summary() {
                       "descartadas do cache %llu, HD %llu, HD incompativeis %llu); dispositivo recriado %llu vez(es); comparados %llu: pixels diferentes %.4f%% (> 8 niveis %.4f%%), maior "
                       "diferenca %u, pior render %llu (%.3f%%); PSNR minimo %.1f dB, medio %.1f dB, quadros abaixo de 40 dB %llu; GPU por "
                       "quadro: media %.2f ms, pior %.1f ms; camadas translucidas por pixel ate %llu; AO em %llu renders (meia resolucao %llu); catalogo de materiais: %llu "
-                      "envios, AO nas translucidas em %llu renders%s%s\n",
+                      "envios, AO nas translucidas em %llu renders; luz das fontes em %llu renders (ate %u luzes)%s%s\n",
                       s.vk_device.empty() ? "indisponivel" : s.vk_device.c_str(), (unsigned long long)s.vk_frames,
                       (unsigned long long)s.vk_failures, (unsigned long long)s.tex_uploads, (unsigned long long)s.tex_legacy,
                       (unsigned long long)s.tex_evicted, (unsigned long long)s.tex_replaced,
@@ -924,7 +930,7 @@ std::string summary() {
                       s.vk_frames ? s.vk_gpu_ms_total / double(s.vk_frames) : 0.0, s.vk_gpu_ms_max,
                       (unsigned long long)s.vk_max_layers, (unsigned long long)s.vk_ao_frames,
                       (unsigned long long)s.vk_ao_half_frames, (unsigned long long)s.tex_materials,
-                      (unsigned long long)s.vk_ao_surface_frames,
+                      (unsigned long long)s.vk_ao_surface_frames, (unsigned long long)s.vk_light_frames, s.vk_lights_max,
                       s.vk_error.empty() ? "" : "; ",
                       s.vk_error.c_str());
         out += v;
