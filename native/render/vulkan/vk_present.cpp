@@ -191,6 +191,13 @@ public:
                                             : "sem conjunto no cache para esse handle");
                         diagPostGen_ = pc->generation();
                     }
+                    // Estabilizacao pos-N9.7 (VK_ERROR_DEVICE_LOST na janela, render ~680): o pos recriou as imagens (a fonte
+                    // mudou de tamanho; perto do titulo ela alterna a cada quadro entre a imagem da CPU e o slot). As vistas
+                    // antigas foram destruidas e o driver reaproveita os valores de handle: um conjunto em cache escrito para a
+                    // vista antiga seria usado com a nova (descritor invalido na GPU). O cache e descartado, como stage() e a
+                    // recriacao do slot ja fazem (antes de qualquer quad deste quadro; o anterior terminou: a cerca).
+                    // Reproducao: com pos, 11 perdas em 30 execucoes; com esta linha, 0 em 30 (docs/N9-7-AGUA.md secao 11)
+                    if (pc->generation() != postGen_) forgetSets(), postGen_ = pc->generation();
                     gameView = v, gameLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, ++st_.post_frames;
                 }
             }
@@ -317,6 +324,7 @@ private:
     std::vector<PostPass> post_;  // os passes deste quadro (sem os que a fonte nao comporta)
     uint64_t              diagFrame_ = 0;  // BS_VK_DIAG: o numero do quadro apresentado (eventos)
     uint64_t              diagPostGen_ = 0;  // BS_VK_DIAG: a geracao do pos vista por ultimo
+    uint64_t              postGen_ = 0;      // a geracao do pos dos conjuntos em cache (forgetSets quando muda)
     int                   pinned_ = -1;
     static constexpr size_t kSlotVersions = 16;  // mais que os slots do dispositivo (vk_device.cpp kSlots)
     uint64_t              slotSeen_[kSlotVersions] = {};  // geracao + 1 de cada slot ja apresentado
