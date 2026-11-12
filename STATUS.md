@@ -4364,6 +4364,12 @@ commit desta entrada (revisão Codex, reprodutor e documentação).
   não se perde. A mudança do `VirtualPad` é só proposta, à espera de decisão.
 - **Pendências do N9.12:** a estimativa de VRAM; a translúcida por ordem × software; o `boot_trace`; a conferência visual; o
   Linux.
+- **Publicação (pedido do mantenedor em 2026-11-12: "ao terminar, publica a 9.7 no github"):** `v0.9.7`, só com o pacote do
+  Windows (o Linux pelo mesmo motivo da `v0.9.5-1`; o N9.6 e o N9.7 sem compilação nem teste no Linux). Leva as fases 4 e 5
+  do N9.5, o N9.6, o N9.7 e esta estabilização. Pacote: `make_builder.ps1 -Versao v0.9.7` na worktree limpa em `3869fc8`;
+  `test_builder` **24/0**, nada novo em `%LOCALAPPDATA%`; ZIP `BlueStinger-Builder-v0.9.7-win-x64.zip`, 14 560 594 B,
+  `040d1e76…20d21`; extraído, os 2 891 arquivos iguais aos do pacote testado; varredura sem mídia do jogo, sem caminho
+  local nem nome de usuário (só os exemplos da documentação do FreeType e do SDL3); `varre_publicacao` 0 achados.
 
 ### N9.7: a integração no master e a investigação da perda do dispositivo Vulkan (2026-11-11)
 
