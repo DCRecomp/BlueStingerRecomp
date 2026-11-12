@@ -201,7 +201,8 @@ manter o mesmo padrão: variantes de shader separadas do fiel, recursos sob dema
 - **Recuperação e configurações:** o estado aplicado sobrevive (depois de recriado, o AO continuou em 210 renders, a escolha
   feita antes). As entradas do controle virtual, que são por tempo, se perdem enquanto a janela trava. Foi isso que reprovou
   o Q4/Q5 da rodada A7.
-- **Causa não demonstrada: nenhuma correção** (sem aumento de tempo limite e sem mudar testes). Registrado no N9.12.
+- **Causa não demonstrada nesta investigação** (2026-11-11): nenhuma correção. **Demonstrada e corrigida na estabilização de
+  2026-11-12 (seção 11).**
 - **Próximos experimentos recomendados:**
   1. pedir `VK_EXT_device_fault` (o endereço e o motivo da falha, se o driver informar);
   2. um modo de validação com uma fila só (a apresentação na fila do renderizador), para isolar a sincronização entre filas
@@ -211,4 +212,70 @@ manter o mesmo padrão: variantes de shader separadas do fiel, recursos sob dema
 - **Q4/Q5 repetidos** (`n96_presets.py`, binários do `9bd13ac`): 0 falhas. No Q4 o renderizador recebeu os três efeitos
   desligados (o AO tinha rodado em 1 444 renders) e não houve recriação nessa execução. A perda continuou em 13 outras
   execuções da suíte (inclusive em duas do Q2), sempre antes das sequências do menu, e a suíte passou porque elas terminaram.
-  **O defeito segue aberto.**
+  O defeito ficou aberto até a seção 11.
+
+## 11. Estabilização após o N9.7: a compilação do master e a perda do dispositivo (2026-11-12, autorizada)
+
+### 11.1 A compilação da árvore principal
+
+- **`tools/extractor/known_versions.h` (particular, fora dos commits):** autorizado pelo mantenedor só o fechamento `};` que
+  faltava depois das entradas `hedhunter_v1006_*`. Backup antes da edição em `D:\BlueStinger-backup\estabilizacao-20261112` e
+  `tmp/sessao-20261112`. SHA-256 antes `c4ad9e1a87788ed448c596813d1cf79a1cbe394d3349bb8f2e9bb673cd1f4fc8`, depois
+  `bfee43ca0e8379ab093081bec84225a667a34920f46ac96e9086f9d87d3bbff1`. Diff: uma linha (`};` depois da linha 22); as entradas
+  `hedhunter_*` intactas.
+- **Gate C1 (binários novos da árvore principal, master `7b0728a`):** os três presets compilam (o extrator e o jogo); SPIR-V
+  45/45; unitários 379/0, render 107/0 (sob a camada Khronos, 0 erros), ui 25/0, remaster 5/0; ctest 30/30 e 23/23, com
+  `real_disc`, `runtime_data`, `analysis_real` e `movie_manifest` aprovados (o `boot_trace` sem os snapshots do Flycast); a
+  Original igual às 10 referências do N8.7; `n97_agua.py` W1–W6 sem falhas; uma Preview pelo Builder da árvore principal e
+  `test_edicao` 11/0.
+
+### 11.2 A causa da perda do dispositivo
+
+- **Reprodutor controlado** (`tools/dev/n9_vulkan_perda.py`): o início até o menu inicial na janela (~40 s), o preset Alto
+  (1440p interno), o mesmo exe; só muda o pós-processamento da apresentação: A sem cor e sem nitidez; B só a cor; C só a
+  nitidez; D as duas. As configurações se alternam (A, B, C, D, A, …). RTX 5080, driver 621.01.
+
+| Exe | A | B | C | D |
+|---|---|---|---|---|
+| validação `n9-estab` antes da correção, sem diagnóstico | 0/10 | 3/10 | 4/10 | 4/10 |
+| o mesmo com `BS_VK_DIAG=1` | 0/5 | 0/5 | 0/5 | 0/5 |
+| com a correção (`ab28c5a`), sem diagnóstico | 0/10 | 0/10 | 0/10 | 0/10 |
+
+  As perdas, nos renders 677–687, aconteciam com qualquer passe de pós-processamento (11 em 30) e nunca sem ele (0 em 10).
+  Com a probabilidade observada antes (~0,37 por execução com pós), 30 execuções seguidas sem perda teriam chance da ordem de
+  10⁻⁶.
+- **Diagnóstico** (`BS_VK_DIAG=1`, só o build de validação; `3ec3b81`): `VK_EXT_device_fault` e
+  `VK_NV_device_diagnostic_checkpoints` existem no driver e foram habilitados, com marcadores por etapa e um registro
+  circular. Com ele ligado a perda não aconteceu (0 em 20: os marcadores mudam o tempo, como a camada Khronos), então não há
+  dados de fault do driver. O modo `BS_VK_FILA_UNICA=1` ficou disponível para comparar as filas.
+- **O que o diagnóstico mostrou:** perto do título (quadros apresentados 1 377 a 1 387) a fonte da imagem alterna a cada quadro
+  entre a imagem da CPU (640×476) e o slot (1 920×1 440), e o pós-processamento recria as três imagens intermediárias a cada
+  troca (gerações 4 a 11). O driver reaproveita os valores de handle das vistas destruídas: a saída da geração 9 tem o mesmo
+  handle da geração 5, e a geração 6 reusa vistas da geração 4.
+- **Causa:** o cache de conjuntos de descritores da apresentação é chaveado por `(VkImageView, VkSampler)` e não era
+  descartado quando o pós recriava as suas imagens (era descartado para a imagem da CPU, em `stage()`, e para o slot, pela
+  versão). Uma vista nova com o handle de uma destruída recebia o conjunto escrito para a antiga: a GPU lia um descritor
+  inválido e o dispositivo era perdido. É o mesmo defeito que a revisão Codex 20261028-030202 corrigiu para os slots.
+- **Hipóteses descartadas:** a resolução interna (o Original em 1440p sem pós não perdia); a correção de cor em particular (a
+  nitidez sozinha também perde); duas threads na mesma fila (a apresentação usa a segunda fila, com trava própria);
+  `vkDeviceWaitIdle` fora das travas (só na destruição); o `post_run` (só nos testes); o shader de cor; a água (o binário do
+  N9.6 perdia igual). A camada Khronos, inclusive a validação de sincronização, não acusou nada: ela muda o tempo e não
+  enxerga a reutilização do handle.
+- **Correção mínima** (`ab28c5a`, commit separado): `PostChain::generation()` (a geração das imagens intermediárias) e, na
+  apresentação, `forgetSets()` quando ela muda, antes de qualquer quad do quadro (o quadro anterior terminou: a cerca). O shader
+  fiel e os recursos do N9.5–N9.7 não mudam; a Original não passa pelo pós (sem efeitos).
+- **Revisão Codex `20261112-163647`:** a correção está no lugar certo (o pool resetado é o da apresentação, depois da cerca;
+  as outras fontes já invalidavam o cache). Três achados aceitos: o fault e os marcadores só com `VK_ERROR_DEVICE_LOST`; o
+  diagnóstico fora do produto (`diag_` vira uma constante falsa sem `BS_VALIDACAO`); o reprodutor versionado e esta seção. Um
+  teste determinístico do cache da apresentação exigiria uma janela (a apresentação precisa de uma superfície): fica a
+  reprodução na janela.
+
+### 11.3 A recuperação e os comandos
+
+- O estado aplicado sobrevive à recriação do dispositivo (o AO continuou em 210 renders no dispositivo novo).
+- **A perda de comandos é do controle virtual dos testes:** `VirtualPad::step()` roda no laço da janela e aplica de uma vez os
+  eventos já vencidos; com a janela travada, o aperto e a soltura (100 ms depois) do mesmo botão caem no mesmo passo, e o SDL
+  não vê mudança de estado. No jogo real, o teclado chega pela fila de mensagens do Windows e não se perde; um controle lido
+  por estado (XInput) pode perder um toque mais curto que o travamento, como qualquer jogo nessa situação.
+- **Proposta (não implementada):** o controle virtual aplicar no máximo uma mudança de estado por botão a cada ciclo do SDL.
+  Mudaria a temporização de todas as suítes da janela e esconderia o efeito de um travamento; fica para decisão.

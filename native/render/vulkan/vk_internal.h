@@ -121,7 +121,13 @@ struct VkBase {
     // (marcadores nos buffers de comando: depois da perda, em que etapa cada fila estava) quando o dispositivo os oferece;
     // um registro circular dos ultimos eventos (envios, cercas, recursos criados e destruidos, recuperacao). Na primeira
     // falha diagReport() despeja tudo; o que falhou primeiro (quem detectou) fica separado do que estava em execucao.
+#if BS_VALIDACAO
     bool                            diag_ = false;
+#else
+    // no produto o diagnostico nao existe: a constante falsa faz o compilador eliminar os pontos de chamada (revisao Codex
+    // 20261112-163647)
+    static constexpr bool           diag_ = false;
+#endif
     PFN_vkCmdSetCheckpointNV        diagCheckpointFn_ = nullptr;
     PFN_vkGetQueueCheckpointDataNV  diagQueueCheckpointsFn_ = nullptr;
     PFN_vkGetDeviceFaultInfoEXT     diagFaultFn_ = nullptr;
@@ -155,7 +161,11 @@ struct VkBase {
             diagReported_ = true;
         }
         std::fprintf(stderr, "[vk-diag] PRIMEIRA FALHA detectada em %s (VkResult %d)\n", where, int(r));
-        if (diagFaultFn_) {
+        // as duas consultas so valem com o dispositivo perdido (VUID-vkGetDeviceFaultInfoEXT-device-07336,
+        // VUID-vkGetQueueCheckpointDataNV-queue-02025; revisao Codex 20261112-163647); outro erro: so o registro
+        const bool lost = r == VK_ERROR_DEVICE_LOST;
+        if (!lost) std::fprintf(stderr, "[vk-diag] device_fault e marcadores omitidos (o resultado nao e VK_ERROR_DEVICE_LOST)\n");
+        if (lost && diagFaultFn_) {
             VkDeviceFaultCountsEXT c{VK_STRUCTURE_TYPE_DEVICE_FAULT_COUNTS_EXT};
             const VkResult         r1 = diagFaultFn_(dev_, &c, nullptr);
             std::fprintf(stderr, "[vk-diag] device_fault: contagem VkResult %d, enderecos %u, fornecedor %u, binario %llu bytes\n",
@@ -175,10 +185,10 @@ struct VkBase {
                 std::fprintf(stderr, "[vk-diag]   fornecedor: \"%s\" codigo 0x%llx dados 0x%llx\n", v.description,
                              static_cast<unsigned long long>(v.vendorFaultCode), static_cast<unsigned long long>(v.vendorFaultData));
             if (!bin.empty()) std::fprintf(stderr, "[vk-diag]   binario do fornecedor: %zu bytes (nao interpretado)\n", bin.size());
-        } else {
+        } else if (lost) {
             std::fprintf(stderr, "[vk-diag] device_fault: indisponivel neste dispositivo\n");
         }
-        if (diagQueueCheckpointsFn_) {
+        if (lost && diagQueueCheckpointsFn_) {
             for (auto [q, nome] : {std::pair{queue_, "renderizador"}, std::pair{presentQueue_, "apresentacao"}}) {
                 if (q == presentQueue_ && q == queue_ && std::string(nome) == "apresentacao") continue;
                 uint32_t n = 0;
@@ -190,7 +200,7 @@ struct VkBase {
                     std::fprintf(stderr, "[vk-diag]   estagio 0x%x: %s\n", unsigned(c.stage),
                                  c.pCheckpointMarker ? static_cast<const char*>(c.pCheckpointMarker) : "(nulo)");
             }
-        } else {
+        } else if (lost) {
             std::fprintf(stderr, "[vk-diag] marcadores: indisponiveis neste dispositivo\n");
         }
         std::lock_guard<std::mutex> lock(diagMutex_);

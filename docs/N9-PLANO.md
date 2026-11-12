@@ -410,11 +410,12 @@ pelas subetapas (decisão do mantenedor, 2026-11-10). Não começa sem autoriza�
   B/px) nem a imagem do AO das translúcidas (o AO medido em ~8 B/px); as sombras aprimoradas na AMD integrada em 1080 (26,0 →
   53,5 ms de GPU); o espaço de tela da sombra de contato; a penumbra de volumes pequenos; o `boot_trace` sem os snapshots do
   Flycast.
-- **Do N9.7 (`docs/N9-7-AGUA.md` seções 5–7 e 10):** a perda do dispositivo na janela perto do render 680 (antiga,
-  reproduzida no N9.6), ligada ao pós-processamento da apresentação (cor e nitidez: 5 de 9; sem ele, 0 de 6). Causa não
-  demonstrada; próximos experimentos: `VK_EXT_device_fault`, uma fila só em validação, 10 execuções por caso. Também a
-  árvore principal, que não compila por causa do arquivo particular `known_versions.h` sem o `};`; a translúcida por ordem × software numa cena sintética (antiga); a estimativa de VRAM agora
-  96 + 4 + 4 B/px.
+- **Do N9.7 (`docs/N9-7-AGUA.md` seções 5–7, 10 e 11):** **resolvidos na estabilização de 2026-11-12:** a perda do
+  dispositivo na janela perto do render 680 (o cache de conjuntos da apresentação não era descartado quando o pós recriava as
+  imagens; correção `ab28c5a`, 0 perdas em 30 execuções com pós contra 11 em 30 antes) e a compilação da árvore principal (o
+  `};` do `known_versions.h` particular, fora dos commits). **Abertos:** a translúcida por ordem × software numa cena
+  sintética (antiga); a estimativa de VRAM agora 96 + 4 + 4 B/px; a proposta do controle virtual (uma mudança de estado por
+  botão a cada ciclo, seção 11.3), à espera de decisão.
 - O mesmo para os riscos que as subetapas seguintes registrarem.
 - **Aceitação:** cada risco registrado resolvido ou aceito pelo mantenedor com evidência; as baterias do N9.5 em diante
   (H, R, P, J, Original × `referencias_n87`) sem falhas na árvore integrada.

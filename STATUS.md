@@ -4337,6 +4337,34 @@ não por uma única bateria contínua** (decisão do mantenedor, 2026-11-02).
 - **Pendências:** H9; D-N8-4 no gate pós-N9; ressalva do 7.1 e D-K1(a); limite de 3 h de `n6_h` no executor, defeito a
   corrigir antes de uma futura integral, sem enfraquecer os testes. N9 e N10 não iniciados.
 
+### Estabilização após o N9.7: a compilação do master e a perda do dispositivo Vulkan (2026-11-12, autorizada)
+
+Detalhes em `docs/N9-7-AGUA.md`, seção 11. Commits locais `3ec3b81` (diagnóstico, só validação), `ab28c5a` (correção) e o
+commit desta entrada (revisão Codex, reprodutor e documentação).
+- **`known_versions.h` particular:** só o `};` que faltava (autorização pontual do mantenedor), fora dos commits. SHA-256
+  `c4ad9e1a…` → `bfee43ca…`; backup em `D:\BlueStinger-backup\estabilizacao-20261112` e `tmp/sessao-20261112`.
+- **Gate C1 (árvore principal, `7b0728a`):** três presets compilam; SPIR-V 45/45; unitários 379/0, render 107/0 (camada
+  Khronos: 0 erros), ui 25/0, remaster 5/0; ctest 30/30 e 23/23 com os testes do disco; N87 10 iguais; W1–W6 ok; Preview pelo
+  Builder e `test_edicao` 11/0. O `boot_trace` continua sem os snapshots do Flycast (não aprovado).
+- **Causa da perda:** o cache de conjuntos de descritores da apresentação, chaveado pela vista, não era descartado quando o
+  pós-processamento recriava as imagens (perto do título a fonte alterna entre 640×476 e 1 920×1 440); o driver reaproveita
+  os handles das vistas destruídas. Correção: `PostChain::generation()` e `forgetSets()` quando ela muda.
+- **Matriz (Alto, janela, `tools/dev/n9_vulkan_perda.py`, RTX 5080, driver 621.01):** antes A 0/10, B 3/10, C 4/10, D 4/10;
+  com `BS_VK_DIAG=1` 0/20 (sem dados de fault: a perda não aconteceu com os marcadores); depois da correção (validação
+  `n9-estab`) 0/10 em cada uma.
+- **Gate V2 (árvore principal, `ab28c5a`, binários novos):** builds ok; SPIR-V 45/45; unitários 379/0, render 107/0 (camada:
+  0 erros), ui 25/0, remaster 5/0; ctest 30/30 e 23/23; particulares com os mesmos hashes; matriz do **produto** A–D 0/10 em
+  cada uma; H1–H7 0 falhas (H7: recuperação transitória e permanente); Original × `referencias_n87` 10 iguais; P1–P5, J1–J7
+  e Q1–Q11 0 falhas; **68 execuções da janela, 0 com `VK_ERROR_DEVICE_LOST`**.
+- **Revisão Codex `20261112-163647`:** aceitos o fault e os marcadores só com `VK_ERROR_DEVICE_LOST`, o diagnóstico fora do
+  produto (`diag_` constante falsa sem `BS_VALIDACAO`; o exe do produto sem nenhum texto `vk-diag`, o de validação com 16) e
+  o reprodutor versionado. Teste determinístico do cache da apresentação: exige janela; fica a reprodução. Depois: três
+  presets compilam, unitários 379/0, render 107/0, ui 25/0, remaster 5/0, ctest 30/30.
+- **Comandos perdidos:** do controle virtual dos testes (aperto e soltura no mesmo passo durante o travamento); o teclado real
+  não se perde. A mudança do `VirtualPad` é só proposta, à espera de decisão.
+- **Pendências do N9.12:** a estimativa de VRAM; a translúcida por ordem × software; o `boot_trace`; a conferência visual; o
+  Linux.
+
 ### N9.7: a integração no master e a investigação da perda do dispositivo Vulkan (2026-11-11)
 
 Detalhes em `docs/N9-7-AGUA.md`, seções 9 e 10. Autorizada pelo mantenedor.
