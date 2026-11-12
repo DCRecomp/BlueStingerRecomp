@@ -10,11 +10,15 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
+#include <cstdarg>
+#include <cstdio>
 #include <cstdint>
 #include <memory>
 #include <mutex>
 #include <span>
 #include <string>
+#include <vector>
 
 namespace bs::native::render {
 namespace detail {
@@ -112,6 +116,88 @@ struct VkBase {
     uint32_t         queueCount_ = 1;  // filas da familia
     float            tsPeriod_ = 0;    // ns por tique de timestamp (0 = sem timestamps na fila)
     uint32_t         tsBits_ = 0;      // bits validos dos timestamps (36 a 64): a diferenca e modulo 2^bits
+    // Estabilizacao pos-N9.7 (so o build de validacao, BS_VK_DIAG=1; desligado nao muda nada): o diagnostico da perda do
+    // dispositivo. VK_EXT_device_fault (o motivo e o endereco que o driver informar) e VK_NV_device_diagnostic_checkpoints
+    // (marcadores nos buffers de comando: depois da perda, em que etapa cada fila estava) quando o dispositivo os oferece;
+    // um registro circular dos ultimos eventos (envios, cercas, recursos criados e destruidos, recuperacao). Na primeira
+    // falha diagReport() despeja tudo; o que falhou primeiro (quem detectou) fica separado do que estava em execucao.
+    bool                            diag_ = false;
+    PFN_vkCmdSetCheckpointNV        diagCheckpointFn_ = nullptr;
+    PFN_vkGetQueueCheckpointDataNV  diagQueueCheckpointsFn_ = nullptr;
+    PFN_vkGetDeviceFaultInfoEXT     diagFaultFn_ = nullptr;
+    std::mutex                      diagMutex_;
+    std::vector<std::string>        diagRing_;
+    size_t                          diagNext_ = 0;
+    bool                            diagReported_ = false;
+    void diagEvent(const char* fmt, ...) {
+        if (!diag_) return;
+        char    b[300];
+        va_list ap;
+        va_start(ap, fmt);
+        std::vsnprintf(b, sizeof b, fmt, ap);
+        va_end(ap);
+        const double t = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now().time_since_epoch()).count();
+        char         line[340];
+        std::snprintf(line, sizeof line, "%.3f %s", t, b);
+        std::lock_guard<std::mutex> lock(diagMutex_);
+        if (diagRing_.size() < 256) diagRing_.emplace_back(line);
+        else diagRing_[diagNext_] = line;
+        diagNext_ = (diagNext_ + 1) % 256;
+    }
+    void diagMark(VkCommandBuffer cmd, const char* tag) {  // tag: literal (o driver guarda o ponteiro)
+        if (diag_ && diagCheckpointFn_) diagCheckpointFn_(cmd, tag);
+    }
+    void diagReport(const char* where, VkResult r) {
+        if (!diag_) return;
+        {
+            std::lock_guard<std::mutex> lock(diagMutex_);
+            if (diagReported_) return;
+            diagReported_ = true;
+        }
+        std::fprintf(stderr, "[vk-diag] PRIMEIRA FALHA detectada em %s (VkResult %d)\n", where, int(r));
+        if (diagFaultFn_) {
+            VkDeviceFaultCountsEXT c{VK_STRUCTURE_TYPE_DEVICE_FAULT_COUNTS_EXT};
+            const VkResult         r1 = diagFaultFn_(dev_, &c, nullptr);
+            std::fprintf(stderr, "[vk-diag] device_fault: contagem VkResult %d, enderecos %u, fornecedor %u, binario %llu bytes\n",
+                         int(r1), c.addressInfoCount, c.vendorInfoCount, static_cast<unsigned long long>(c.vendorBinarySize));
+            std::vector<VkDeviceFaultAddressInfoEXT> ai(c.addressInfoCount);
+            std::vector<VkDeviceFaultVendorInfoEXT>  vi(c.vendorInfoCount);
+            std::vector<uint8_t>                     bin(size_t(c.vendorBinarySize));
+            VkDeviceFaultInfoEXT                     fi{VK_STRUCTURE_TYPE_DEVICE_FAULT_INFO_EXT};
+            fi.pAddressInfos = ai.empty() ? nullptr : ai.data(), fi.pVendorInfos = vi.empty() ? nullptr : vi.data();
+            fi.pVendorBinaryData = bin.empty() ? nullptr : bin.data();
+            const VkResult r2 = diagFaultFn_(dev_, &c, &fi);
+            std::fprintf(stderr, "[vk-diag] device_fault: VkResult %d, descricao \"%s\"\n", int(r2), fi.description);
+            for (const auto& a : ai)
+                std::fprintf(stderr, "[vk-diag]   endereco: tipo %d, 0x%016llx, precisao %llu\n", int(a.addressType),
+                             static_cast<unsigned long long>(a.reportedAddress), static_cast<unsigned long long>(a.addressPrecision));
+            for (const auto& v : vi)
+                std::fprintf(stderr, "[vk-diag]   fornecedor: \"%s\" codigo 0x%llx dados 0x%llx\n", v.description,
+                             static_cast<unsigned long long>(v.vendorFaultCode), static_cast<unsigned long long>(v.vendorFaultData));
+            if (!bin.empty()) std::fprintf(stderr, "[vk-diag]   binario do fornecedor: %zu bytes (nao interpretado)\n", bin.size());
+        } else {
+            std::fprintf(stderr, "[vk-diag] device_fault: indisponivel neste dispositivo\n");
+        }
+        if (diagQueueCheckpointsFn_) {
+            for (auto [q, nome] : {std::pair{queue_, "renderizador"}, std::pair{presentQueue_, "apresentacao"}}) {
+                if (q == presentQueue_ && q == queue_ && std::string(nome) == "apresentacao") continue;
+                uint32_t n = 0;
+                diagQueueCheckpointsFn_(q, &n, nullptr);
+                std::vector<VkCheckpointDataNV> cp(n, VkCheckpointDataNV{VK_STRUCTURE_TYPE_CHECKPOINT_DATA_NV});
+                if (n) diagQueueCheckpointsFn_(q, &n, cp.data());
+                std::fprintf(stderr, "[vk-diag] marcadores da fila do %s: %u\n", nome, n);
+                for (const auto& c : cp)
+                    std::fprintf(stderr, "[vk-diag]   estagio 0x%x: %s\n", unsigned(c.stage),
+                                 c.pCheckpointMarker ? static_cast<const char*>(c.pCheckpointMarker) : "(nulo)");
+            }
+        } else {
+            std::fprintf(stderr, "[vk-diag] marcadores: indisponiveis neste dispositivo\n");
+        }
+        std::lock_guard<std::mutex> lock(diagMutex_);
+        std::fprintf(stderr, "[vk-diag] ultimos %zu eventos (o mais antigo primeiro):\n", diagRing_.size());
+        for (size_t i = 0; i < diagRing_.size(); ++i)
+            std::fprintf(stderr, "[vk-diag]   %s\n", diagRing_[(diagNext_ + i) % diagRing_.size()].c_str());
+    }
     std::mutex&      presentLock() { return presentQueue_ == queue_ ? queueMutex_ : presentMutex_; }
     void             waitIdle() {  // vkDeviceWaitIdle exige todas as filas sincronizadas
         std::scoped_lock lock(queueMutex_, presentMutex_);
@@ -270,6 +356,9 @@ public:
     virtual VkImageView record(VkCommandBuffer cmd, VkImageView src, VkImageLayout srcLayout, uint32_t w, uint32_t h,
                                std::span<const PostPass> passes)                  = 0;
     virtual VkImage     image_of(VkImageView view) const                          = 0;
+    // a geracao das imagens intermediarias: muda quando record as recria (outro tamanho de entrada); as vistas antigas foram
+    // destruidas, e um handle novo pode ter o mesmo valor de um antigo
+    virtual uint64_t    generation() const                                        = 0;
 };
 std::unique_ptr<PostChain> make_post_chain(VkBase& base, std::string* error);
 

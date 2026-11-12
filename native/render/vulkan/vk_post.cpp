@@ -171,6 +171,9 @@ public:
             VkRenderPassBeginInfo rb{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
             rb.renderPass = pass_, rb.framebuffer = fb_[out], rb.renderArea = {{0, 0}, {w_, h_}};
             if (queries_) f_.vkCmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, queries_, uint32_t(2 * done));
+            static const char* const kMarks[kMaxPasses] = {"pos: passe 0", "pos: passe 1", "pos: passe 2", "pos: passe 3",
+                                                            "pos: passe 4", "pos: passe 5", "pos: passe 6", "pos: passe 7"};
+            b_.diagMark(cmd, kMarks[size_t(done)]);  // BS_VK_DIAG: o passe em execucao, se a fila parar nele
             f_.vkCmdBeginRenderPass(cmd, &rb, VK_SUBPASS_CONTENTS_INLINE);
             const VkViewport vp{0, 0, float(w_), float(h_), 0, 1};
             const VkRect2D   sc{{0, 0}, {w_, h_}};
@@ -191,6 +194,7 @@ public:
         }
         return done ? in : VK_NULL_HANDLE;
     }
+    uint64_t generation() const override { return gen_; }
     VkImage image_of(VkImageView v) const override {
         for (const Image& i : img_)
             if (i.view == v) return i.img;
@@ -234,6 +238,7 @@ private:
         recorded_.clear();
     }
     uint32_t              w_ = 0, h_ = 0;
+    uint64_t              gen_ = 0;  // a geracao das imagens intermediarias (generation)
 
     static bool fail(std::string* e, const char* m) {
         if (e) *e = std::string("pos-processamento: ") + m;
@@ -243,7 +248,10 @@ private:
     bool targets(uint32_t w, uint32_t h) {
         if (w == w_ && h == h_ && fb_[0]) return true;
         MemScope mc(telemetry::Mem::Post);  // N9.5 fase 5C
+        b_.diagEvent("pos: imagens intermediarias recriadas %ux%u -> %ux%u", w_, h_, w, h);
+        const VkImageView old[3] = {img_[0].view, img_[1].view, img_[2].view};
         freeTargets();
+        ++gen_;
         for (int i = 0; i < 3; ++i) {
             img_[i] = b_.makeImage(w, h, VK_FORMAT_R8G8B8A8_UNORM,
                                    VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
@@ -255,6 +263,15 @@ private:
             ++g_live;
         }
         w_ = w, h_ = h;
+        if (b_.diag_) {  // as vistas antigas e as novas (o driver reaproveita valores de handle)
+            int reused = 0;
+            for (const VkImageView nv : {img_[0].view, img_[1].view, img_[2].view})
+                for (const VkImageView ov : old) reused += ov && nv == ov;
+            std::fprintf(stderr, "[vk-diag] pos: geracao %llu, imagens %ux%u; vistas antigas %p %p %p, novas %p %p %p (%d valores repetidos)\n",
+                         static_cast<unsigned long long>(gen_), w, h, static_cast<void*>(old[0]), static_cast<void*>(old[1]),
+                         static_cast<void*>(old[2]), static_cast<void*>(img_[0].view), static_cast<void*>(img_[1].view),
+                         static_cast<void*>(img_[2].view), reused);
+        }
         return true;
     }
     void freeTargets() {

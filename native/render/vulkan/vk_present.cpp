@@ -90,6 +90,7 @@ public:
             const VkResult w  = f_.vkWaitForFences(b_.dev_, 1, &fence_, VK_TRUE, UINT64_MAX);
             dg::finish(dg::Stall::PresentFence, tf);
             if (w != VK_SUCCESS) return fail("cerca", w);
+            b_.diagEvent("apresentacao %llu: cerca do quadro anterior concluida", static_cast<unsigned long long>(diagFrame_));
             waited += ms(tw);
         }
         releasePinned();
@@ -154,6 +155,8 @@ public:
         VkCommandBufferBeginInfo bi{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
         bi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
         f_.vkBeginCommandBuffer(cmd_, &bi);
+        ++diagFrame_;
+        b_.diagMark(cmd_, "apresentacao: inicio (envios)");
         for (const auto& [t, offset] : uploads_) {
             VkBase::barrier(f_, cmd_, t->image.img, t->ready ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_UNDEFINED,
                             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
@@ -167,6 +170,7 @@ public:
             t->ready = true;
         }
         // pos-processamento (secao 21): so a imagem do jogo, antes do passe da swapchain (as camadas vem depois, nitidas)
+        b_.diagMark(cmd_, "apresentacao: pos-processamento");
         if (gameView && r.post && r.post_count)
             if (PostChain* pc = slots_.post_chain()) {
                 // o CRT desenha as 480 linhas do jogo: so com uma fonte de verdade alta (o slot na resolucao interna); a
@@ -174,9 +178,23 @@ public:
                 post_.assign(r.post, r.post + r.post_count);
                 if (srcH < kCrtMinSourceHeight)
                     std::erase_if(post_, [&](const PostPass& p) { return p.shader == pc->builtin(PostBuiltin::Crt); });
-                if (VkImageView v = pc->record(cmd_, gameView, gameLayout, srcW, srcH, post_))
+                if (VkImageView v = pc->record(cmd_, gameView, gameLayout, srcW, srcH, post_)) {
+                    // BS_VK_DIAG (so diagnostico, nada muda): a saida do pos depois de uma recriacao das imagens dele ja tem
+                    // um conjunto no cache? (o conjunto foi escrito para a vista destruida que tinha o mesmo handle)
+                    if (b_.diag_ && pc->generation() != diagPostGen_) {
+                        bool cached = false;
+                        for (const auto& [k, s] : sets_) cached = cached || k.first == v;
+                        std::fprintf(stderr, "[vk-diag] apresentacao %llu: pos na geracao %llu (antes %llu), saida %p, %s\n",
+                                     static_cast<unsigned long long>(diagFrame_), static_cast<unsigned long long>(pc->generation()),
+                                     static_cast<unsigned long long>(diagPostGen_), static_cast<void*>(v),
+                                     cached ? "JA HAVIA um conjunto no cache para esse handle (escrito para a vista antiga)"
+                                            : "sem conjunto no cache para esse handle");
+                        diagPostGen_ = pc->generation();
+                    }
                     gameView = v, gameLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, ++st_.post_frames;
+                }
             }
+        b_.diagMark(cmd_, "apresentacao: quadro na swapchain");
         VkClearValue          clear{};
         VkRenderPassBeginInfo rb{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
         rb.renderPass = pass_, rb.framebuffer = fbs_[idx], rb.renderArea = {{0, 0}, {sw_, sh_}};
@@ -226,6 +244,10 @@ public:
             std::lock_guard<std::mutex> lock(b_.presentLock());
             s1 = dg::mark(s0);
             f_.vkResetFences(b_.dev_, 1, &fence_);  // logo antes do envio (uma falha dele refaz a cerca: resync)
+            b_.diagEvent("apresentacao %llu: envio na fila %p, cerca %p, imagem %u da swapchain %ux%u, jogo %ux%u (slot %d), "
+                         "passes de pos %zu, camadas %d", static_cast<unsigned long long>(diagFrame_),
+                         static_cast<void*>(b_.presentQueue_), static_cast<void*>(fence_), idx, sw_, sh_, srcW, srcH, pinned_,
+                         post_.size(), int(layerOn[0]) + int(layerOn[1]));
             s2 = dg::mark(s0);
             pr = f_.vkQueueSubmit(b_.presentQueue_, 1, &si, fence_);
             s3 = dg::mark(s0);
@@ -293,6 +315,8 @@ private:
     std::vector<std::pair<Tex*, VkDeviceSize>> uploads_;
     VkDeviceSize          staged_ = 0;
     std::vector<PostPass> post_;  // os passes deste quadro (sem os que a fonte nao comporta)
+    uint64_t              diagFrame_ = 0;  // BS_VK_DIAG: o numero do quadro apresentado (eventos)
+    uint64_t              diagPostGen_ = 0;  // BS_VK_DIAG: a geracao do pos vista por ultimo
     int                   pinned_ = -1;
     static constexpr size_t kSlotVersions = 16;  // mais que os slots do dispositivo (vk_device.cpp kSlots)
     uint64_t              slotSeen_[kSlotVersions] = {};  // geracao + 1 de cada slot ja apresentado
@@ -309,6 +333,7 @@ private:
         return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t).count();
     }
     Error fail(const char* what, VkResult r) {
+        if (r != VK_SUCCESS) b_.diagReport((std::string("apresentacao: ") + what).c_str(), r);  // so com BS_VK_DIAG
         std::fprintf(stderr, "[apresentacao] %s falhou (VkResult %d)\n", what, int(r));
         return r == VK_ERROR_DEVICE_LOST ? Error::Io : Error::Unsupported;
     }

@@ -128,6 +128,11 @@ public:
         VkDeviceQueueCreateInfo qi{VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO};
         const float prios[2] = {1.0f, 1.0f};
         qi.queueFamilyIndex = qfam_, qi.queueCount = std::min(queueCount_, 2u), qi.pQueuePriorities = prios;
+#if BS_VALIDACAO
+        // estabilizacao pos-N9.7 (so validacao): BS_VK_FILA_UNICA=1 poe a apresentacao na fila do renderizador (a mesma
+        // trava), para comparar com as duas filas da producao
+        if (std::getenv("BS_VK_FILA_UNICA")) qi.queueCount = 1;
+#endif
         VkPhysicalDeviceFeatures feat{};
         feat.depthClamp = VK_TRUE, feat.fragmentStoresAndAtomics = VK_TRUE;
         // acessos fora dos limites dos buffers devolvem valores definidos em vez de falha de pagina (obrigatorio no
@@ -165,9 +170,19 @@ public:
         // N9.5 fase 5C: o orcamento da memoria so com a telemetria ligada (sem ela, o dispositivo e o de sempre)
         if (telemetry::enabled() && has(VK_EXT_MEMORY_BUDGET_EXTENSION_NAME))
             budgetExt_ = true, ext.push_back(VK_EXT_MEMORY_BUDGET_EXTENSION_NAME);
+        // estabilizacao pos-N9.7 (so validacao, BS_VK_DIAG=1): o diagnostico da perda do dispositivo (vk_internal.h)
+#if BS_VALIDACAO
+        diag_ = std::getenv("BS_VK_DIAG") != nullptr;
+#endif
+        VkPhysicalDeviceFaultFeaturesEXT faultFeat{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FAULT_FEATURES_EXT};
+        const bool faultExt = diag_ && has(VK_EXT_DEVICE_FAULT_EXTENSION_NAME);
+        const bool cpExt    = diag_ && has(VK_NV_DEVICE_DIAGNOSTIC_CHECKPOINTS_EXTENSION_NAME);
+        if (faultExt) faultFeat.deviceFault = VK_TRUE, ext.push_back(VK_EXT_DEVICE_FAULT_EXTENSION_NAME);
+        if (cpExt) ext.push_back(VK_NV_DEVICE_DIAGNOSTIC_CHECKPOINTS_EXTENSION_NAME);
         VkDeviceCreateInfo dci{VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO};
         dci.queueCreateInfoCount = 1, dci.pQueueCreateInfos = &qi, dci.pEnabledFeatures = &feat;
         dci.enabledExtensionCount = uint32_t(ext.size()), dci.ppEnabledExtensionNames = ext.data();
+        if (faultExt) dci.pNext = &faultFeat;
         st_.float_controls = floatControls_, st_.denorm_preserve = denormPreserve_, st_.raw_depth = rawDepth_;
         if (!ok(f_.vkCreateDevice(phys_, &dci, nullptr, &dev_), "vkCreateDevice", error)) return false;
         ++g_live;
@@ -178,6 +193,18 @@ public:
         f_.vkGetDeviceQueue(dev_, qfam_, 0, &queue_);
         presentQueue_ = queue_;
         if (qi.queueCount > 1) f_.vkGetDeviceQueue(dev_, qfam_, 1, &presentQueue_);
+        if (diag_) {
+            if (faultExt) diagFaultFn_ = reinterpret_cast<PFN_vkGetDeviceFaultInfoEXT>(f_.vkGetDeviceProcAddr(dev_, "vkGetDeviceFaultInfoEXT"));
+            if (cpExt) {
+                diagCheckpointFn_ = reinterpret_cast<PFN_vkCmdSetCheckpointNV>(f_.vkGetDeviceProcAddr(dev_, "vkCmdSetCheckpointNV"));
+                diagQueueCheckpointsFn_ =
+                    reinterpret_cast<PFN_vkGetQueueCheckpointDataNV>(f_.vkGetDeviceProcAddr(dev_, "vkGetQueueCheckpointDataNV"));
+            }
+            std::fprintf(stderr, "[vk-diag] ligado: device_fault %s, marcadores %s; filas: renderizador %p, apresentacao %p%s\n",
+                         diagFaultFn_ ? "sim" : "nao", diagCheckpointFn_ ? "sim" : "nao", static_cast<void*>(queue_),
+                         static_cast<void*>(presentQueue_), presentQueue_ == queue_ ? " (a mesma)" : "");
+            diagEvent("dispositivo criado: filas %p/%p", static_cast<void*>(queue_), static_cast<void*>(presentQueue_));
+        }
         VkCommandPoolCreateInfo pci{VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
         pci.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT, pci.queueFamilyIndex = qfam_;
         if (!ok(f_.vkCreateCommandPool(dev_, &pci, nullptr, &pool_), "vkCreateCommandPool", error)) return false;
@@ -733,6 +760,7 @@ private:
     float                 waterTime_ = 0, waterHorizon_ = 0, waterBottom_ = 1;
 
     Error fail(const char* what, VkResult r = VK_SUCCESS) {  // motivo da falha para o diagnostico (stats().last_error)
+        if (r != VK_SUCCESS) diagReport(what, r);  // so com BS_VK_DIAG (validacao): o primeiro resultado diferente de sucesso
         st_.last_error = std::string(what) + (r != VK_SUCCESS ? " (VkResult " + std::to_string(int(r)) + ")" : "");
         return Error::Io;
     }
@@ -1054,6 +1082,7 @@ private:
         gameW_ = gw, gameH_ = gh;
         if (w == w_ && h == h_ && gw == downW_ && gh == downH_ && pass_) return true;
         MemScope mc(telemetry::Mem::Targets);  // N9.5 fase 5C
+        diagEvent("alvo do render recriado: %ux%u -> %ux%u (jogo %ux%u)", w_, h_, w, h, gw, gh);
         waitIdle();
         freeTarget();
         w_ = w, h_ = h, downW_ = gw, downH_ = gh;
@@ -1978,6 +2007,7 @@ private:
         VkCommandBufferBeginInfo bi{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
         bi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
         f_.vkBeginCommandBuffer(cmd_, &bi);
+        diagMark(cmd_, "render: inicio");
         // N9.6 fase 2b (achado na camada de validacao durante o N9.7, VUID-vkCmdDraw-None-09600): o binding 6 (a imagem do AO
         // para o catalogo) esta no conjunto de todo desenho e o fragmento o declara; no primeiro quadro depois de criada, a
         // imagem estava em UNDEFINED nos desenhos do passe A (o passe do AO so a escreve entre A e B). O conteudo dela so e
@@ -2028,6 +2058,7 @@ private:
         VkRenderPassBeginInfo rb{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
         rb.renderPass = pass_, rb.framebuffer = fb_, rb.renderArea = {{0, 0}, {w_, h_}}, rb.clearValueCount = 3, rb.pClearValues = clear;
         if (ts) f_.vkCmdWriteTimestamp(cmd_, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, tsPool_, 1);  // os envios terminaram
+        diagMark(cmd_, "render: passe A");
         f_.vkCmdBeginRenderPass(cmd_, &rb, VK_SUBPASS_CONTENTS_INLINE);
         // com a profundidade crua, o clamp do depthClamp vai a +-1e30 (o 1/w do jogo cabe; o shader escreve gl_FragDepth)
         VkViewport vp{0, 0, float(w_), float(h_), rawDepth_ ? -1e30f : 0.f, rawDepth_ ? 1e30f : 1.f};
@@ -2043,7 +2074,9 @@ private:
         // N8.7: o fim do passe A (opacas e punch-through), os volumes e o comeco do passe B (translucidas)
         auto toB = [&]() -> bool {
             f_.vkCmdEndRenderPass(cmd_);
+            diagMark(cmd_, "render: AO, luz e volumes");
             if (!ambientOcclusion(cl) || !lighting(cl) || !volumes(cl)) return false;
+            diagMark(cmd_, "render: depois dos volumes");
             if (waterFrame) {
                 // N9.7: fotografia da cena opaca depois dos volumes. A agua, desenhada no passe B, pode entao refletir
                 // e refratar o ambiente sem realimentar o proprio anexo de cor.
@@ -2074,6 +2107,7 @@ private:
             }
             VkRenderPassBeginInfo rbB{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
             rbB.renderPass = passB_, rbB.framebuffer = fbB_, rbB.renderArea = {{0, 0}, {w_, h_}};
+            diagMark(cmd_, "render: passe B");
             f_.vkCmdBeginRenderPass(cmd_, &rbB, VK_SUBPASS_CONTENTS_INLINE);
             inB = true, bound = VK_NULL_HANDLE;
             return true;
@@ -2137,6 +2171,7 @@ private:
         }
         if (ts) f_.vkCmdWriteTimestamp(cmd_, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, tsPool_, 2);  // passes A e B e os volumes
         if (prep_.has_autosort) {
+            diagMark(cmd_, "render: resolve");
             f_.vkCmdBindPipeline(cmd_, VK_PIPELINE_BIND_POINT_COMPUTE, resolve_);
             f_.vkCmdBindDescriptorSets(cmd_, VK_PIPELINE_BIND_POINT_COMPUTE, compLayout_, 0, 1, &resolveSet_, 0, nullptr);
             const uint32_t sz[2] = {w_, h_};
@@ -2197,6 +2232,7 @@ private:
         hb.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT, hb.dstAccessMask = VK_ACCESS_HOST_READ_BIT;
         f_.vkCmdPipelineBarrier(cmd_, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT, 0, 1, &hb, 0, nullptr, 0, nullptr);
         if (ts) f_.vkCmdWriteTimestamp(cmd_, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, tsPool_, 4);  // a saida (slot, reducao, leitura)
+        diagMark(cmd_, "render: fim (slot, reducao, leitura)");
         f_.vkEndCommandBuffer(cmd_);
         VkSubmitInfo si{VK_STRUCTURE_TYPE_SUBMIT_INFO};
         si.commandBufferCount = 1, si.pCommandBuffers = &cmd_;
@@ -2222,6 +2258,11 @@ private:
         {  // a fila e compartilhada com a apresentacao (thread da janela)
             std::lock_guard<std::mutex> lock(queueMutex_);
             a1 = dg::mark(a0);
+            diagEvent("render %llu: envio na fila do renderizador %p, cerca %p, alvo %ux%u, escala %.3g, slot %d, AO %d luz %d "
+                      "sombras %d agua %d",
+                      static_cast<unsigned long long>(st_.frames + 1), static_cast<void*>(queue_), static_cast<void*>(fence_), w_,
+                      h_, double(scale_), writeSlot_, int(aoOn_.load()), int(lightOn_.load()), int(shadowsOn_.load()),
+                      int(waterQuality_));
             r  = f_.vkQueueSubmit(queue_, 1, &si, fence_);
             a2 = dg::mark(a0);
             if (r != VK_SUCCESS) return fail("vkQueueSubmit", r);  // como antes: com a trava na mao
@@ -2232,6 +2273,7 @@ private:
             r                 = f_.vkWaitForFences(dev_, 1, &fence_, VK_TRUE, UINT64_MAX);
             dg::finish(dg::Stall::GameFence, tf);
             if (r != VK_SUCCESS) return fail("vkWaitForFences", r);
+            diagEvent("render %llu: cerca concluida", static_cast<unsigned long long>(st_.frames + 1));
         }
         // a perda do dispositivo pode sinalizar a cerca sem o trabalho feito (AMD integrada, 2026-10-22: o quadro saia
         // com a imagem anterior e so o envio seguinte acusava): a fila ociosa confirma que o quadro terminou de fato
