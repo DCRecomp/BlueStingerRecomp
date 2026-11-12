@@ -4337,6 +4337,23 @@ não por uma única bateria contínua** (decisão do mantenedor, 2026-11-02).
 - **Pendências:** H9; D-N8-4 no gate pós-N9; ressalva do 7.1 e D-K1(a); limite de 3 h de `n6_h` no executor, defeito a
   corrigir antes de uma futura integral, sem enfraquecer os testes. N9 e N10 não iniciados.
 
+### N9.7: a integração no master e a investigação da perda do dispositivo Vulkan (2026-11-11)
+
+Detalhes em `docs/N9-7-AGUA.md`, seções 9 e 10. Autorizada pelo mantenedor.
+- **Backup** fora da árvore de trabalho, em `D:\BlueStinger-backup\n97-integracao-20261111` (pedido do mantenedor): os 35
+  arquivos modificados e não rastreados, o diff, um bundle Git das três branches (verificado) e o manifesto SHA-256 (conferido).
+- **Integração:** os 32 arquivos do protótipo eram iguais ao A0 `c9a6367`. A integração foi um avanço rápido (`f690ecb` →
+  `9bd13ac`): 50 arquivos gravados com o conteúdo do commit e conferidos, `update-ref` e `git reset -q`. Os particulares, o
+  `_bs-extract.exe` e `tools/extractor/build/` ficaram intocados; os hashes dos particulares conferem. O `generated/` velho
+  (22/10) foi regenerado e ficou igual ao `generated-f3`.
+- **Bloqueado:** a compilação da árvore principal. O `tools/extractor/known_versions.h` particular está sem o `};` que fecha a
+  lista (modificação local) e não foi alterado. Os testes usam a worktree `tmp/wt-n97`, com o mesmo código.
+- **Perda do dispositivo:** acontece na janela por volta do render 680, só com o pós-processamento da apresentação ligado
+  (com cor e nitidez, 5 de 9; sem pós-processamento, 0 de 6), na Remastered e na Original, nos binários do N9.6 e do N9.7. A
+  camada Khronos, inclusive a sincronização, dá 0 erros e 0 perdas. Causa não demonstrada, sem correção; registrada no N9.12
+  com os próximos experimentos.
+- **Q4/Q5** repetidos: 0 falhas nesta rodada, porque a perda caiu antes das sequências do menu. O defeito segue aberto.
+
 ### N9.7: água e reflexos (2026-11-11, commits locais na branch `n9-7`)
 
 Detalhes em `docs/N9-7-AGUA.md`; o plano e os gates em `docs/N9-7-PLANO.md`. Autorizado pelo mantenedor em 2026-11-11 com
@@ -4363,9 +4380,7 @@ D7-1 (a água original por padrão, inclusive no Alto), D7-2 (o catálogo de mat
   - a conferência visual (com o mantenedor).
 - **Achado antigo, para o N9.12:** com o preset Alto (1440p), o Vulkan perde o dispositivo perto do render 680, logo depois do
   menu inicial nativo, e se recupera. Reproduzido também no binário do N9.6 `f690ecb` (3 de 4 execuções); não é da água.
-- **Master:** não avançado. A árvore principal ainda guarda o protótipo sem commit; a integração no master substituiria esses
-  arquivos pela versão oficial e espera a autorização do mantenedor. O protótipo está preservado no `c9a6367` e na branch
-  `n9-7-agua-prototipo` (`8cf3971`).
+- **Master:** integrado em 2026-11-11 (entrada seguinte).
 
 ### N9.6: o ajuste final dos presets e a preparação do N9.7 (2026-11-11)
 

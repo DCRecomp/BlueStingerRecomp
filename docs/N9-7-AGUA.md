@@ -145,3 +145,70 @@ continua com o material dela. Para o N9.8 (texturas HD, antialiasing e pós-proc
 quadros do mar têm de manter as oito identidades originais no manifesto (senão a água volta a piscar); (2) o MSAA precisa
 levar em conta a cópia da cena da água (a imagem é de uma amostra) e as imagens do AO, da luz e das sombras do N9.6; (3)
 manter o mesmo padrão: variantes de shader separadas do fiel, recursos sob demanda, testes Vulkan sob a camada de validação.
+
+## 9. Integração no master (2026-11-11, autorizada pelo mantenedor)
+
+- **Estado inicial:** master `f690ecb`; `n9-7` `9bd13ac`; `n9-7-agua-prototipo` `8cf3971`; a árvore principal com 30
+  arquivos modificados e 6 não rastreados (o protótipo, os dois arquivos particulares, `_bs-extract.exe` e
+  `tools/extractor/build/`).
+- **Backup fora da árvore de trabalho** (pedido do mantenedor; exceção registrada à regra de não criar nada fora da pasta de
+  trabalho): `D:\BlueStinger-backup\n97-integracao-20261111`. Contém os 35 arquivos modificados e não rastreados (sem os
+  artefatos de `tools/extractor/build/`), o diff completo, um bundle Git com as três branches (verificado pelo `git bundle
+  verify`) e o manifesto SHA-256, conferido com `sha256sum -c` (37 entradas íntegras). Também o `generated/` antigo, com o
+  manifesto dele.
+- **Comparação:** os 32 arquivos do protótipo na árvore principal eram idênticos ao A0 `c9a6367` (0 diferentes). O
+  protótipo está preservado no `c9a6367`, na branch `8cf3971` e no backup.
+- **Método:** `f690ecb` é ancestral de `9bd13ac`, então a integração é um avanço rápido. Os arquivos foram gravados com o
+  conteúdo do `9bd13ac` e o fim de linha do `.gitattributes` (script com ensaio,
+  `tmp/sessao-20261111/n97/integra_n97.py`): 50 arquivos (32 do protótipo, 11 limpos e 7 novos), conferidos contra o commit.
+  Depois, `update-ref` do master de `f690ecb` para `9bd13ac` e `git reset -q` (só o índice). Os arquivos particulares, o
+  `_bs-extract.exe` e `tools/extractor/build/` ficaram intocados. Sem conflitos. Depois disso, o `git status` mostra só os
+  dois particulares e os dois não rastreados.
+- **O `generated/` da árvore principal estava velho** (22/10, sem os ganchos `BS_HUD_SCOPE` da fase 3B do N9.5). Ele foi
+  regenerado pelo `bs-recomp` do `9bd13ac` e ficou igual ao `generated-f3` que as worktrees usam (0 diferenças); o antigo
+  ficou no backup.
+- **Gate I2 bloqueado na árvore principal:** o arquivo particular `tools/extractor/known_versions.h` tem uma modificação
+  local (duas entradas `hedhunter_v1006_*`) sem o `};` que fecha a lista. Com isso, o extrator (`bs_disc_data`, ligado ao
+  jogo) não compila. O arquivo é protegido e não foi alterado. Os arquivos rastreados da árvore principal são exatamente os do
+  `9bd13ac`, e a worktree `tmp/wt-n97` compila esse commit. Os testes abaixo usam os binários dela (o mesmo código: entre o
+  `cec9842` da bateria A7 e o `9bd13ac` só mudou documentação). A compilação da árvore principal espera a decisão do
+  mantenedor sobre o arquivo particular.
+
+## 10. A perda do dispositivo Vulkan (investigação delimitada, 2026-11-11)
+
+- **Sintoma:** na janela, `vkWaitForFences` do render devolve `VK_ERROR_DEVICE_LOST` (−4) nos renders 678–681 (a tela de
+  título), em seguida falha a cerca da apresentação, e a recuperação recria o dispositivo com sucesso. Acontece na Remastered
+  e na Original. GPU: RTX 5080, driver 621.01.
+- **Fatores** (`tmp/sessao-20261111/n97/repro_fatores.py`, 3 execuções de ~40 s por caso, a mesma cena):
+
+| Caso | Resolução | Correção de cor | Nitidez | Perdas |
+|---|---|---|---|---|
+| Alto | 1440p | sim | sim | 2/3 |
+| Alto sem nitidez | 1440p | sim | não | 1/3 |
+| Alto sem correção de cor | 1440p | não | sim | 0/3 |
+| Alto sem pós-processamento | 1440p | não | não | 0/3 |
+| Equilibrado com nitidez | 1080p | sim | sim | 1/3 |
+| Original em 1440p | 1440p | não | não | 0/3 |
+| Alto em 1080p | 1080p | sim | sim | 2/3 |
+
+- **Leitura:** a resolução não decide. Sem o pós-processamento da apresentação, 0 em 6; com a correção de cor e a nitidez
+  (dois passes), 5 em 9. É o mesmo comportamento no binário do N9.6 (`f690ecb`, 3 de 4) e no do N9.7 (3 de 3): não é da água.
+- **Camada Khronos:** com a validação padrão e com a de sincronização (`VALIDATE_SYNC`, também no envio), 0 erros e 0 perdas
+  (a camada muda o tempo).
+- **Descartado na leitura do código:** duas threads na mesma fila (a apresentação usa a segunda fila da família, com trava
+  própria; com uma fila só, a mesma trava); `vkDeviceWaitIdle` fora das duas travas (só na destruição); o `post_run` do
+  renderizador (só nos testes); o shader de cor (sem laço, uma leitura).
+- **Recuperação e configurações:** o estado aplicado sobrevive (depois de recriado, o AO continuou em 210 renders, a escolha
+  feita antes). As entradas do controle virtual, que são por tempo, se perdem enquanto a janela trava. Foi isso que reprovou
+  o Q4/Q5 da rodada A7.
+- **Causa não demonstrada: nenhuma correção** (sem aumento de tempo limite e sem mudar testes). Registrado no N9.12.
+- **Próximos experimentos recomendados:**
+  1. pedir `VK_EXT_device_fault` (o endereço e o motivo da falha, se o driver informar);
+  2. um modo de validação com uma fila só (a apresentação na fila do renderizador), para isolar a sincronização entre filas
+     (o slot escrito numa e lido na outra) e as imagens da cadeia de pós-processamento;
+  3. 10 execuções por caso, para separar a correção de cor da nitidez com confiança;
+  4. as mesmas execuções com o driver anterior, se o mantenedor quiser.
+- **Q4/Q5 repetidos** (`n96_presets.py`, binários do `9bd13ac`): 0 falhas. No Q4 o renderizador recebeu os três efeitos
+  desligados (o AO tinha rodado em 1 444 renders) e não houve recriação nessa execução. A perda continuou em 13 outras
+  execuções da suíte (inclusive em duas do Q2), sempre antes das sequências do menu, e a suíte passou porque elas terminaram.
+  **O defeito segue aberto.**

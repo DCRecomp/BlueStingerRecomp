@@ -347,7 +347,7 @@ só como histórico:
   commits**, preservado na árvore de trabalho para avaliação no N9.7, na ordem oficial (depois do N9.6). Avaliação e
   compatibilidade com o N9.5 na seção 12.9 de `docs/N9-5-AUDITORIA.md`.
 - **N9.7 autorizado em 2026-11-11** (D7-1 a água original por padrão, D7-2 o catálogo de materiais, D7-3 o shader próprio).
-  A0–A7 em commits locais na branch `n9-7` (`docs/N9-7-AGUA.md`): o mar do cais com os oito quadros da animação, a variante
+  A0–A7 em commits locais na branch `n9-7` e integrados ao master em 2026-11-11 (`9bd13ac`; `docs/N9-7-AGUA.md`): o mar do cais com os oito quadros da animação, a variante
   `-DWATER`, a imagem da cena sob demanda, `[imagem] agua`, o menu e `--agua`. Bateria final sem falhas, exceto Q4/Q5 do
   `n96_presets` (uma perda do dispositivo antiga na janela com o Alto, também no binário do N9.6); o visual e a integração no
   master com o mantenedor.
@@ -410,8 +410,10 @@ pelas subetapas (decisão do mantenedor, 2026-11-10). Não começa sem autoriza�
   B/px) nem a imagem do AO das translúcidas (o AO medido em ~8 B/px); as sombras aprimoradas na AMD integrada em 1080 (26,0 →
   53,5 ms de GPU); o espaço de tela da sombra de contato; a penumbra de volumes pequenos; o `boot_trace` sem os snapshots do
   Flycast.
-- **Do N9.7 (`docs/N9-7-AGUA.md` seções 5–7):** a perda do dispositivo na janela com o preset Alto perto do render 680 (antiga,
-  reproduzida no N9.6); a translúcida por ordem × software numa cena sintética (antiga); a estimativa de VRAM agora
+- **Do N9.7 (`docs/N9-7-AGUA.md` seções 5–7 e 10):** a perda do dispositivo na janela perto do render 680 (antiga,
+  reproduzida no N9.6), ligada ao pós-processamento da apresentação (cor e nitidez: 5 de 9; sem ele, 0 de 6). Causa não
+  demonstrada; próximos experimentos: `VK_EXT_device_fault`, uma fila só em validação, 10 execuções por caso. Também a
+  árvore principal, que não compila por causa do arquivo particular `known_versions.h` sem o `};`; a translúcida por ordem × software numa cena sintética (antiga); a estimativa de VRAM agora
   96 + 4 + 4 B/px.
 - O mesmo para os riscos que as subetapas seguintes registrarem.
 - **Aceitação:** cada risco registrado resolvido ou aceito pelo mantenedor com evidência; as baterias do N9.5 em diante
