@@ -100,3 +100,23 @@ Toda a arte do instalador é geometria desenhada pelo código (`gui/arte.cpp`) e
 - A interface do jogo (N9.2), os saves de PC (N9.3, depois cancelado), o preset gráfico Remastered (N9.5–N9.8) e os pacotes de dublagem e HD
   (N9.8 e N9.9).
 - Detecção de atualização pela rede (N9.10).
+
+## 8. v0.9.7-1: "Adicionar à Steam" (pedido do mantenedor, 2026-11-12)
+
+- **A opção:** uma caixa "Adicionar à Steam" na tela das opções, junto dos atalhos, **desmarcada por padrão**; no `--auto`,
+  só com `--integrar --steam` (os testes).
+- **O que faz** (`builder/instalador/steam`): o jogo entra como atalho de jogo não-Steam em cada conta da Steam desta máquina
+  (`<Steam>\userdata\<conta>\config\shortcuts.vdf`, a pasta `0` e as que não são números ficam de fora), com o nome da edição
+  ("Blue Stinger" ou "Blue Stinger Remastered"), o executável, a pasta e o ícone do jogo, e o `appid` que a Steam calcula
+  (CRC-32 do executável e do nome, com o bit alto).
+- **O formato:** o binário de chave e valor da própria Steam, lido e gravado pelo projeto (sem dependência nova). Um arquivo
+  que não se lê no formato esperado nunca é reescrito (o aviso diz qual). Cada gravação guarda a versão anterior em
+  `shortcuts.vdf.anterior-bluestinger` e troca o arquivo de uma vez. As entradas de outros programas ficam byte a byte.
+- **Sem duplicar:** a entrada do mesmo executável é atualizada (a reinstalação na mesma pasta), preservando o que a Steam
+  guardou nela (tags, tempo de jogo).
+- **A desinstalação** tira as entradas cujo executável está na pasta da instalação.
+- **A Steam:** Windows, `HKCU\Software\Valve\Steam\SteamPath`; Linux, `~/.steam/steam`, `$XDG_DATA_HOME/Steam`
+  (`~/.local/share/Steam`) e o Flatpak. Sem a Steam, a instalação termina com o aviso "Steam não encontrada". Com a Steam
+  aberta, o jogo aparece depois de reiniciá-la (o aviso diz isso).
+- **Testes:** `bs_instalador_tests` (`instalador_steam_formato_e_entradas`, `instalador_steam_desviada`), com a Steam
+  desviada por `BS_INSTALADOR_TESTE_RAIZ` para `<raiz>\steam`: os testes nunca tocam na Steam real.

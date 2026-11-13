@@ -71,7 +71,7 @@ Ferramentas:
 - `bs-builder --disc <img.cdi> --out <pasta> --kit . --sdl3 build/msvc-release/_deps/sdl3-src`:
   fluxo completo do Builder (CDI → BlueStinger.exe) a partir do repositório. Janelas sobre o mesmo núcleo:
   `BlueStinger-Recompiler.exe` (o instalador do N9.1: Win32 + Direct2D, no Linux SDL3 + FreeType; telas em
-  `builder/instalador/gui`; `--auto --portatil --edicao --idioma <cod> --sem-filmes [--integrar]` para testes; `--captura <pasta>` e
+  `builder/instalador/gui`; `--auto --portatil --edicao --idioma <cod> --sem-filmes [--integrar [--steam]]` para testes (v0.9.7-1: a opção "Adicionar à Steam", desmarcada por padrão, `builder/instalador/steam`); `--captura <pasta>` e
   `--teclas <roteiro>` sem janela; desinstalador `BlueStinger-Desinstalar` no pacote; unitários `bs_instalador_tests`, ctest
   `instalador`; suíte `tools/dist/test_instalador.ps1 -Disc <cdi>`, com a integração desviada por `BS_INSTALADOR_TESTE_RAIZ`) e `BlueStinger-Developer.exe` (três áreas: exportar o projeto C++20 sem compilar, `--somente-exportar` no CLI; compilar projeto Release/Debug sem o CDI pela pasta dos recursos; inspecionar instalação ou projeto sem o CDI).
   Textos por chave em `builder/ui`; unitários `bs_ui_tests` (ctest `ui`).

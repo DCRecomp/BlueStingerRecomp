@@ -1,11 +1,13 @@
-# Mods padrão (legendas) — conteúdo só local
+# Mods padrão (legendas) — fora do git
 
 O Builder (Recompiler, Developer e `bs-builder`) instala em toda instalação os pacotes que estiverem aqui
 (`mods-padrao/<id>/mod.toml`): a pasta vai para `<instalação>\mods\<id>` e os `.srt` de `video\` do pacote vão para
 `<instalação>\mods\video`.
 
-**O conteúdo destas pastas não é versionado nem publicado** (`.gitignore`): as legendas são a transcrição e a tradução
-das falas do jogo comercial, geradas na máquina de quem tem o disco. Só este README está no repositório.
+**O conteúdo destas pastas não é versionado** (`.gitignore`): as legendas são a transcrição e a tradução das falas do
+jogo comercial. Só este README está no repositório. Desde a v0.9.7-1 (decisão do mantenedor, 2026-11-12), os pacotes
+`legendas-en` e `legendas-pt-br` vão no ZIP do Builder das releases (`tools/dist/make_builder.ps1 -Versao <v>
+-LegendasLocais`); ver `LEGAL.md`.
 
 Como gerar localmente, a partir dos dados do seu disco (`tools/dev/legendas`, ver `docs/LEGENDAS-EN-PLANO.md`):
 
@@ -19,6 +21,5 @@ Como gerar localmente, a partir dos dados do seu disco (`tools/dev/legendas`, ve
 `revisoes.en-US.tsv` e `traducao.pt-BR.tsv` (em `tools/dev/legendas`) também ficam só locais, com cópias datadas em
 `%LOCALAPPDATA%\BlueStingerRecomp\backups`.
 
-Para a distribuição local de testes, `tools/dist/make_builder.ps1 -LegendasLocais` copia estes pacotes para o kit (com
-aviso de uso local no `VERSAO.txt`); sem a opção, o Builder sai sem legendas. `tools/dist/make_preview.ps1` usa o
-repositório como kit e leva os pacotes daqui.
+`tools/dist/make_builder.ps1 -LegendasLocais` copia estes pacotes para o kit (o `VERSAO.txt` lista os pacotes); sem a
+opção, o Builder sai sem legendas. `tools/dist/make_preview.ps1` usa o repositório como kit e leva os pacotes daqui.

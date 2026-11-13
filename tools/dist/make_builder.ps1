@@ -9,8 +9,9 @@
 # jogo, nem dados do disco); a montagem confere isso antes de trocar a pasta. Uma tentativa
 # que falha deixa a anterior intacta.
 # -LegendasLocais: copia para o kit os pacotes locais de mods-padrao/ (legendas transcritas e traduzidas, texto
-# derivado das falas do jogo, fora do git: ver mods-padrao/README.md). So para a distribuicao local de testes: o
-# VERSAO.txt avisa que ela nao pode ser publicada. Sem a opcao, o Builder sai sem legendas.
+# derivado das falas do jogo, fora do git: ver mods-padrao/README.md). Desde a v0.9.7-1 (decisao do mantenedor,
+# 2026-11-12) os pacotes de legenda tambem vao na release (-Versao); o texto continua fora do git. Sem a opcao, o Builder
+# sai sem legendas.
 # -IconeLocal: copia para o kit icone-local/bluestinger.ico (feito da capa do proprio usuario por
 # tools/dev/gerar_icone.py --capa, fora do git): o executavel que o Builder gera usa esse icone no lugar do original.
 # Tambem so para a distribuicao local (arte do jogo).
@@ -101,14 +102,15 @@ $kv = "tools/extractor/known_versions.h"
 cmd /c "git -C `"$repo`" show HEAD:$kv > `"$(Join-Path $kit $kv)`""
 if ($LASTEXITCODE -ne 0) { Fail "nao consegui ler $kv do commit" }
 $locais = @()
+$legendas = @()
 if ($LegendasLocais) {
     foreach ($p in Get-ChildItem -Directory (Join-Path $repo "mods-padrao") -ErrorAction SilentlyContinue) {
         if (-not (Test-Path (Join-Path $p.FullName "mod.toml"))) { continue }
         Copy-Item -Recurse -LiteralPath $p.FullName -Destination (Join-Path $kit "mods-padrao\$($p.Name)")
-        $locais += $p.Name
+        $legendas += $p.Name
     }
-    if (-not $locais) { Fail "-LegendasLocais sem nenhum pacote em mods-padrao (ver mods-padrao/README.md)" }
-    Step "legendas locais no kit: $($locais -join ', ') (uso local: nao publicar)"
+    if (-not $legendas) { Fail "-LegendasLocais sem nenhum pacote em mods-padrao (ver mods-padrao/README.md)" }
+    Step "pacotes de legenda no kit: $($legendas -join ', ')"
 }
 if ($IconeLocal) {
     $ico = Join-Path $repo "icone-local\bluestinger.ico"
@@ -126,7 +128,7 @@ $version = (git -C $repo describe --always --dirty --abbrev=7 2>$null)
 if (-not $version) { $version = "desconhecida" }
 if ($Versao) {
     if ($Versao -notmatch '^v[0-9]+\.[0-9]+\.[0-9]+[A-Za-z0-9.+-]*$') { Fail "rotulo de versao invalido: $Versao" }
-    if ($locais) { Fail "-Versao (release) nao aceita -LegendasLocais nem -IconeLocal" }
+    if ($locais) { Fail "-Versao (release) nao aceita -IconeLocal (a capa do jogo so na distribuicao local)" }
     # a arvore inteira igual ao commit (o proprio script, o sdl3_avisos.py, os textos e o kit), menos os dois arquivos
     # particulares do mantenedor: o known_versions.h (o kit sempre le o do commit; o build ja foi conferido acima) e o
     # docs/DISTRIBUICAO-COMPILADOR.md (fora do kit). Arquivos nao rastreados nao entram (o kit usa so os rastreados)
@@ -241,11 +243,15 @@ if ($LASTEXITCODE -ne 2) { Fail "bs-builder.exe montado nao respondeu (codigo $L
 $kitFiles = Get-ChildItem -LiteralPath $kit -Recurse -File
 @"
 Blue Stinger Builder $version
-Distribuicao: Builder ($(if ($locais) { 'com conteudo local do jogo: uso local, nao publicar' } else { 'sem conteudo do jogo' }))
+Distribuicao: Builder ($(if ($locais) { 'com conteudo local do jogo: uso local, nao publicar' } elseif ($legendas) { 'sem o jogo; com os pacotes de legenda' } else { 'sem conteudo do jogo' }))
 Montada em: $(Get-Date -Format 'yyyy-MM-dd HH:mm')
 Runtime do MSVC: $($crt.Name) ($([IO.Path]::GetFileName($env:VCToolsRedistDir.TrimEnd('\'))))
 Kit de fontes: $($kitFiles.Count) arquivos, $([math]::Round((($kitFiles | Measure-Object Length -Sum).Sum / 1MB), 1)) MB (SDL3 release-3.2.30)
 "@ | Set-Content -Encoding utf8 "$stage\VERSAO.txt"
+if ($legendas) {
+    "Pacotes de legenda no kit: $($legendas -join ', ') (texto das legendas, sem audio, video nem dados do jogo; o jogo" +
+        " vem so do CDI do usuario)." | Add-Content -Encoding utf8 "$stage\VERSAO.txt"
+}
 if ($locais) {
     "Conteudo local no kit: $($locais -join ', '). Derivado do jogo (falas, capa): distribuicao SO para uso local," +
         " NAO publicar." | Add-Content -Encoding utf8 "$stage\VERSAO.txt"

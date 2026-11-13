@@ -56,6 +56,7 @@ struct Config {
     bool                  automatico = false; // --auto: sem perguntas, fecha no fim (0/1/2/3)
     bool                  semFilmes = false;  // --sem-filmes
     bool                  integrar = false;   // --integrar: no --auto tambem cria atalhos e a entrada (testes com a raiz desviada)
+    bool                  steam = false;      // --steam: no --auto com --integrar, tambem adiciona o jogo a Steam (v0.9.7-1)
     std::optional<Fase>   cancelarNaFase;     // --cancelar-na-fase (testes): cancela quando o Builder entra nela
     std::vector<std::wstring> idiomasSistema; // preferencias do sistema, para o idioma inicial
     bool                  linux_ = false;     // textos e opcoes do Linux (compilador portatil, sem entrada de desinstalacao)

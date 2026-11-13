@@ -19,6 +19,7 @@ namespace bs::builder::instalador {
 struct Atalhos {
     bool menu = true;
     bool areaDeTrabalho = false;
+    bool steam = false;  // v0.9.7-1: o jogo como atalho nao-Steam na Steam (steam.h); desmarcado por padrao
 };
 
 struct DadosIntegracao {

@@ -2213,9 +2213,36 @@ int mainWindow(Args& a) {
         prefs.camera    = st::read_camera(prefsDir, &w4);
         for (const std::string& w : {w1, w2, w3, w4})
             if (!w.empty()) std::fprintf(stderr, "[menu] %s\n", w.c_str());
+        // v0.9.7-1 (mantenedor, 2026-11-12): a Remastered instalada vem com o melhor possivel (remastered_best: o Alto, 16:9,
+        // sombras aprimoradas, luz, SSAO alto e agua alta), uma vez: sem graficos.toml (instalacao nova) ou com o arquivo que o
+        // menu de uma versao anterior gravou (o cabecalho do jogo, sem a marca [padroes] desta versao). Um arquivo escrito a
+        // mao (as suites da janela) e a marca ja gravada valem como estao; o --headless (testes) nunca aplica. O arquivo
+        // recebe os padroes e a marca na hora; o jogador muda o que quiser depois, pelo menu.
+        if (editionProfile().edition == bs::native::edition::Edition::Remastered && !a.headless &&
+            prefs.graphics.remaster_defaults < st::kRemasterDefaults) {
+            std::string     text;
+            std::error_code ec;
+            const bool      exists = fs::exists(prefsDir / st::kGraphicsFile, ec);
+            if (exists) {
+                std::ifstream in(prefsDir / st::kGraphicsFile, std::ios::binary);
+                std::getline(in, text);
+            }
+            if (!exists || text.rfind(st::kGraphicsHeader, 0) == 0) {
+                prefs.graphics = st::remastered_best(prefs.graphics);
+                std::string err;
+                if (!st::write_graphics(prefsDir, prefs.graphics, &err)) std::fprintf(stderr, "[menu] %s\n", err.c_str());
+                std::fprintf(stderr, "[menu] Remastered: os padroes graficos melhores (%s; versao %u): Alto, 16:9, sombras "
+                                     "aprimoradas, luz das fontes, SSAO alto e agua alta\n",
+                             exists ? "graficos.toml de uma versao anterior" : "instalacao nova", st::kRemasterDefaults);
+            }
+        }
+        // a marca acompanha toda gravacao do menu na Remastered (um arquivo gravado por esta versao nunca e tratado como de
+        // uma anterior); o arquivo so muda quando o jogador muda algo
+        if (editionProfile().edition == bs::native::edition::Edition::Remastered)
+            prefs.graphics.remaster_defaults = (std::max)(prefs.graphics.remaster_defaults, st::kRemasterDefaults);
         persisted        = prefs;
         // O perfil fornece o padrao sem reescrever a preferencia compartilhada entre edicoes. Um arquivo existente
-        // sempre vence; numa instalacao nova da Remastered, a agua aprimorada ja nasce ligada e continua ajustavel.
+        // sempre vence (fora a vez unica dos padroes da Remastered, acima).
         renderOverride   = a.renderExplicit;
         cameraOverride   = a.cameraMode >= 0;
         if (cameraOverride) prefs.camera.mode = st::CameraMode(a.cameraMode);

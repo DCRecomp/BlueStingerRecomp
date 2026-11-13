@@ -5,6 +5,7 @@
 #include "child_process.h"
 #include "instalador/gui/arte.h"
 #include "instalador/gui/tema.h"
+#include "instalador/steam.h"
 #include "platform/install_config.h"
 #include "ui/i18n.h"
 #include "ui/step_keys.h"
@@ -144,6 +145,7 @@ struct Instalador::Impl {
     std::optional<Result>     res;
     std::string               avisoIntegracao;
     std::vector<fs::path>     atalhosFeitos;
+    int                       steamFeitos = -1;  // v0.9.7-1: contas da Steam com o jogo (-1 = nao pedido)
     size_t                    pacotesCopiados = 0;
     // verificacao
     Verificacao               ver;
@@ -395,7 +397,17 @@ void Instalador::ao_terminar(Result r) {
                 if (it->is_regular_file(ec)) kb += it->file_size(ec) / 1024;
             d.tamanhoKB = kb;
             s.avisoIntegracao.clear();
-            s.atalhosFeitos = integrar(d, c_.automatico ? Atalhos{} : s.atalhos, antes, &s.avisoIntegracao);
+            Atalhos pedidos = c_.automatico ? Atalhos{} : s.atalhos;
+            if (c_.automatico) pedidos.steam = c_.steam;
+            s.atalhosFeitos = integrar(d, pedidos, antes, &s.avisoIntegracao);
+            // v0.9.7-1: a Steam (atalho de jogo nao-Steam), so se marcado
+            s.steamFeitos = -1;
+            if (pedidos.steam) {
+                EntradaSteam e;
+                const std::u8string nome = fs::path(nome_exibicao(inst.edicao)).u8string();
+                e.nome = std::string(nome.begin(), nome.end()), e.exe = r.exe, e.pasta = r.installDir, e.icone = d.icone;
+                s.steamFeitos = adicionar_steam(e, &s.avisoIntegracao);
+            }
             std::string err;
             if (!registrar(lista, inst.pasta, s.atalhosFeitos, &err)) s.avisoIntegracao += err;
             s.encontradas = listar(lista);
@@ -463,6 +475,8 @@ void Instalador::comecar_desinstalacao() {
         ResultadoDesinstalar r = instalador::desinstalar(pasta, op, trab ? cache_dirs(pasta) : std::vector<fs::path>{});
         if (r.ok) {
             desintegrar(pasta, atalhos);
+            std::string ignorado;
+            remover_steam(pasta, &ignorado);  // v0.9.7-1: as entradas da Steam que apontam para a pasta (se houver)
             esquecer(lista, pasta);
             if (!r.pendentes.empty()) {  // o proprio desinstalador: sai depois do processo, com as pastas que esvaziarem
                 std::vector<fs::path> pastas;
@@ -800,6 +814,8 @@ void Instalador::componentes(const Ret& r) {
         y2 += 32;
         ui_.caixa(id("comp.desktop"), tr("comp.desktop"), {}, {x2, y2, col, 26}, s.atalhos.areaDeTrabalho);
         y2 += 32;
+        ui_.caixa(id("comp.steam"), tr("comp.steam"), {}, {x2, y2, col, 26}, s.atalhos.steam);  // v0.9.7-1
+        y2 += 32;
     }
     // pacotes locais (toda a largura)
     float y3 = std::max(y1, y2) + 10;
@@ -980,6 +996,7 @@ void Instalador::conclusao(const Ret& r) {
             for (const auto& a : s.atalhosFeitos) l += (l.empty() ? L"" : L"; ") + a.parent_path().filename().wstring();
             par(tr("fim.shortcuts", {std::to_wstring(s.atalhosFeitos.size())}), tema::kTextoSuave);
         }
+        if (s.steamFeitos > 0) par(tr("fim.steam", {std::to_wstring(s.steamFeitos)}), tema::kTextoSuave);  // v0.9.7-1
         if (s.pacotesCopiados) par(tr("fim.packs", {std::to_wstring(s.pacotesCopiados)}), tema::kTextoSuave);
         if (!res.warning.empty()) par(tr("fim.warn", {widen(res.warning)}), tema::kAmbar, tema::kPequeno);
         if (!s.avisoIntegracao.empty()) par(tr("fim.warn", {widen(s.avisoIntegracao)}), tema::kAmbar, tema::kPequeno);
@@ -1146,6 +1163,7 @@ std::string Instalador::estado(const std::string& k) const {
     if (k == "des.restantes") return std::to_string(s.des.restantes.size());
     if (k == "edicao") return native::edition::edition_name(s.edicao);
     if (k == "atalhos") return std::to_string(s.atalhosFeitos.size());
+    if (k == "steam") return std::to_string(s.steamFeitos);  // v0.9.7-1
     if (k == "encontradas") return std::to_string(s.encontradas.size());
     if (k == "recuos") return std::to_string(s.prog.recuos()) + (s.prog.recuos() ? " (" + s.prog.primeiro_recuo() + ")" : "");
     if (k == "cdi") {

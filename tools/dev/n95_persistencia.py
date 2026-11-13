@@ -4,8 +4,9 @@ Cada caso roda o executavel numa pasta propria dentro de --saida (copia do exe, 
 caso e um cartao vazio; nada da pasta do usuario e tocado), com o controle virtual (BS_CONTROLE_VIRTUAL: so a janela do
 Blue Stinger recebe os botoes, nada de entrada global nem captura da area de trabalho) e confere o log e o arquivo depois.
 
-  P1 Remastered, sem graficos.toml: Configuracoes > Graficos > Proporcao, Direita. O 16:9 vale na hora (sem o aviso de
-     confirmacao), o arquivo passa a "16:9"; numa segunda execucao, sem tocar em nada, o jogo comeca em 16:9.
+  P1 Remastered com um graficos.toml 4:3 escrito a mao: Configuracoes > Graficos > Proporcao, Direita. O 16:9 vale na
+     hora (sem o aviso de confirmacao), o arquivo passa a "16:9"; numa segunda execucao, sem tocar em nada, o jogo comeca em
+     16:9. Um arquivo escrito a mao nao recebe os padroes da Remastered (v0.9.7-1).
   P2 Remastered com o arquivo antigo `proporcao = "automatico"` (D5-1): comeca em 4:3, com o aviso; a mesma troca grava
      "16:9" e o "automatico" some do arquivo.
   P3 Remastered com o software e "16:9" no arquivo: a linha Proporcao fica indisponivel (Direita nao muda nada) e o arquivo
@@ -15,9 +16,15 @@ Blue Stinger recebe os botoes, nada de entrada global nem captura da area de tra
   P4 --proporcao (so nesta execucao, revisao Codex 20261110-004711): uma gravacao por outra opcao mantem a proporcao do
      arquivo nos dois sentidos; mudada no menu, a proporcao vai para o arquivo.
   P5 o recuo real para o SDL (BS_APRESENTACAO_FALHAR, exe de validacao): o quadro largo desliga e o 16:9 do arquivo fica.
+  P6 v0.9.7-1, Remastered sem graficos.toml (instalacao nova): os padroes melhores (o Alto, 16:9, sombras aprimoradas, luz
+     das fontes, SSAO alto, agua alta) chegam ao jogo e ao arquivo, com a marca [padroes]; na segunda execucao, nada de novo
+     e o arquivo igual. A Original sem graficos.toml continua como antes (4:3, nada aplicado, nenhum arquivo).
+  P7 v0.9.7-1, Remastered com o graficos.toml que o menu de uma versao anterior gravou (o cabecalho do jogo, 4:3, sem a
+     marca): recebe os padroes uma vez; numa mudanca pelo menu (Proporcao, Direita: 4:3) a escolha fica e a marca tambem; na
+     execucao seguinte, 4:3 e nada reaplicado.
 
   python tools/dev/n95_persistencia.py --exe build/msvc-release/app/bluestinger.exe --data <data> --saida tmp/<pasta>
-         [--casos P1,P2,P3,P4,P5] [--exe-validacao build/msvc-validacao/app/bluestinger.exe]
+         [--casos P1,P2,P3,P4,P5,P6,P7] [--exe-validacao build/msvc-validacao/app/bluestinger.exe]
 Saida 1 se algum criterio falhar. A janela do jogo abre por ~45 s em cada execucao.
 """
 import argparse
@@ -95,7 +102,7 @@ def depois(texto, marca):
 
 
 def p1(a, ok):
-    d = preparar(a, "P1", "remastered")
+    d = preparar(a, "P1", "remastered", GRAFICOS.format(prop="4:3", rend="vulkan"))
     rc, t, toml = rodar(a, d, "1", ATE_GRAFICOS + PROPORCAO + ["dpright"] + SAIR_MENU, REM_INICIO)
     m = depois(t, "[remaster] menu inicial")
     ok("P1 a troca rodou (rc=0, menu inicial)", rc == 0 and bool(m), "rc=%d" % rc)
@@ -105,6 +112,51 @@ def p1(a, ok):
     rc, t, toml2 = rodar(a, d, "2", [], 0, 20000)
     ok("P1 a execucao seguinte comeca em 16:9", rc == 0 and "[menu] proporcao: 16:9 (quadro largo)" in t, "rc=%d" % rc)
     ok("P1 sem mudanca, o arquivo fica igual", toml2 == toml)
+    ok("P1 o arquivo escrito a mao nao recebe os padroes da Remastered", MELHORES not in t)
+
+
+MELHORES = "[menu] Remastered: os padroes graficos melhores"
+CABECALHO = "# Blue Stinger Native PC: configuracoes graficas (gravadas pelo menu do jogo; editar a mao tambem vale)\n"
+
+
+def melhores_no_arquivo(toml):
+    chaves = ['proporcao = "16:9"', 'sombras = "aprimoradas"', "iluminacao = true", "ssao = true", 'ssao_qualidade = "alta"',
+              'agua = "alta"', "[padroes]", "remastered = 1"]
+    return [c for c in chaves if c not in toml]
+
+
+def p6(a, ok):
+    d = preparar(a, "P6", "remastered")
+    rc, t, toml = rodar(a, d, "1", [], 0, 30000)
+    ok("P6 rodou (rc=0)", rc == 0, "rc=%d" % rc)
+    ok("P6 os padroes melhores numa instalacao nova", MELHORES + " (instalacao nova" in t)
+    ok("P6 chegam ao jogo: quadro largo, sombras, luz, SSAO alto e agua alta",
+       "[render] quadro: largo 854x480" in t and "[render] sombras aprimoradas: ligadas" in t and
+       "[render] luz das fontes: ligada" in t and "[render] oclusao ambiente: ligada (qualidade alta)" in t and
+       "[render] agua: alta" in t)
+    falta = melhores_no_arquivo(toml)
+    ok("P6 o arquivo com os padroes e a marca", not falta, "faltam %s" % falta)
+    rc, t2, toml2 = rodar(a, d, "2", [], 0, 30000)
+    ok("P6 na segunda execucao nada de novo e o arquivo igual", rc == 0 and MELHORES not in t2 and toml2 == toml and
+       "[render] quadro: largo 854x480" in t2, "rc=%d" % rc)
+    o = preparar(a, "P6o", "original")
+    rc, t3, toml3 = rodar(a, o, "1", [], 0, 25000)
+    ok("P6 a Original sem graficos.toml: nada aplicado, 4:3", rc == 0 and MELHORES not in t3 and "[render] quadro: largo" not in t3
+       and "padroes" not in toml3, "rc=%d" % rc)
+
+
+def p7(a, ok):
+    d = preparar(a, "P7", "remastered", CABECALHO + GRAFICOS.format(prop="4:3", rend="vulkan"))
+    rc, t, toml = rodar(a, d, "1", ATE_GRAFICOS + PROPORCAO + ["dpright"] + SAIR_MENU, REM_INICIO)
+    ok("P7 rodou (rc=0)", rc == 0, "rc=%d" % rc)
+    ok("P7 os padroes melhores no arquivo de uma versao anterior", MELHORES + " (graficos.toml de uma versao anterior" in t)
+    m = depois(t, "[remaster] menu inicial")
+    ok("P7 a escolha pelo menu (4:3) vale e fica no arquivo, com a marca",
+       "[menu] proporcao: 4:3" in m and 'proporcao = "4:3"' in toml and "remastered = 1" in toml and
+       'sombras = "aprimoradas"' in toml, toml.replace("\n", " | ")[:240])
+    rc, t2, toml2 = rodar(a, d, "2", [], 0, 25000)
+    ok("P7 na execucao seguinte, 4:3 e nada reaplicado", rc == 0 and MELHORES not in t2 and "[render] quadro: largo" not in t2 and
+       toml2 == toml, "rc=%d" % rc)
 
 
 def p2(a, ok):
@@ -180,7 +232,7 @@ def main():
     ap.add_argument("--exe", required=True)
     ap.add_argument("--data", required=True)
     ap.add_argument("--saida", required=True, help="pasta dos casos (dentro de tmp/)")
-    ap.add_argument("--casos", default="P1,P2,P3,P4,P5")
+    ap.add_argument("--casos", default="P1,P2,P3,P4,P5,P6,P7")
     ap.add_argument("--exe-validacao", help="exe de validacao (para o P5)")
     a = ap.parse_args()
     a.exe, a.data, a.saida = os.path.abspath(a.exe), os.path.abspath(a.data), os.path.abspath(a.saida)
@@ -195,7 +247,7 @@ def main():
             falhas.append(nome)
 
     for n in a.casos.split(","):
-        {"P1": p1, "P2": p2, "P3": p3, "P4": p4, "P5": p5}[n](a, ok)
+        {"P1": p1, "P2": p2, "P3": p3, "P4": p4, "P5": p5, "P6": p6, "P7": p7}[n](a, ok)
     print("\n%d falha(s) (%s)" % (len(falhas), a.saida))
     return 1 if falhas else 0
 

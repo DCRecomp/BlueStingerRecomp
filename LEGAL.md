@@ -19,9 +19,11 @@ repository. It grants no rights to Blue Stinger or to any data, code or assets d
   áudio, vídeo.
 - Código gerado a partir do executável do jogo (`generated/`, `analysis/`).
 - Saves, traces e capturas que contenham dados do jogo.
-- Transcrições e traduções das falas e dos filmes (pacotes de legendas): são texto derivado do jogo e não há
-  autorização para publicá-las. As ferramentas que as geram são do projeto; cada usuário gera os pacotes a partir da
-  própria cópia (`mods-padrao/README.md`, `docs/LEGENDAS-PENDENCIAS.md`).
+- Transcrições e traduções das falas e dos filmes (pacotes de legendas): são texto derivado do jogo e ficam fora do
+  repositório. As ferramentas que as geram são do projeto (`mods-padrao/README.md`, `docs/LEGENDAS-PENDENCIAS.md`).
+  **Decisão do mantenedor (2026-11-12):** a partir da v0.9.7-1, os pacotes `legendas-en` (en-US) e `legendas-pt-br`
+  (pt-BR) vão no ZIP do Builder publicado nas releases. Eles têm só o texto das legendas, sem áudio, vídeo nem dados do
+  disco; o jogo continua vindo do CDI de cada usuário. O texto continua fora do git.
 
 O `.gitignore` bloqueia esses caminhos e extensões. `config/*.toml` contém só
 metadados (ID de produto, hashes, tamanhos e endereços) e nenhum byte do jogo.

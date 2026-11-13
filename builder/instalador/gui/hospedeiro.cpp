@@ -276,6 +276,7 @@ bool ler_linha(const std::vector<std::wstring>& args, Linha& l) {
         else if (a == L"--auto") l.c.automatico = true;
         else if (a == L"--sem-filmes") l.c.semFilmes = true;
         else if (a == L"--integrar") l.c.integrar = true;
+        else if (a == L"--steam") l.c.steam = true;
         else if (a == L"--pasta" && more) l.c.pastaDesinstalar = fs::path(args[++i]);
         else if (a == L"--captura" && more) l.captura = fs::path(args[++i]);
         else if (a == L"--teclas" && more) l.teclas = fs::path(args[++i]);

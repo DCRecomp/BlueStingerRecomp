@@ -84,6 +84,16 @@ GraphicsSettings preset(Preset p) {
     return s;
 }
 
+GraphicsSettings remastered_best(const GraphicsSettings& base) {
+    GraphicsSettings s = preset(Preset::High);
+    s.aspect = Aspect::Wide16x9, s.shadows = Shadows::Enhanced, s.lighting = true;
+    s.ssao = true, s.ssao_quality = SsaoQuality::High, s.water = Water::High;
+    s.window = base.window, s.window_w = base.window_w, s.window_h = base.window_h, s.vsync = base.vsync;
+    s.vulkan = base.vulkan, s.shader = base.shader, s.shader_params = base.shader_params;
+    s.remaster_defaults = kRemasterDefaults;
+    return s;
+}
+
 Preset classify(const GraphicsSettings& s) {
     for (Preset p : {Preset::Original, Preset::Balanced, Preset::High})
         if (same_quality(s, preset(p))) return p;
@@ -244,7 +254,7 @@ const char* preset_name(Preset p) {
 
 std::string to_toml(const GraphicsSettings& s) {
     std::ostringstream o;
-    o << "# Blue Stinger Native PC: configuracoes graficas (gravadas pelo menu do jogo; editar a mao tambem vale)\n"
+    o << kGraphicsHeader << " (gravadas pelo menu do jogo; editar a mao tambem vale)\n"
       << "preset = \"" << preset_name(classify(s)) << "\"\n\n[imagem]\n"
       << "resolucao = \"" << name(s.resolution) << "\"\n"
       << "escala = " << s.scale_pct << "\n"
@@ -282,6 +292,7 @@ std::string to_toml(const GraphicsSettings& s) {
       << "proporcao = \"" << name(s.aspect) << "\"\n"
       << "vsync = " << (s.vsync ? "true" : "false") << "\n"
       << "renderizador = \"" << (s.vulkan ? "vulkan" : "software") << "\"\n";
+    if (s.remaster_defaults) o << "\n[padroes]\nremastered = " << s.remaster_defaults << "\n";  // v0.9.7-1
     if (!s.shader_params.empty()) {
         o << "\n[shader_parametros]\n";
         for (const auto& [k, v] : s.shader_params) o << "\"" << k << "\" = " << v << "\n";
@@ -335,6 +346,7 @@ GraphicsSettings from_toml(const std::string& text, std::string* warning) {
         for (const auto& [k, v] : *t)
             if (auto d = v.value<double>(); d && std::isfinite(*d)) s.shader_params[std::string(k.str())] = float(*d);
     str("tela", "modo", s.window), bln("tela", "vsync", s.vsync);
+    num("padroes", "remastered", s.remaster_defaults);  // v0.9.7-1
     // N9.5 fase 5 (D5-1): "auto" (o nome gravado ate a fase 4) e "automatico" valem 4:3, com aviso; a proxima gravacao
     // escreve "4:3"
     std::string oldAspect;

@@ -4337,6 +4337,26 @@ não por uma única bateria contínua** (decisão do mantenedor, 2026-11-02).
 - **Pendências:** H9; D-N8-4 no gate pós-N9; ressalva do 7.1 e D-K1(a); limite de 3 h de `n6_h` no executor, defeito a
   corrigir antes de uma futura integral, sem enfraquecer os testes. N9 e N10 não iniciados.
 
+### v0.9.7-1: legendas no pacote, a Remastered no máximo e "Adicionar à Steam" (2026-11-12, pedido do mantenedor)
+
+O mantenedor testou a v0.9.7 e pediu três correções, numa worktree própria (`tmp/wt-0971`, branch `v0.9.7-1` sobre `000e222`), com a publicação como `v0.9.7-1`.
+- **Legendas pt-BR ausentes:**
+  - **Causa:** a decisão de 2026-10-23 deixava o texto das falas fora de todo pacote público, e o `make_builder -Versao` recusava `-LegendasLocais`.
+  - **Decisão nova (2026-11-12, "Incluir na release"):** os pacotes `legendas-en` 0.3.1 e `legendas-pt-br` 0.2.1 vão no ZIP. Continuam fora do git.
+  - **Mudanças:** o `make_builder -Versao` aceita `-LegendasLocais` (o ícone da capa continua só local); `LEGAL.md` e `mods-padrao/README.md` atualizados.
+- **A Remastered no máximo ao instalar:**
+  - **O que vem:** `remastered_best` (o Alto, 16:9, sombras aprimoradas, luz das fontes, SSAO alto e água alta), aplicado uma vez.
+  - **Quando vale:** sem `graficos.toml` ou com o arquivo gravado pelo menu de uma versão anterior (o cabeçalho do jogo, sem a marca `[padroes] remastered`).
+  - **Quando não vale:** o `--headless` (testes) e os arquivos escritos à mão ficam como estão.
+  - **A marca:** acompanha toda gravação do menu na Remastered.
+  - **Testes:** unitário `graphics_remastered_best_defaults`; suíte P com P1 a partir de um arquivo 4:3 escrito à mão e os casos novos P6 e P7.
+- **"Adicionar à Steam"** (`builder/instalador/steam`, `docs/N9-1-INSTALADOR.md` seção 8):
+  - a caixa na tela das opções, desmarcada por padrão; `--steam` com `--auto --integrar`;
+  - o atalho de jogo não-Steam no `shortcuts.vdf` binário de cada conta, sem duplicar e com a versão anterior guardada;
+  - um arquivo de formato desconhecido fica intocado, e a desinstalação remove a entrada;
+  - unitários `instalador_steam_formato_e_entradas` e `instalador_steam_desviada`.
+- **Testes:** por pedido do mantenedor ("Não precisa testar o 0.9.7-1"), nenhum teste rodou nesta versão. Só a compilação Release passou (`msvc-release`). Os unitários novos e as suítes P6 e P7 estão escritos e **não foram executados**.
+
 ### Estabilização após o N9.7: a compilação do master e a perda do dispositivo Vulkan (2026-11-12, autorizada)
 
 Detalhes em `docs/N9-7-AGUA.md`, seção 11. Commits locais `3ec3b81` (diagnóstico, só validação), `ab28c5a` (correção) e o

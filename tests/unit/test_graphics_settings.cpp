@@ -380,3 +380,21 @@ BS_TEST(graphics_post_effects) {
     const st::GraphicsSettings mc = st::clamp_to(m, all);
     BS_CHECK(mc.gamma == def.gamma && mc.bloom_strength == def.bloom_strength);
 }
+
+// v0.9.7-1: os padroes da Remastered (o melhor possivel, uma vez) e a marca no graficos.toml
+BS_TEST(graphics_remastered_best_defaults) {
+    st::GraphicsSettings base;
+    base.window = st::WindowMode::Fullscreen, base.window_w = 1600, base.window_h = 900, base.vsync = false, base.vulkan = true;
+    const st::GraphicsSettings b = st::remastered_best(base);
+    BS_CHECK(b.aspect == st::Aspect::Wide16x9 && b.shadows == st::Shadows::Enhanced && b.lighting && b.ssao &&
+             b.ssao_quality == st::SsaoQuality::High && b.water == st::Water::High);
+    BS_CHECK(b.resolution == st::preset(st::Preset::High).resolution && b.color && b.sharpen > 0);  // o resto do Alto
+    BS_CHECK(b.window == base.window && b.window_w == 1600 && b.window_h == 900 && !b.vsync && b.vulkan);  // do jogador
+    BS_CHECK(b.remaster_defaults == st::kRemasterDefaults && st::classify(b) == st::Preset::Custom);
+    // a marca vai e volta pelo arquivo; sem ela, 0 (um arquivo antigo)
+    const std::string t = st::to_toml(b);
+    BS_CHECK(t.rfind(st::kGraphicsHeader, 0) == 0 && t.find("[padroes]") != std::string::npos);
+    BS_CHECK(st::from_toml(t).remaster_defaults == st::kRemasterDefaults && st::from_toml(t) == b);
+    BS_CHECK(st::from_toml(st::to_toml(st::GraphicsSettings{})).remaster_defaults == 0);
+    BS_CHECK(st::to_toml(st::GraphicsSettings{}).find("[padroes]") == std::string::npos);
+}

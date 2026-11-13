@@ -70,6 +70,9 @@ struct GraphicsSettings {
     Aspect     aspect = Aspect::Original4x3;
     bool       vsync  = true;
     bool       vulkan = true;  // renderizador: Vulkan (padrao desde o fechamento do N7) ou o rasterizador em software
+    // v0.9.7-1: a versao dos padroes da Remastered ja aplicada a este arquivo ([padroes] remastered; 0 = nenhuma). Fora dos
+    // presets e da classificacao
+    uint32_t   remaster_defaults = 0;
     bool       operator==(const GraphicsSettings&) const = default;
 };
 
@@ -106,6 +109,14 @@ struct Capabilities {
 };
 
 GraphicsSettings preset(Preset p);                   // o preset (Custom = Original)
+// v0.9.7-1 (mantenedor, 2026-11-12: "deve vir o melhor possivel quando instalar"): os padroes de uma instalacao da Remastered:
+// o Alto, o 16:9, as sombras aprimoradas, a luz das fontes, o SSAO na qualidade alta e a agua alta (clamp_to leva ao que a
+// GPU e o renderizador comportam). O modo de tela, o tamanho da janela, o V-Sync e o renderizador ficam os de `base`.
+// kRemasterDefaults e a versao desses padroes: um graficos.toml com uma versao menor recebe os novos uma vez.
+inline constexpr uint32_t kRemasterDefaults = 1;
+GraphicsSettings remastered_best(const GraphicsSettings& base);
+// O texto que o menu grava no comeco do arquivo (to_toml): distingue um graficos.toml gravado pelo jogo de um escrito a mao
+inline constexpr const char* kGraphicsHeader = "# Blue Stinger Native PC: configuracoes graficas";
 Preset           classify(const GraphicsSettings& s);  // qual preset a configuracao e (ou Custom)
 uint32_t         internal_height(const GraphicsSettings& s);  // altura interna em pixels, com a escala
 

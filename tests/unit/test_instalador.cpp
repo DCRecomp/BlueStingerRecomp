@@ -7,6 +7,7 @@
 #include "instalador/fases.h"
 #include "instalador/instalacoes.h"
 #include "instalador/integracao.h"
+#include "instalador/steam.h"
 #include "platform/install_config.h"
 
 #include <cstdlib>
@@ -411,4 +412,101 @@ BS_TEST(instalador_espaco) {
     TempDir t;
     BS_CHECK(espaco_livre(t.p / "nao" / "existe") > 0);
     BS_CHECK(espaco_necessario(true) > espaco_necessario(false));
+}
+
+// v0.9.7-1: a opcao "Adicionar a Steam" (steam.h): o formato binario, a entrada sem duplicar, o que ja estava no arquivo
+// preservado byte a byte, a remocao pela pasta, o arquivo de formato desconhecido intocado e a Steam desviada nos testes.
+BS_TEST(instalador_steam_formato_e_entradas) {
+    // o CRC-32 de referencia ("123456789" -> CBF43926) com o bit alto: o appid de atalho que a Steam calcula
+    BS_CHECK(appid_atalho("12345678", "9") == 0xCBF43926u);
+    BS_CHECK(appid_atalho("\"C:\\a.exe\"", "X") >= 0x80000000u);
+    // um arquivo com uma entrada de outro programa (com um inteiro de 64 bits e uma tabela de tags)
+    NoVdf raiz, lista, outra, tags;
+    lista.tipo = 0x00, lista.nome = "shortcuts";
+    outra.tipo = 0x00, outra.nome = "0";
+    NoVdf n;
+    n.tipo = 0x01, n.nome = "AppName", n.texto = "Outro jogo";
+    outra.filhos.push_back(n);
+    n.nome = "Exe", n.texto = "\"D:\\Outro\\outro.exe\"";
+    outra.filhos.push_back(n);
+    n = {};
+    n.tipo = 0x07, n.nome = "Grande", n.numero = 0x0123456789ABCDEFull;
+    outra.filhos.push_back(n);
+    tags.tipo = 0x00, tags.nome = "tags";
+    n = {};
+    n.tipo = 0x01, n.nome = "0", n.texto = "favorito";
+    tags.filhos.push_back(n);
+    outra.filhos.push_back(tags);
+    lista.filhos.push_back(outra);
+    raiz.filhos.push_back(lista);
+    const std::string original = gravar_vdf(raiz);
+    NoVdf lido;
+    BS_CHECK(ler_vdf(original, lido) && gravar_vdf(lido) == original);  // ida e volta byte a byte
+
+    TempDir t;
+    EntradaSteam e;
+    e.nome = "Blue Stinger Remastered", e.pasta = t.p / "Jogo", e.exe = t.p / "Jogo" / exeName(), e.icone = e.exe;
+    std::string um, dois, tres;
+    BS_CHECK(incluir_entrada(original, e, um));
+    BS_CHECK(ler_vdf(um, lido) && lido.filhos.size() == 1 && lido.filhos[0].filhos.size() == 2);
+    const NoVdf* nova = lido.filhos[0].filho("1");
+    BS_CHECK(nova && nova->filho("AppName") && nova->filho("AppName")->texto == e.nome);
+    BS_CHECK(nova && nova->filho("Exe") && nova->filho("Exe")->texto.front() == '"' && nova->filho("appid") &&
+             nova->filho("appid")->numero == appid_atalho(nova->filho("Exe")->texto, e.nome));
+    // a entrada de antes, inteira (o mesmo trecho de bytes no comeco do arquivo novo)
+    BS_CHECK(gravar_vdf(lido).compare(0, original.size() - 2, original, 0, original.size() - 2) == 0);
+    // de novo, o mesmo executavel: atualiza, nao duplica
+    e.nome = "Blue Stinger Remastered 2";
+    BS_CHECK(incluir_entrada(um, e, dois) && ler_vdf(dois, lido) && lido.filhos[0].filhos.size() == 2);
+    BS_CHECK(lido.filhos[0].filho("1")->filho("AppName")->texto == "Blue Stinger Remastered 2");
+    // num arquivo vazio (a conta sem atalhos ainda)
+    BS_CHECK(incluir_entrada("", e, tres) && ler_vdf(tres, lido) && lido.filhos.size() == 1 && lido.filhos[0].filhos.size() == 1);
+    // a remocao: so a entrada que aponta para a pasta; a outra fica e o arquivo volta ao original
+    std::string sem;
+    int         tiradas = 0;
+    BS_CHECK(tirar_entradas(dois, e.pasta, sem, &tiradas) && tiradas == 1 && sem == original);
+    BS_CHECK(tirar_entradas(original, e.pasta, sem, &tiradas) && tiradas == 0 && sem == original);
+    // formato desconhecido: nada muda
+    std::string lixo = original;
+    lixo[0] = char(0x05);
+    BS_CHECK(!ler_vdf(lixo, lido) && !incluir_entrada(lixo, e, um) && !tirar_entradas(lixo, e.pasta, sem, &tiradas));
+    BS_CHECK(!ler_vdf(original.substr(0, original.size() - 3), lido));  // cortado
+}
+
+BS_TEST(instalador_steam_desviada) {
+    TesteRaiz r;
+    BS_CHECK(pasta_steam().empty());  // sem <raiz>/steam: "Steam nao encontrada"
+    std::string aviso;
+    EntradaSteam e;
+    e.nome = "Blue Stinger", e.pasta = r.t.p / "Jogo", e.exe = r.t.p / "Jogo" / exeName();
+    BS_CHECK(adicionar_steam(e, &aviso) == 0 && aviso.find("Steam nao encontrada") != std::string::npos);
+    const fs::path steam = r.t.p / "steam";
+    fs::create_directories(steam / "userdata" / "12345" / "config");
+    fs::create_directories(steam / "userdata" / "678");      // conta sem config ainda
+    fs::create_directories(steam / "userdata" / "0");        // a pasta anonima: fica de fora
+    fs::create_directories(steam / "userdata" / "anonimo");  // nao e conta
+    put(steam / "userdata" / "678" / "config" / "shortcuts.vdf", std::string("\x05nada", 5));  // formato desconhecido
+    fs::remove(steam / "userdata" / "678" / "config" / "shortcuts.vdf");
+    fs::remove(steam / "userdata" / "678" / "config");
+    BS_CHECK(pasta_steam() == steam);
+    BS_CHECK(arquivos_atalhos_steam(steam).size() == 2);
+    aviso.clear();
+    BS_CHECK(adicionar_steam(e, &aviso) == 2 && aviso.empty());
+    BS_CHECK(adicionar_steam(e, &aviso) == 2);  // de novo: a mesma entrada
+    NoVdf lido;
+    for (const auto& f : arquivos_atalhos_steam(steam)) {
+        BS_CHECK(ler_vdf(get(f), lido) && lido.filhos.size() == 1 && lido.filhos[0].filhos.size() == 1);
+        BS_CHECK(fs::exists(fs::path(f).concat(".anterior-bluestinger")));  // a segunda gravacao guardou a primeira
+    }
+    // um arquivo de formato desconhecido numa conta: nao e tocado e o aviso diz qual
+    const fs::path ruim = steam / "userdata" / "12345" / "config" / "shortcuts.vdf";
+    put(ruim, std::string("\x05nada", 5));
+    aviso.clear();
+    BS_CHECK(adicionar_steam(e, &aviso) == 1 && aviso.find("formato desconhecido") != std::string::npos);
+    BS_CHECK(get(ruim) == std::string("\x05nada", 5));
+    // a desinstalacao tira a entrada da outra conta
+    aviso.clear();
+    BS_CHECK(remover_steam(e.pasta, &aviso) == 1);
+    BS_CHECK(ler_vdf(get(steam / "userdata" / "678" / "config" / "shortcuts.vdf"), lido) && lido.filhos[0].filhos.empty());
+    BS_CHECK(get(ruim) == std::string("\x05nada", 5));
 }

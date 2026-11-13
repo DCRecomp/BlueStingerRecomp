@@ -42,7 +42,7 @@ target_compile_features(bs_builder_ui PUBLIC cxx_std_20)
 # N9.1 (docs/N9-1-INSTALADOR.md): instalacoes do jogador, verificacao, desinstalacao, fases do progresso e integracao com o
 # sistema (atalhos, desinstalador), sem janela. O que toca o sistema: instalador/integracao_<BS_PLAT>.cpp
 add_library(bs_instalador_core STATIC instalador/instalacoes.cpp instalador/fases.cpp instalador/integracao.cpp
-            instalador/integracao_${BS_PLAT}.cpp)
+            instalador/integracao_${BS_PLAT}.cpp instalador/steam.cpp)
 target_include_directories(bs_instalador_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(bs_instalador_core PUBLIC bs_builder_core bs_native PRIVATE bs_disc_data tomlplusplus::tomlplusplus)
 if(WIN32)
