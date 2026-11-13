@@ -943,3 +943,153 @@ BS_TEST(render_vulkan_effects_target_switch) {
     }
     BS_CHECK(nr::vulkan_live_objects() == 0);
 }
+
+// N9.8 fase 8.1: a filtragem da Remastered (mipmaps pela GPU, trilinear, anisotropica; a variante -DFILTERED).
+//  - um chao em perspectiva com um xadrez de 1 texel: longe, o fiel (so o maior nivel) cintila; filtrado, vira cinza;
+//  - perto (ampliado), o filtrado fica no bilinear do fiel; o ponto nao muda; desligada, a imagem do fiel bit a bit;
+//  - a textura enviada antes de ligar ganha a cadeia (promocao); a criada depois ja nasce com ela;
+//  - repeticao, clamp e espelho em u e em v: ampliado, o filtrado igual ao fiel na tolerancia da quantizacao.
+namespace {
+nr::CommandList floor_scene(nr::TextureHandle t, nr::Filter f) {
+    nr::CommandList cl;
+    cl.frame.width = 640, cl.frame.height = 480, cl.frame.clear_color = 0xFF000000;
+    auto vtx = [](float x, float y, float iw, float u, float v) {
+        nr::Vertex vx;
+        vx.x = x, vx.y = y, vx.inv_w = iw, vx.u = u, vx.v = v, vx.color = 0xFFFFFFFF;
+        return vx;
+    };
+    // de perto (y 479, 1/w 1) a longe (y 200, 1/w 0,02): as UVs com a perspectiva
+    cl.vertices = {vtx(0, 479, 1.f, 0, 0), vtx(640, 479, 1.f, 32, 0), vtx(280, 200, 0.02f, 0, 400), vtx(360, 200, 0.02f, 32, 400)};
+    nr::Draw dr;
+    dr.vertex_count = 4, dr.state.depth = nr::DepthTest::Always, dr.state.texture = t, dr.state.filter = f;
+    dr.state.env = nr::TexEnv::Replace;
+    cl.draws = {dr};
+    return cl;
+}
+nr::CommandList quad_scene(nr::TextureHandle t, nr::Wrap wu, nr::Wrap wv) {
+    nr::CommandList cl;
+    cl.frame.width = 640, cl.frame.height = 480, cl.frame.clear_color = 0xFF000000;
+    auto vtx = [](float x, float y, float u, float v) {
+        nr::Vertex vx;
+        vx.x = x, vx.y = y, vx.inv_w = 1.f, vx.u = u, vx.v = v, vx.color = 0xFFFFFFFF;
+        return vx;
+    };
+    // 384 x 384 pixels para UV de -1 a 2 numa textura 32 x 32: 4 pixels por texel, tres copias em cada eixo
+    cl.vertices = {vtx(100, 40, -1, -1), vtx(484, 40, 2, -1), vtx(100, 424, -1, 2), vtx(484, 424, 2, 2)};
+    nr::Draw dr;
+    dr.vertex_count = 4, dr.state.depth = nr::DepthTest::Always, dr.state.texture = t, dr.state.env = nr::TexEnv::Replace;
+    dr.state.wrap_u = wu, dr.state.wrap_v = wv;
+    cl.draws = {dr};
+    return cl;
+}
+// media e desvio do verde num retangulo da imagem 640 x 480
+void band(const std::vector<uint32_t>& img, int x0, int y0, int x1, int y1, double& mean, double& sd) {
+    double s = 0, s2 = 0, n = 0;
+    for (int y = y0; y < y1; ++y)
+        for (int x = x0; x < x1; ++x) {
+            const double g = double((img[size_t(y) * 640 + x] >> 8) & 0xFF);
+            s += g, s2 += g * g, ++n;
+        }
+    mean = s / n, sd = std::sqrt(std::max(0.0, s2 / n - mean * mean));
+}
+int max_diff(const std::vector<uint32_t>& a, const std::vector<uint32_t>& b, int x0, int y0, int x1, int y1) {
+    int m = 0;
+    for (int y = y0; y < y1; ++y)
+        for (int x = x0; x < x1; ++x)
+            for (int sh = 0; sh <= 16; sh += 8)
+                m = std::max(m, std::abs(int((a[size_t(y) * 640 + x] >> sh) & 0xFF) - int((b[size_t(y) * 640 + x] >> sh) & 0xFF)));
+    return m;
+}
+} // namespace
+
+BS_TEST(render_vulkan_texture_filtering) {
+    std::string err;
+    {
+        auto d = nr::VulkanDevice::create(&err);
+        if (!d) BS_SKIP("dispositivo Vulkan");
+        if (!d->stats().mipmaps) BS_SKIP("mipmaps pela GPU");
+        std::fprintf(stderr, "  anisotropica ate %ux\n", d->stats().max_anisotropy);
+        nr::TextureDesc td;
+        td.width = td.height = 16;
+        std::vector<uint32_t> checker(256);
+        for (uint32_t i = 0; i < 256; ++i) checker[i] = ((i % 16) + (i / 16)) % 2 ? 0xFFFFFFFFu : 0xFF000000u;
+        const nr::TextureHandle t = d->create_texture(td, std::as_bytes(std::span<const uint32_t>(checker))).value();
+        d->set_scale(2);
+        std::vector<uint32_t> fiel, tri, ani, off, pFiel, pFilt;
+        BS_CHECK(run_cl(*d, floor_scene(t, nr::Filter::Bilinear), fiel));
+        BS_CHECK(run_cl(*d, floor_scene(t, nr::Filter::Point), pFiel));
+        BS_CHECK(d->stats().filtered_draws == 0 && d->stats().mip_textures == 0);
+        d->set_filtering(1, 16);
+        BS_CHECK(run_cl(*d, floor_scene(t, nr::Filter::Bilinear), tri));
+        const nr::VulkanStats s1 = d->stats();
+        BS_CHECK(s1.mip_promotions == 1 && s1.mip_textures == 1 && s1.filtered_draws == 1);
+        BS_CHECK(run_cl(*d, floor_scene(t, nr::Filter::Point), pFilt));
+        BS_CHECK(d->stats().filtered_draws == s1.filtered_draws);  // o ponto nao vai pela variante
+        BS_CHECK(pFilt == pFiel);
+        d->set_filtering(2, 16);
+        BS_CHECK(run_cl(*d, floor_scene(t, nr::Filter::Bilinear), ani));
+        d->set_filtering(0, 16);
+        BS_CHECK(run_cl(*d, floor_scene(t, nr::Filter::Bilinear), off));
+        BS_CHECK(off == fiel);  // desligada: o fiel bit a bit, mesmo com a textura ja com os mipmaps
+        if (fiel.size() == 640u * 480 && tri.size() == fiel.size() && ani.size() == fiel.size()) {
+            double mf = 0, sf = 0, mt = 0, st = 0, ma = 0, sa = 0;
+            band(fiel, 300, 206, 340, 226, mf, sf), band(tri, 300, 206, 340, 226, mt, st), band(ani, 300, 206, 340, 226, ma, sa);
+            std::fprintf(stderr, "  longe (verde): fiel media %.1f desvio %.1f; trilinear %.1f / %.1f; anisotropica %.1f / %.1f\n",
+                         mf, sf, mt, st, ma, sa);
+            BS_CHECK(st < sf * 0.5 && sa < sf * 0.5);  // a cintilacao some
+            BS_CHECK(std::abs(mt - 127.5) < 25 && std::abs(ma - 127.5) < 25);  // e vira o cinza do xadrez
+            const int nearDiff = max_diff(fiel, tri, 0, 440, 640, 478);
+            std::fprintf(stderr, "  perto: maior diferenca fiel x trilinear %d\n", nearDiff);
+            BS_CHECK(nearDiff <= 6);
+        }
+        d->set_filtering(1, 16);  // de novo: a textura ja tem a cadeia (nenhuma promocao nova)
+        std::vector<uint32_t> again;
+        BS_CHECK(run_cl(*d, floor_scene(t, nr::Filter::Bilinear), again) && again == tri);
+        BS_CHECK(d->stats().mip_promotions == 1);
+        // revisao Codex 20261112-211237: o reenvio de uma textura que ja tem a cadeia (todos os niveis de volta a destino, o
+        // maior substituido e os outros gerados de novo): o xadrez vira vermelho, perto (nivel 0) e longe (niveis menores)
+        {
+            const std::vector<uint32_t> red(256, 0xFFFF0000u);
+            BS_CHECK(d->update_texture(t, std::as_bytes(std::span<const uint32_t>(red))).ok());
+            std::vector<uint32_t> img;
+            BS_CHECK(run_cl(*d, floor_scene(t, nr::Filter::Bilinear), img));
+            if (img.size() == 640u * 480) {
+                int bad = 0;
+                for (const auto [x, y] : {std::pair{320, 470}, {320, 300}, {320, 215}, {310, 206}})
+                    bad += !close(img[size_t(y) * 640 + x] & 0xFFFFFF, 0xFF0000, 2);
+                std::fprintf(stderr, "  reenvio com a cadeia: %d de 4 pontos fora do vermelho\n", bad);
+                BS_CHECK(bad == 0);
+            }
+            BS_CHECK(d->update_texture(t, std::as_bytes(std::span<const uint32_t>(checker))).ok());
+            BS_CHECK(run_cl(*d, floor_scene(t, nr::Filter::Bilinear), img) && img == tri);  // de volta ao xadrez
+        }
+        // uma textura criada com a filtragem ligada ja nasce com a cadeia
+        nr::TextureDesc gd;
+        gd.width = gd.height = 32;
+        std::vector<uint32_t> grad(32 * 32);
+        for (uint32_t y = 0; y < 32; ++y)
+            for (uint32_t x = 0; x < 32; ++x) grad[y * 32 + x] = 0xFF000000u | ((x * 8) << 16) | ((y * 8) << 8) | (255 - x * 4);
+        const nr::TextureHandle g = d->create_texture(gd, std::as_bytes(std::span<const uint32_t>(grad))).value();
+        BS_CHECK(d->stats().mip_textures == 2 && d->stats().mip_promotions == 1);
+        d->set_scale(1);
+        int worst = 0;
+        for (const nr::Wrap wu : {nr::Wrap::Repeat, nr::Wrap::Clamp, nr::Wrap::Mirror})
+            for (const nr::Wrap wv : {nr::Wrap::Repeat, nr::Wrap::Clamp, nr::Wrap::Mirror}) {
+                std::vector<uint32_t> a, b;
+                d->set_filtering(0, 16);
+                BS_CHECK(run_cl(*d, quad_scene(g, wu, wv), a));
+                d->set_filtering(1, 16);
+                BS_CHECK(run_cl(*d, quad_scene(g, wu, wv), b));
+                if (a.size() != 640u * 480 || b.size() != a.size()) continue;
+                const int m = max_diff(a, b, 102, 42, 482, 422);  // por dentro do quadrado (um pixel de folga)
+                if (m > 3) std::fprintf(stderr, "  modo u %d v %d: diferenca %d\n", int(wu), int(wv), m);
+                worst = std::max(worst, m);
+            }
+        std::fprintf(stderr, "  repeticao, clamp e espelho (9 combinacoes, ampliado 4x): maior diferenca %d\n", worst);
+        BS_CHECK(worst <= 3);
+        d->destroy_texture(g);
+        d->destroy_texture(t);
+        BS_CHECK(d->stats().mip_textures == 0);
+    }
+    BS_CHECK(nr::vulkan_live_objects() == 0);
+}

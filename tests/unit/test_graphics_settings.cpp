@@ -97,11 +97,12 @@ BS_TEST(graphics_presets_safe_defaults) {
     for (st::Preset p : {st::Preset::Original, st::Preset::Balanced, st::Preset::High}) {
         const st::GraphicsSettings s = st::preset(p);
         BS_CHECK(s.shadows == st::Shadows::Original && !s.ssao && !s.lighting && s.water == st::Water::Original);  // N9.7 D7-1
+        BS_CHECK(!s.hd_textures);  // N9.8 D8-5: as texturas HD so pela escolha manual
         BS_CHECK(st::from_toml(std::string("preset = \"") + st::preset_name(p) + "\"\n") == s);  // o nome no arquivo
     }
     const st::GraphicsSettings hi = st::preset(st::Preset::High);  // o resto do Alto nao mudou
     BS_CHECK(hi.resolution == st::Resolution::P1440 && hi.filter == st::Filter::Anisotropic && hi.anisotropy == 16 && hi.msaa == 4 &&
-             hi.hd_textures && hi.sharpen == 0.25f && hi.color && hi.contrast == 1.10f && hi.saturation == 1.15f);
+             hi.sharpen == 0.25f && hi.color && hi.contrast == 1.10f && hi.saturation == 1.15f);
     st::Capabilities gpu;
     gpu.vulkan = true, gpu.max_msaa = 8, gpu.max_anisotropy = 16, gpu.max_height = 2160, gpu.features = st::Features::all();
     const fs::path dir = fs::temp_directory_path() / "bs_graficos_presets";

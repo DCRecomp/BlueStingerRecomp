@@ -36,6 +36,13 @@ $jobs = @(
     @("pvr_frag_autosort_fc_water.h", "pvr.frag", "kPvrFragAutosortFcWater", @("-DAUTOSORT", "-DFLOAT_CONTROLS", "-DWATER")),
     @("pvr_frag_fcd_water.h", "pvr.frag", "kPvrFragFcdWater", @("-DFLOAT_CONTROLS", "-DDENORM_PRESERVE", "-DWATER")),
     @("pvr_frag_autosort_fcd_water.h", "pvr.frag", "kPvrFragAutosortFcdWater", @("-DAUTOSORT", "-DFLOAT_CONTROLS", "-DDENORM_PRESERVE", "-DWATER")),
+    # N9.8 fase 8.1: a filtragem (mipmaps, trilinear e anisotropica) da Remastered; o fiel continua com o mesmo SPIR-V
+    @("pvr_frag_filtered.h", "pvr.frag", "kPvrFragFiltered", @("-DFILTERED")),
+    @("pvr_frag_autosort_filtered.h", "pvr.frag", "kPvrFragAutosortFiltered", @("-DAUTOSORT", "-DFILTERED")),
+    @("pvr_frag_fc_filtered.h", "pvr.frag", "kPvrFragFcFiltered", @("-DFLOAT_CONTROLS", "-DFILTERED")),
+    @("pvr_frag_autosort_fc_filtered.h", "pvr.frag", "kPvrFragAutosortFcFiltered", @("-DAUTOSORT", "-DFLOAT_CONTROLS", "-DFILTERED")),
+    @("pvr_frag_fcd_filtered.h", "pvr.frag", "kPvrFragFcdFiltered", @("-DFLOAT_CONTROLS", "-DDENORM_PRESERVE", "-DFILTERED")),
+    @("pvr_frag_autosort_fcd_filtered.h", "pvr.frag", "kPvrFragAutosortFcdFiltered", @("-DAUTOSORT", "-DFLOAT_CONTROLS", "-DDENORM_PRESERVE", "-DFILTERED")),
     @("resolve_comp_fcd.h", "resolve.comp", "kResolveCompFcd", @("-DFLOAT_CONTROLS", "-DDENORM_PRESERVE")),
     # N8.7: volumes modificadores (sombra por intensidade), com as tres variantes do ambiente FP
     @("volumes_comp.h", "volumes.comp", "kVolumesComp", @()),

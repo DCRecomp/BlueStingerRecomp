@@ -30,6 +30,12 @@ layout(location = 6) flat in uint fSeq;
 layout(location = 7) flat in uint fTri;
 
 layout(set = 0, binding = 0) uniform sampler2D tex;
+#ifdef FILTERED
+// N9.8 fase 8.1 (so a variante -DFILTERED: a Remastered com a filtragem ligada, desenhos bilineares de uma textura com
+// mipmaps): a mesma imagem com a cadeia de mipmaps, por nove amostradores (repeticao, clamp ou espelho em u e em v, os modos
+// do PVR), trilinear e, com a anisotropica, o nivel escolhido no amostrador
+layout(set = 0, binding = 1) uniform sampler2D texF[9];
+#endif
 
 layout(push_constant) uniform Batch {
     vec2  size;
@@ -168,6 +174,48 @@ bool exact(ivec2 pix, out float z, out vec4 col, out vec3 off, out vec2 uv) {
     return true;
 }
 
+#ifdef FILTERED
+// N9.8 fase 8.1: a UV do triangulo num ponto qualquer (nas coordenadas do jogo), sem a cobertura: as mesmas equacoes de
+// exact(). Serve ao gradiente da UV por pixel do alvo: as derivadas da GPU nao servem (o modo fiel desenha o retangulo
+// envolvente, e os pixels fora do triangulo ja foram descartados)
+vec2 uvAt(vec2 q) {
+    const uint  t = fTri * kTriWords;
+    const vec2  a = vec2(fw(t), fw(t + 1u)), b = vec2(fw(t + 2u), fw(t + 3u)), c = vec2(fw(t + 4u), fw(t + 5u));
+    const float az = fw(t + 6u), bz = fw(t + 7u), cz = fw(t + 8u), inv = fw(t + 9u);
+    const float m0 = ((b.x - q.x) * (c.y - q.y) - (c.x - q.x) * (b.y - q.y)) * inv;
+    const float m1 = ((c.x - q.x) * (a.y - q.y) - (a.x - q.x) * (c.y - q.y)) * inv;
+    const float m2 = 1.0 - m0 - m1;
+    const float zt = m0 * az + m1 * bz + m2 * cz;
+    if (zt == 0.0) return vec2(0.0);
+    const float p0 = m0 * az / zt, p1 = m1 * bz / zt, p2 = m2 * cz / zt;
+    return vec2(p0 * fw(t + 10u) + p1 * fw(t + 12u) + p2 * fw(t + 14u), p0 * fw(t + 11u) + p1 * fw(t + 13u) + p2 * fw(t + 15u));
+}
+
+// N9.8 fase 8.1: o bilinear do PVR pelo hardware, com os mipmaps. O ponto de amostra do PVR (u x n - meio texel com
+// TEXEL_HALF; texel i em [i, i + 1)) vira a coordenada do hardware (o centro do texel i em (i + 0,5) / n). O gradiente e o
+// de um pixel do alvo em x e em y. O modo de cada eixo escolhe o amostrador (indice constante em cada ramo).
+vec4 filteredTexel(vec2 uv, ivec2 pix, float half_) {
+    const float tspOff = (pc.flags & F_ATTR_CORNER) != 0u ? 0.0 : 0.5;
+    const vec2  q  = (vec2(pix) + tspOff) * pc.invScale;
+    const vec2  u0 = uvAt(q);
+    const vec2  gx = uvAt(q + vec2(pc.invScale, 0.0)) - u0, gy = uvAt(q + vec2(0.0, pc.invScale)) - u0;
+    const vec2  c  = uv + vec2(0.5 - half_) / vec2(pc.texSize);
+    const uint  mu = (pc.flags & F_CLAMP_U) != 0u ? 1u : ((pc.flags & F_FLIP_U) != 0u ? 2u : 0u);
+    const uint  mv = (pc.flags & F_CLAMP_V) != 0u ? 1u : ((pc.flags & F_FLIP_V) != 0u ? 2u : 0u);
+    switch (mu * 3u + mv) {
+    case 0u: return textureGrad(texF[0], c, gx, gy);
+    case 1u: return textureGrad(texF[1], c, gx, gy);
+    case 2u: return textureGrad(texF[2], c, gx, gy);
+    case 3u: return textureGrad(texF[3], c, gx, gy);
+    case 4u: return textureGrad(texF[4], c, gx, gy);
+    case 5u: return textureGrad(texF[5], c, gx, gy);
+    case 6u: return textureGrad(texF[6], c, gx, gy);
+    case 7u: return textureGrad(texF[7], c, gx, gy);
+    default: return textureGrad(texF[8], c, gx, gy);
+    }
+}
+#endif
+
 // N8.7: o alfa da fog por tabela para um 1/w, com as contas do rasterizador em software (soft_raster.cpp, fogAlpha):
 // z = densidade x 1/w em [1, 256); 16 entradas por oitava; os dois valores da entrada interpolados pela fracao
 float fogAlpha(float invW) {
@@ -289,6 +337,10 @@ void main() {
         const float   half_ = (pc.flags & F_TEXEL_HALF) != 0u ? 0.5 : 0.0;
         precise float fu = uv.x * float(pc.texSize.x) - half_, fv = uv.y * float(pc.texSize.y) - half_;
         precise vec4  t;
+#ifdef FILTERED
+        if (((pc.flags >> 10) & 3u) != 0u) t = filteredTexel(uv, p, half_);  // N9.8 fase 8.1: o ponto continua o do fiel
+        else
+#endif
         if (((pc.flags >> 10) & 3u) == 0u) {
             t = texel(int(floor(fu + 0.5)), int(floor(fv + 0.5)));
         } else {

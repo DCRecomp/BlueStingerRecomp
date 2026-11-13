@@ -63,6 +63,9 @@ BS_TEST(edition_names_and_profiles) {
     BS_CHECK(ed::EditionProfile{} == ed::profile_for(ed::Edition::Original));
     // N9.6 fase 1: a iluminacao aprimorada so na Remastered (a Original fica fiel)
     BS_CHECK(!ed::profile_for(ed::Edition::Original).lighting_effects && ed::profile_for(ed::Edition::Remastered).lighting_effects);
+    // N9.8 fase 8.1: a filtragem (mipmaps, trilinear, anisotropica) so na Remastered
+    BS_CHECK(!ed::profile_for(ed::Edition::Original).texture_filtering && ed::profile_for(ed::Edition::Remastered).texture_filtering);
+    BS_CHECK(!ed::profile_for(ed::Edition::Original).hd_textures && ed::profile_for(ed::Edition::Remastered).hd_textures);  // N9.8 fase 8.2
 }
 
 BS_TEST(edition_read_from_install_config) {

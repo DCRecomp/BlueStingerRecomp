@@ -13,8 +13,9 @@ nem captura da area de trabalho). A janela abre por ~35-60 s em cada execucao.
   Q3 a reabertura (o mesmo arquivo, sem tocar em nada): os tres chegam ao renderizador ja no inicio; o arquivo fica.
   Q4 no menu, os tres desfeitos: o renderizador recebe os tres desligados; o arquivo igual ao do Q2 menos as tres escolhas.
   Q5 a reabertura: nenhum dos tres; o arquivo fica.
-  O menu grava os valores ja ajustados aos recursos (clamp_to, desde o N7c): no produto o MSAA, a filtragem e as texturas HD
-  ainda sao "em breve" e voltam ao original, entao o Alto gravado pelo menu fica "personalizado" (regra existente).
+  O menu grava os valores ja ajustados aos recursos (clamp_to, desde o N7c): no produto o MSAA e as texturas HD ainda sao
+  "em breve" e voltam ao original, entao o Alto gravado pelo menu fica "personalizado" (regra existente). Desde o N9.8 fase
+  8.1, a filtragem existe na Remastered com o Vulkan: a anisotropica do Alto fica no arquivo.
   Q6 Original com o Alto e as tres escolhas no arquivo: nenhuma chega ao renderizador (a Original fica fiel); o arquivo nao e
      reescrito.
   Q7 a rota passo_load_slot1 no modo espectador ate o corredor (luzes do catalogo e volumes), fechada pelo "sair" do controle
@@ -107,9 +108,9 @@ def main():
     ok("Q2 antes do menu: nenhum efeito", not efeitos(t[:len(t) - len(m)]) if m else False)
     ok("Q2 o menu pede os tres ao render_capture", rc == 0 and efeitos(m) == ["luz", "sombras", "ssao"], "rc %d, %s" % (rc, efeitos(m)))
     # o resto do Alto como o menu o grava pelas regras existentes (clamp_to desde o N7c): o que o produto ainda nao tem (MSAA,
-    # filtragem, texturas HD: "em breve") volta ao original; o resto fica
+    # texturas HD: "em breve") volta ao original; o resto fica (a filtragem anisotropica, desde o N9.8 fase 8.1)
     resto = {"resolucao": "1440p", "anisotropia": "16", "nitidez": "0.25", "cor": "true", "contraste": "1.1", "saturacao": "1.15",
-             "msaa": "1", "filtragem": "original", "texturas_hd": "false"}
+             "msaa": "1", "filtragem": "anisotropica", "texturas_hd": "false"}
     vals = {k: chave(toml, k) for k in list(resto) + ["preset", "sombras", "iluminacao", "ssao"]}
     ok("Q2 o arquivo: personalizado com as tres escolhas e o resto do Alto",
        vals["preset"] == "personalizado" and vals["sombras"] == "aprimoradas" and vals["iluminacao"] == "true"

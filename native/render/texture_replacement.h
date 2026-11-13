@@ -48,6 +48,11 @@ class ITextureReplacements {
 public:
     virtual ~ITextureReplacements() = default;
     virtual const ReplacementTexture* find(const TextureId& id) = 0;
+    // N9.8 fase 8.2: o comeco de um render (o limite de carregamento por quadro recomeca)
+    virtual void begin_frame() {}
+    // N9.8 fase 8.2: find(id) deu nullptr so porque o limite do quadro acabou: o renderizador usa o original agora e pergunta
+    // de novo no proximo render (sem isso, a textura ficaria no original ate os bytes mudarem)
+    virtual bool deferred(const TextureId&) const { return false; }
 };
 
 } // namespace bs::native::render

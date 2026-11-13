@@ -68,14 +68,15 @@ GraphicsSettings preset(Preset p) {
     GraphicsSettings s;  // Original Dreamcast: o padrao da estrutura
     switch (p) {
     case Preset::Balanced:
-        s.resolution = Resolution::P1080, s.filter = Filter::Bilinear, s.msaa = 2, s.hd_textures = true;
+        // N9.8 (D8-5, mantenedor 2026-11-12): as texturas HD so pela escolha manual, em nenhum preset
+        s.resolution = Resolution::P1080, s.filter = Filter::Bilinear, s.msaa = 2;
         s.color = true, s.contrast = 1.05f, s.saturation = 1.10f;  // aprimorado: um pouco mais de contraste e cor
         break;
     case Preset::High:
         s.resolution = Resolution::P1440, s.filter = Filter::Anisotropic, s.anisotropy = 16, s.msaa = 4;
         // N9.6 (mantenedor, 2026-11-11): as sombras originais tambem no Alto; as aprimoradas (borda suave e sombras de contato),
         // a luz das fontes e o SSAO ficam so na escolha manual (na GPU integrada em 1080, as aprimoradas dobram o custo)
-        s.hd_textures = true, s.sharpen = 0.25f;
+        s.sharpen = 0.25f;  // N9.8 (D8-5): sem as texturas HD
         // N9.7 (D7-1, mantenedor 2026-11-11): a agua original em todos os presets; a aprimorada so pela escolha manual
         s.color = true, s.contrast = 1.10f, s.saturation = 1.15f;
         break;

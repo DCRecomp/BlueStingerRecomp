@@ -18,6 +18,7 @@
 #include "pvr/vram.h"
 #include "render/render_ir.h"
 #include "render/texture_convert.h"
+#include "render/png_write.h"  // N9.8 fase 8.2: a exportacao das texturas originais (so validacao)
 #if BS_VALIDACAO
 #include "kamui/draw_class.h"  // N9.5 fase 2: a marca cena/HUD no TSV da proveniencia
 #endif
@@ -46,6 +47,7 @@ bool                      g_materials    = false;  // N9.6 fase 2b: o catalogo d
 bool                      g_lighting     = false;  // N9.6 fase 3: a luz das fontes do catalogo (set_lighting)
 bool                      g_shadows      = false;  // N9.6 fase 4: as sombras aprimoradas (set_shadows)
 nr::WaterQuality          g_water        = nr::WaterQuality::Original;  // N9.7: a agua aprimorada (set_water)
+uint32_t                  g_filter       = 0, g_aniso = 16;  // N9.8 fase 8.1: a filtragem das texturas (set_filtering)
 
 std::unique_ptr<Renderer> g_core;
 
@@ -235,7 +237,9 @@ bool Renderer::texture_handle(nr::IRenderDevice& dev, TexCache& cache, bool hd, 
     // N8.7 3b (docs/N8-7-KAMUI.md): a memoria das texturas diz se os bytes da textura (ou a paleta) mudaram desde a
     // ultima leitura, sem reler; na validacao os bytes ainda sao relidos e uma textura velha e contada (tem de ser 0)
     const uint64_t gen = texture_generation(k), pal = texture_palette(k) ? pvr_palette_generation() : 0;
-    if (e.handle && e.gen == gen && e.pal == pal && e.provider == repl) {
+    // N9.8 fase 8.2: uma substituicao adiada pelo limite do quadro e pedida de novo (o original fica ate ela chegar)
+    const bool retry = e.waiting && repl;
+    if (e.handle && e.gen == gen && e.pal == pal && e.provider == repl && !retry) {
 #if BS_VALIDACAO
         texture_source(k, raw_);
         if (raw_ != e.raw) {
@@ -256,7 +260,7 @@ bool Renderer::texture_handle(nr::IRenderDevice& dev, TexCache& cache, bool hd, 
     }();
     if (early) e.gen = gen, e.pal = pal;
 #endif
-    if (e.handle && e.raw == raw_ && e.provider == repl) {  // os bytes nao mudaram: a geracao nova vale para o handle
+    if (e.handle && e.raw == raw_ && e.provider == repl && !retry) {  // os bytes nao mudaram: a geracao nova vale para o handle
         e.gen = gen, e.pal = pal;
         out = e.handle;
         return true;
@@ -266,16 +270,43 @@ bool Renderer::texture_handle(nr::IRenderDevice& dev, TexCache& cache, bool hd, 
     st.tex_legacy += legacy;
     // a identidade pelo conteudo, so quando alguem a usa (HD ou o catalogo da Remastered): calculada uma vez por envio
     const bool          mats = g_materials && hd;  // N9.6 fase 2b: o catalogo so no Vulkan (o software e a referencia)
-    const nr::TextureId id   = repl || mats ? nr::texture_id(k.width, k.height, argb_) : nr::TextureId{};
+#if BS_VALIDACAO
+    // N9.8 fase 8.2: BS_TEXTURAS_EXPORTAR=<pasta> grava cada textura original enviada ao Vulkan como <TextureId>.png (a base
+    // local de um pacote HD; arte do jogo, nunca publicada). So na validacao
+    static const std::filesystem::path exportDir = [] {
+        const char* v = std::getenv("BS_TEXTURAS_EXPORTAR");
+        return v && *v ? std::filesystem::path(v) : std::filesystem::path();
+    }();
+    const bool exporting = hd && !exportDir.empty();
+#else
+    constexpr bool exporting = false;
+#endif
+    const nr::TextureId id   = repl || mats || exporting ? nr::texture_id(k.width, k.height, argb_) : nr::TextureId{};
+#if BS_VALIDACAO
+    if (exporting) {
+        std::error_code       ec;
+        const std::filesystem::path f = exportDir / (id.text() + ".png");
+        if (!std::filesystem::exists(f, ec)) {
+            std::filesystem::create_directories(exportDir, ec);
+            const std::string png = nr::encode_png(k.width, k.height, argb_);
+            std::ofstream(f, std::ios::binary).write(png.data(), std::streamsize(png.size()));
+            ++st.tex_exported;
+        }
+    }
+#endif
     const uint32_t      mat  = mats ? nr::material_flags(id) : 0;
     st.tex_materials += mat != 0;
     // substituicao HD pelo conteudo (nunca pelo endereco): compativel ou o original
     const std::vector<uint32_t>* texels = &argb_;
     uint32_t                     tw = k.width, th = k.height;
+    bool waiting = false;
     if (repl) {
         if (const nr::ReplacementTexture* r = repl->find(id)) {
             if (nr::replacement_compatible(id, *r)) texels = &r->argb, tw = r->width, th = r->height, ++st.tex_replaced;
             else ++st.tex_replace_rejected;
+        } else {
+            waiting = repl->deferred(id);
+            st.tex_replace_deferred += waiting;
         }
     }
     const auto bytes = std::as_bytes(std::span<const uint32_t>(*texels));
@@ -293,7 +324,7 @@ bool Renderer::texture_handle(nr::IRenderDevice& dev, TexCache& cache, bool hd, 
         if (!r) return false;
         e.handle = r.value();
     }
-    e.w = tw, e.h = th, e.provider = repl;
+    e.w = tw, e.h = th, e.provider = repl, e.waiting = waiting;
     if (mats || e.material) dev.set_texture_material(e.handle, mat), e.material = mat;  // N9.6 fase 2b
     if (mat & nr::kMaterialEmissive) dev.set_texture_light(e.handle, nr::emissive_color(argb_));  // N9.6 fase 3
     // revisao Codex 20261029-013355: os bytes e as geracoes so valem depois do envio que deu certo
@@ -388,6 +419,7 @@ void Renderer::drop_vk(bool lost) {
 bool Renderer::vk_attempt(uint32_t w, uint32_t h, std::vector<uint32_t>& out, std::string* why) {
     if (!ensure_vk()) return false;
     if (st.renders % 300 == 0) evict(*vk_, vkTex_);
+    if (g_replacements) g_replacements->begin_frame();  // N9.8 fase 8.2: o limite de carregamento recomeca
     std::vector<nr::TextureHandle> handles(frame.textures.size());
     for (size_t i = 0; i < frame.textures.size(); ++i)
         if (!texture_handle(*vk_, vkTex_, true, frame.textures[i], handles[i])) {
@@ -415,6 +447,9 @@ bool Renderer::vk_attempt(uint32_t w, uint32_t h, std::vector<uint32_t>& out, st
     // N9.7: a agua so no nativo e no render do framebuffer; a fase e o numero deste render (a contagem do Renderer, que
     // fica igual se o dispositivo Vulkan for recriado: as ondas continuam de onde estavam)
     vk_->set_water(mode == Mode::Native && w == 640 && h == 480 ? g_water : nr::WaterQuality::Original, st.renders);
+    // N9.8 fase 8.1: a filtragem em todo render do nativo (o desenho em textura tambem amostra texturas); o modo comparar
+    // fica com a do fiel
+    vk_->set_filtering(mode == Mode::Native ? g_filter : 0u, g_aniso);
     bs::native::telemetry::set_image(uint32_t(480 * sc + 0.5f), wideW != 0);  // N9.5 fase 5C (so le um bool sem a telemetria)
     if (sc == 1.f && !wideW) hires_.clear();
     const nr::CommandList* cl = &frame.cl;
@@ -497,6 +532,8 @@ bool Renderer::vk_attempt(uint32_t w, uint32_t h, std::vector<uint32_t>& out, st
         st.vk_light_frames = vk_->stats().light_frames, st.vk_lights_max = vk_->stats().lights_max;  // N9.6 fase 3
         st.vk_soft_shadow_frames = vk_->stats().soft_shadow_frames;  // N9.6 fase 4
         st.vk_water_frames = vk_->stats().water_frames, st.vk_water_draws = vk_->stats().water_draws;  // N9.7
+        st.vk_filtered_draws = vk_->stats().filtered_draws, st.vk_mip_promotions = vk_->stats().mip_promotions;  // N9.8 fase 8.1
+        st.vk_mip_textures_max = std::max(st.vk_mip_textures_max, vk_->stats().mip_textures);
         st.vk_water_scene_bytes_max = std::max(st.vk_water_scene_bytes_max, vk_->stats().water_scene_bytes);
         return true;
     }
@@ -733,6 +770,11 @@ void     set_water(uint32_t quality) {  // N9.7
     g_water = nr::WaterQuality(std::min<uint32_t>(quality, uint32_t(nr::WaterQuality::High)));
 }
 uint32_t water() { return uint32_t(g_water); }
+void     set_filtering(uint32_t mode, uint32_t anisotropy) {  // N9.8 fase 8.1
+    g_filter = std::min(mode, 2u), g_aniso = std::clamp(anisotropy, 1u, 16u);
+}
+uint32_t filtering() { return g_filter; }
+uint32_t filtering_anisotropy() { return g_aniso; }
 bool     shadows() { return g_shadows; }
 bool     lighting() { return g_lighting; }
 bool     materials() { return g_materials; }
@@ -942,17 +984,18 @@ std::string summary() {
         out += b;
     }
     if (!s.vk_device.empty() || !s.vk_error.empty()) {
-        char v[1200];
+        char v[1800];
         std::snprintf(v, sizeof v,
                       "[render-vk] %s: quadros %llu, falhas %llu; texturas enviadas %llu (pelo decodificador do legado %llu, "
-                      "descartadas do cache %llu, HD %llu, HD incompativeis %llu); dispositivo recriado %llu vez(es); comparados %llu: pixels diferentes %.4f%% (> 8 niveis %.4f%%), maior "
+                      "descartadas do cache %llu, HD %llu, HD incompativeis %llu, HD adiadas %llu, exportadas %llu); dispositivo recriado %llu vez(es); comparados %llu: pixels diferentes %.4f%% (> 8 niveis %.4f%%), maior "
                       "diferenca %u, pior render %llu (%.3f%%); PSNR minimo %.1f dB, medio %.1f dB, quadros abaixo de 40 dB %llu; GPU por "
                       "quadro: media %.2f ms, pior %.1f ms; camadas translucidas por pixel ate %llu; AO em %llu renders (meia resolucao %llu); catalogo de materiais: %llu "
-                      "envios, AO nas translucidas em %llu renders; luz das fontes em %llu renders (ate %u luzes); borda suave dos volumes em %llu renders; agua em %llu renders (%llu desenhos, imagem da cena ate %llu KiB)%s%s\n",
+                      "envios, AO nas translucidas em %llu renders; luz das fontes em %llu renders (ate %u luzes); borda suave dos volumes em %llu renders; agua em %llu renders (%llu desenhos, imagem da cena ate %llu KiB); filtragem: %llu desenhos, texturas com mipmaps ate %llu (%llu promovidas)%s%s\n",
                       s.vk_device.empty() ? "indisponivel" : s.vk_device.c_str(), (unsigned long long)s.vk_frames,
                       (unsigned long long)s.vk_failures, (unsigned long long)s.tex_uploads, (unsigned long long)s.tex_legacy,
                       (unsigned long long)s.tex_evicted, (unsigned long long)s.tex_replaced,
-                      (unsigned long long)s.tex_replace_rejected, (unsigned long long)s.vk_recoveries,
+                      (unsigned long long)s.tex_replace_rejected, (unsigned long long)s.tex_replace_deferred,
+                      (unsigned long long)s.tex_exported, (unsigned long long)s.vk_recoveries,
                       (unsigned long long)s.cmp_frames,
                       s.cmp_pixels ? 100.0 * double(s.cmp_diff) / double(s.cmp_pixels) : 0.0,
                       s.cmp_pixels ? 100.0 * double(s.cmp_diff8) / double(s.cmp_pixels) : 0.0, s.cmp_max,
@@ -964,6 +1007,8 @@ std::string summary() {
                       (unsigned long long)s.vk_ao_surface_frames, (unsigned long long)s.vk_light_frames, s.vk_lights_max,
                       (unsigned long long)s.vk_soft_shadow_frames, (unsigned long long)s.vk_water_frames,
                       (unsigned long long)s.vk_water_draws, (unsigned long long)(s.vk_water_scene_bytes_max / 1024),
+                      (unsigned long long)s.vk_filtered_draws, (unsigned long long)s.vk_mip_textures_max,
+                      (unsigned long long)s.vk_mip_promotions,
                       s.vk_error.empty() ? "" : "; ",
                       s.vk_error.c_str());
         out += v;

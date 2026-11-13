@@ -90,7 +90,7 @@ done
 passo "kit de fontes"
 entradas=(CMakeLists.txt LICENSE app runtime tools/extractor tools/dist/LEIA-ME.txt config tools/dcmap native legacy transitional
           tools/build third_party/dr_libs third_party/xiph third_party/vulkan mods-padrao
-          third_party/fonts third_party/pl_mpeg tools/dist/linux/LEIA-ME-JOGO.txt)
+          third_party/fonts third_party/pl_mpeg third_party/stb tools/dist/linux/LEIA-ME-JOGO.txt)
 git -C "$repo" archive "$sha" -- "${entradas[@]}" | tar -x -C "$stage/kit"
 printf '%s\n' "$versao" > "$stage/kit/VERSION"
 copia_fontes "$deps/tomlplusplus" "$stage/kit/third_party/tomlplusplus"
@@ -110,6 +110,7 @@ cp "$deps/freetype/LICENSE.TXT" "$L/FreeType-LICENSE.txt"; cp "$deps/freetype/do
 cp "$K/third_party/fonts/noto-sans/OFL.txt" "$L/NotoSans-OFL-1.1.txt"
 cp "$K/third_party/pl_mpeg/LICENSE" "$L/pl_mpeg-MIT.txt"
 cp "$K/third_party/dr_libs/LICENSE" "$L/dr_flac-MIT0.txt"
+cp "$K/third_party/stb/LICENSE" "$L/stb_image-dominio-publico-ou-MIT.txt"  # N9.8 fase 8.2: o PNG das texturas HD de mods
 cp "$K/third_party/xiph/libogg/COPYING" "$L/libogg-BSD.txt"; cp "$K/third_party/xiph/libvorbis/COPYING" "$L/libvorbis-BSD.txt"
 cp "$K/third_party/vulkan/Apache-2.0.txt" "$L/Vulkan-Headers-Apache-2.0.txt"
 # v0.8.0 (docs/N9-L-LICENCAS.md, secao 7): avisos de terceiros do SDL3, HIDAPI, yuv2rgb, creditos e procedencia

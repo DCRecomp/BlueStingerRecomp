@@ -15,6 +15,12 @@
 #include "render/vulkan/spirv/pvr_frag_autosort_fc_water.h"
 #include "render/vulkan/spirv/pvr_frag_fcd_water.h"
 #include "render/vulkan/spirv/pvr_frag_autosort_fcd_water.h"
+#include "render/vulkan/spirv/pvr_frag_filtered.h"
+#include "render/vulkan/spirv/pvr_frag_autosort_filtered.h"
+#include "render/vulkan/spirv/pvr_frag_fc_filtered.h"
+#include "render/vulkan/spirv/pvr_frag_autosort_fc_filtered.h"
+#include "render/vulkan/spirv/pvr_frag_fcd_filtered.h"
+#include "render/vulkan/spirv/pvr_frag_autosort_fcd_filtered.h"
 #include "render/soft/soft_raster.h"
 #include "render/vulkan/spirv/pvr_vert.h"
 #include "render/vulkan/spirv/ao_blur_comp.h"
@@ -50,6 +56,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <functional>
 #include <chrono>
 #include <thread>
 #include <cmath>
@@ -90,6 +97,7 @@ constexpr uint32_t F_TEXTURED = 1, F_GOURAUD = 2, F_OFFSET = 4, F_USE_ALPHA = 8,
                    F_SCENE  = 1u << 27,  // N9.6 fase 1: desenho da cena 3D (bit 1 do anexo de sombra; o AO so age nele)
                    F_AO_SURF = 1u << 28;  // N9.6 fase 2b: translucida do catalogo: o AO do opaco no plano dela
 constexpr uint32_t kFragBytes = 32;  // struct Frag (std430)
+constexpr uint32_t kFilterSamplers = 9;  // N9.8 fase 8.1: os modos do PVR em u e em v (repeticao, clamp, espelho)
 constexpr uint32_t kFrameDataBytes = 64 * 4 + 2 * 4;  // N8.7: FrameData de pvr.frag (fog)
 constexpr uint32_t kHeader    = 32;  // cabecalho das listas por pixel (Heads: 8 palavras)
 
@@ -100,7 +108,15 @@ struct Tex {
     bool            ready = false;  // ja recebeu dados (layout de leitura)
     uint32_t        material = 0;   // N9.6 fase 2b: os bits do catalogo de materiais (set_texture_material)
     uint32_t        light = 0xFFFFFF;  // N9.6 fase 3: a cor da luz de uma fonte (set_texture_light)
+    uint32_t        levels = 1;     // N9.8 fase 8.1: os niveis de mipmap (1 = so o maior, o fiel)
 };
+
+// N9.8 fase 8.1: os niveis de mipmap ate 1 x 1
+uint32_t mip_levels(uint32_t w, uint32_t h) {
+    uint32_t n = 1;
+    for (uint32_t m = std::max(w, h); m > 1; m >>= 1) ++n;
+    return n;
+}
 
 class VkDev final : public VulkanDevice, public VkBase, public SlotSource {
 public:
@@ -138,6 +154,8 @@ public:
         // acessos fora dos limites dos buffers devolvem valores definidos em vez de falha de pagina (obrigatorio no
         // Vulkan 1.0; perda do dispositivo na GPU AMD integrada, 2026-10-22)
         feat.robustBufferAccess = VK_TRUE;
+        // N9.8 fase 8.1: a anisotropica da filtragem (opcional; pick() ja viu se o dispositivo a tem)
+        if (st_.max_anisotropy > 1) feat.samplerAnisotropy = VK_TRUE;
         // Garantias do modo fiel (opcionais; sem elas o backend roda, mas a igualdade bit a bit com o software deixa
         // de ser garantida e o resumo diz isso):
         //   VK_KHR_shader_float_controls com RTE e preservacao de subnormais em float32: o ambiente FP do software;
@@ -224,8 +242,13 @@ public:
         Tex       t;
         MemScope  mc(telemetry::Mem::Textures);  // N9.5 fase 5C
         t.desc = desc, t.desc.mip_levels = 1;  // o software amostra so o maior nivel (fase de fidelidade)
-        t.image = makeImage(desc.width, desc.height, VK_FORMAT_B8G8R8A8_UNORM,
-                            VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
+        // N9.8 fase 8.1: com a filtragem ligada, a cadeia de mipmaps (gerada pela GPU a cada envio); sem ela, so o maior
+        t.levels = filterApplied_ ? mip_levels(desc.width, desc.height) : 1;
+        t.image  = makeImage(desc.width, desc.height, VK_FORMAT_B8G8R8A8_UNORM,
+                             // TRANSFER_SRC sempre: os niveis menores sao gerados do maior, e uma textura enviada antes de
+                             // ligar a filtragem e a origem da copia que lhe da a cadeia (camada Khronos, VUID 01212/06662)
+                             VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+                             VK_IMAGE_ASPECT_COLOR_BIT, t.levels);
         if (!t.image.img) return Error::Io;
         VkDescriptorSetAllocateInfo ai{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
         ai.descriptorPool = texPool_, ai.descriptorSetCount = 1, ai.pSetLayouts = &texLayout_;
@@ -237,6 +260,7 @@ public:
         VkWriteDescriptorSet  w{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
         w.dstSet = t.set, w.descriptorCount = 1, w.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, w.pImageInfo = &ii;
         f_.vkUpdateDescriptorSets(dev_, 1, &w, 0, nullptr);
+        if (t.levels > 1) writeFiltered(t), ++st_.mip_textures;
         const uint32_t id = ++nextTex_;
         texs_[id]         = t;
         TextureHandle h;
@@ -265,6 +289,7 @@ public:
         if (it == texs_.end()) return;
         // sem quadro em voo (cada submit espera o seu): pode destruir ja
         f_.vkFreeDescriptorSets(dev_, texPool_, 1, &it->second.set);
+        if (it->second.levels > 1) --st_.mip_textures;
         freeImage(it->second.image);
         uploads_.erase(std::remove_if(uploads_.begin(), uploads_.end(), [&](const Upload& u) { return u.tex == h.value; }),
                        uploads_.end());
@@ -295,6 +320,7 @@ public:
     }
 
     Result<void> submitFrame(const CommandList& cl) {
+        applyFiltering();  // N9.8 fase 8.1: a filtragem pedida (o quadro anterior terminou: a cerca)
         // N9.7: a agua aprimorada neste quadro: a qualidade ligada, o render do framebuffer e algum desenho translucido de
         // uma textura do catalogo com kMaterialWater; o horizonte e o fundo vem dos y desses desenhos (water_extent)
         waterQuality_ = WaterQuality(waterQ_.load(std::memory_order_relaxed));
@@ -348,6 +374,7 @@ public:
         }
         // N9.7 (revisao Codex 20261111-121354): a agua conta so o render concluido (a tentativa que transbordou e refeita)
         st_.water_frames += waterFramesRec_, st_.water_draws += waterDrawsRec_;
+        st_.filtered_draws += filteredDrawsRec_;  // N9.8 fase 8.1
         st_.frames++, st_.triangles += prep_.triangles, st_.culled += prep_.culled;
         st_.nonfinite_depth += prep_.nonfinite_depth, st_.batches += prep_.batches.size();
         st_.negative_depth_frames += prep_.depth_bias != 0;  // so importa sem profundidade crua
@@ -367,6 +394,9 @@ public:
     void  set_ambient_occlusion_quality(AoQuality q) override { aoQuality_.store(uint8_t(q), std::memory_order_relaxed); }
     void  set_lighting(bool on) override { lightOn_.store(on, std::memory_order_relaxed); }  // N9.6 fase 3
     void  set_shadows(bool on) override { shadowsOn_.store(on, std::memory_order_relaxed); }  // N9.6 fase 4
+    void set_filtering(uint32_t mode, uint32_t anisotropy) override {  // N9.8 fase 8.1 (a thread do render, como o submit)
+        filterMode_ = std::min(mode, 2u), filterAniso_ = std::clamp(anisotropy, 1u, 16u);
+    }
     void  set_water(WaterQuality q, uint64_t render) override {  // N9.7
         waterQ_.store(uint8_t(q), std::memory_order_relaxed), waterRender_.store(render, std::memory_order_relaxed);
     }
@@ -667,6 +697,13 @@ private:
     VkPipelineLayout      gfxLayout_ = VK_NULL_HANDLE, compLayout_ = VK_NULL_HANDLE;
     VkShaderModule        vert_ = VK_NULL_HANDLE, frag_ = VK_NULL_HANDLE, fragList_ = VK_NULL_HANDLE, comp_ = VK_NULL_HANDLE;
     VkShaderModule        waterFrag_ = VK_NULL_HANDLE, waterFragList_ = VK_NULL_HANDLE;  // N9.7: -DWATER (o mesmo ambiente FP)
+    VkShaderModule        filtFrag_ = VK_NULL_HANDLE, filtFragList_ = VK_NULL_HANDLE;    // N9.8 fase 8.1: -DFILTERED
+    // N9.8 fase 8.1: a filtragem. Pedida (set_filtering) e aplicada no inicio do submit seguinte (applyFiltering): os nove
+    // amostradores (u x v: repeticao, clamp, espelho), recriados quando a anisotropica muda; filterApplied_ 0 = o fiel
+    VkSampler             filtSamplers_[kFilterSamplers] = {};
+    uint32_t              filterMode_ = 0, filterAniso_ = 16, filterApplied_ = 0, anisoApplied_ = 0;
+    uint64_t              filteredDrawsRec_ = 0;  // os da tentativa de gravacao em curso
+    bool                  promoteWarned_ = false;
     VkPipeline            resolve_ = VK_NULL_HANDLE;
     VkSampler             sampler_ = VK_NULL_HANDLE, waterSampler_ = VK_NULL_HANDLE;
     std::unordered_map<uint32_t, VkPipeline> pipes_;
@@ -842,15 +879,29 @@ private:
             const double byMem  = std::sqrt(pixels * 3.0 / 4.0);                    // altura 4:3
             const double byDim  = double(p.limits.maxImageDimension2D) * 3.0 / 4.0;  // a largura e 4/3 da altura
             st_.max_internal_height = uint32_t(std::max(480.0, std::min(byMem, byDim)));
+            // N9.8 fase 8.1: a filtragem: a anisotropica (recurso e limite) e a geracao dos mipmaps pela GPU (blit linear
+            // no formato das texturas; obrigatorio no Vulkan para B8G8R8A8_UNORM, conferido assim mesmo)
+            VkPhysicalDeviceFeatures sf{};
+            f_.vkGetPhysicalDeviceFeatures(phys_, &sf);
+            st_.max_anisotropy = sf.samplerAnisotropy ? uint32_t(std::clamp(p.limits.maxSamplerAnisotropy, 1.f, 16.f)) : 1u;
+            VkFormatProperties fp{};
+            f_.vkGetPhysicalDeviceFormatProperties(phys_, VK_FORMAT_B8G8R8A8_UNORM, &fp);
+            const VkFormatFeatureFlags need = VK_FORMAT_FEATURE_BLIT_SRC_BIT | VK_FORMAT_FEATURE_BLIT_DST_BIT |
+                                              VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT;
+            st_.mipmaps = (fp.optimalTilingFeatures & need) == need;
         }
         return true;
     }
 
 
     bool layouts(std::string* error) {
-        VkDescriptorSetLayoutBinding tb{0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr};
+        // binding 1 (N9.8 fase 8.1): a mesma imagem pelos nove amostradores da filtragem (so a variante -DFILTERED o declara;
+        // escrito so nas texturas com mipmaps)
+        VkDescriptorSetLayoutBinding tb[2] = {{0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
+                                              {1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, kFilterSamplers,
+                                               VK_SHADER_STAGE_FRAGMENT_BIT, nullptr}};
         VkDescriptorSetLayoutCreateInfo li{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
-        li.bindingCount = 1, li.pBindings = &tb;
+        li.bindingCount = 2, li.pBindings = tb;
         if (!ok(f_.vkCreateDescriptorSetLayout(dev_, &li, nullptr, &texLayout_), "layout da textura", error)) return false;
         ++g_live;
         VkDescriptorSetLayoutBinding fb[7] = {{0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
@@ -874,7 +925,7 @@ private:
         if (!ok(f_.vkCreateDescriptorSetLayout(dev_, &li, nullptr, &resolveLayout_), "layout do resolve", error)) return false;
         ++g_live;
 
-        VkDescriptorPoolSize       tps{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 8192};
+        VkDescriptorPoolSize       tps{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 8192 * (1 + kFilterSamplers)};
         VkDescriptorPoolCreateInfo pi{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
         pi.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT, pi.maxSets = 8192, pi.poolSizeCount = 1, pi.pPoolSizes = &tps;
         if (!ok(f_.vkCreateDescriptorPool(dev_, &pi, nullptr, &texPool_), "pool das texturas", error)) return false;
@@ -957,21 +1008,27 @@ private:
             fragList_ = module(kPvrFragAutosortFcd, sizeof kPvrFragAutosortFcd);
             waterFrag_     = module(kPvrFragFcdWater, sizeof kPvrFragFcdWater);
             waterFragList_ = module(kPvrFragAutosortFcdWater, sizeof kPvrFragAutosortFcdWater);
+            filtFrag_      = module(kPvrFragFcdFiltered, sizeof kPvrFragFcdFiltered);
+            filtFragList_  = module(kPvrFragAutosortFcdFiltered, sizeof kPvrFragAutosortFcdFiltered);
             comp_     = module(kResolveCompFcd, sizeof kResolveCompFcd);
         } else if (floatControls_) {
             frag_     = module(kPvrFragFc, sizeof kPvrFragFc);
             fragList_ = module(kPvrFragAutosortFc, sizeof kPvrFragAutosortFc);
             waterFrag_     = module(kPvrFragFcWater, sizeof kPvrFragFcWater);
             waterFragList_ = module(kPvrFragAutosortFcWater, sizeof kPvrFragAutosortFcWater);
+            filtFrag_      = module(kPvrFragFcFiltered, sizeof kPvrFragFcFiltered);
+            filtFragList_  = module(kPvrFragAutosortFcFiltered, sizeof kPvrFragAutosortFcFiltered);
             comp_     = module(kResolveCompFc, sizeof kResolveCompFc);
         } else {
             frag_     = module(kPvrFrag, sizeof kPvrFrag);
             fragList_ = module(kPvrFragAutosort, sizeof kPvrFragAutosort);
             waterFrag_     = module(kPvrFragWater, sizeof kPvrFragWater);
             waterFragList_ = module(kPvrFragAutosortWater, sizeof kPvrFragAutosortWater);
+            filtFrag_      = module(kPvrFragFiltered, sizeof kPvrFragFiltered);
+            filtFragList_  = module(kPvrFragAutosortFiltered, sizeof kPvrFragAutosortFiltered);
             comp_     = module(kResolveComp, sizeof kResolveComp);
         }
-        if (!vert_ || !frag_ || !fragList_ || !comp_ || !waterFrag_ || !waterFragList_) {
+        if (!vert_ || !frag_ || !fragList_ || !comp_ || !waterFrag_ || !waterFragList_ || !filtFrag_ || !filtFragList_) {
             if (error) *error = "shaders";
             return false;
         }
@@ -1687,19 +1744,185 @@ private:
 
     // pipeline pela parte fixa do estado: modo, comparacao e escrita de profundidade, fatores de mistura
     // N9.7: water = a variante -DWATER do fragmento (desenho de agua com a agua aprimorada); a parte fixa e a mesma
-    VkPipeline pipeline(PassMode mode, const DrawState& s, bool water = false) {
+    // ---- N9.8 fase 8.1: a filtragem ----
+    // a barreira de um intervalo de niveis de mipmap
+    void mipBarrier(VkCommandBuffer c, VkImage img, uint32_t base, uint32_t count, VkImageLayout from, VkImageLayout to,
+                    VkPipelineStageFlags ss, VkAccessFlags sa, VkPipelineStageFlags ds, VkAccessFlags da) {
+        VkImageMemoryBarrier b{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
+        b.oldLayout = from, b.newLayout = to, b.srcAccessMask = sa, b.dstAccessMask = da;
+        b.srcQueueFamilyIndex = b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        b.image = img, b.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, base, count, 0, 1};
+        f_.vkCmdPipelineBarrier(c, ss, ds, 0, 0, nullptr, 0, nullptr, 1, &b);
+    }
+    // os niveis 1.. gerados do nivel 0 (todos em TRANSFER_DST na entrada; todos para leitura no fragmento na saida), por
+    // blit linear de cada nivel para o seguinte (a media 2 x 2 dos texels, sem pre-multiplicar o alfa)
+    void genMips(VkCommandBuffer c, VkImage img, uint32_t w, uint32_t h, uint32_t levels) {
+        for (uint32_t i = 1; i < levels; ++i) {
+            mipBarrier(c, img, i - 1, 1, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                       VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                       VK_ACCESS_TRANSFER_READ_BIT);
+            VkImageBlit bl{};
+            bl.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, i - 1, 0, 1}, bl.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, i, 0, 1};
+            bl.srcOffsets[1] = {int32_t(std::max(1u, w >> (i - 1))), int32_t(std::max(1u, h >> (i - 1))), 1};
+            bl.dstOffsets[1] = {int32_t(std::max(1u, w >> i)), int32_t(std::max(1u, h >> i)), 1};
+            f_.vkCmdBlitImage(c, img, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, img, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &bl,
+                              VK_FILTER_LINEAR);
+            mipBarrier(c, img, i - 1, 1, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                       VK_PIPELINE_STAGE_TRANSFER_BIT, 0, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_ACCESS_SHADER_READ_BIT);
+        }
+        mipBarrier(c, img, levels - 1, 1, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                   VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                   VK_ACCESS_SHADER_READ_BIT);
+    }
+    // o binding 1 de uma textura com mipmaps: a imagem pelos nove amostradores
+    void writeFiltered(const Tex& t) {
+        if (!filtSamplers_[0]) return;
+        VkDescriptorImageInfo ii[kFilterSamplers];
+        for (uint32_t k = 0; k < kFilterSamplers; ++k) ii[k] = {filtSamplers_[k], t.image.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+        VkWriteDescriptorSet w{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+        w.dstSet = t.set, w.dstBinding = 1, w.descriptorCount = kFilterSamplers;
+        w.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, w.pImageInfo = ii;
+        f_.vkUpdateDescriptorSets(dev_, 1, &w, 0, nullptr);
+    }
+    // um envio fora do quadro, na fila do renderizador, esperado pela cerca (o quadro anterior ja terminou)
+    bool oneShot(const std::function<void(VkCommandBuffer)>& rec) {
+        f_.vkResetCommandBuffer(cmd_, 0);
+        VkCommandBufferBeginInfo bi{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+        bi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+        f_.vkBeginCommandBuffer(cmd_, &bi);
+        rec(cmd_);
+        f_.vkEndCommandBuffer(cmd_);
+        VkSubmitInfo si{VK_STRUCTURE_TYPE_SUBMIT_INFO};
+        si.commandBufferCount = 1, si.pCommandBuffers = &cmd_;
+        f_.vkResetFences(dev_, 1, &fence_);
+        VkResult r;
+        {
+            std::lock_guard<std::mutex> lock(queueMutex_);
+            r = f_.vkQueueSubmit(queue_, 1, &si, fence_);
+        }
+        if (r == VK_SUCCESS) r = f_.vkWaitForFences(dev_, 1, &fence_, VK_TRUE, UINT64_MAX);
+        if (r != VK_SUCCESS) fail("envio da filtragem", r);
+        return r == VK_SUCCESS;
+    }
+    // a filtragem pedida, no inicio do submit: os amostradores (a anisotropica), o binding 1 das texturas com a cadeia e, ao
+    // ligar, a cadeia nas texturas ja enviadas (de uma vez: uma copia do maior nivel para uma imagem nova e os blits)
+    void applyFiltering() {
+        const uint32_t want  = st_.mipmaps ? filterMode_ : 0u;
+        const uint32_t aniso = want == 2 ? std::min(filterAniso_, st_.max_anisotropy) : 1u;
+        if (want == filterApplied_ && (want == 0 || aniso == anisoApplied_)) return;
+        if (want && (!filtSamplers_[0] || aniso != anisoApplied_)) {
+            VkSampler fresh[kFilterSamplers] = {};
+            const VkSamplerAddressMode modes[3] = {VK_SAMPLER_ADDRESS_MODE_REPEAT, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+                                                   VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT};
+            VkSamplerCreateInfo si{VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO};
+            si.magFilter = si.minFilter = VK_FILTER_LINEAR, si.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+            si.minLod = 0, si.maxLod = VK_LOD_CLAMP_NONE, si.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+            si.anisotropyEnable = aniso > 1 ? VK_TRUE : VK_FALSE, si.maxAnisotropy = float(aniso);
+            for (uint32_t k = 0; k < kFilterSamplers; ++k) {
+                si.addressModeU = modes[k / 3], si.addressModeV = modes[k % 3];  // o indice do shader: u x 3 + v
+                if (f_.vkCreateSampler(dev_, &si, nullptr, &fresh[k]) != VK_SUCCESS) {
+                    for (VkSampler& s : fresh)
+                        if (s) f_.vkDestroySampler(dev_, s, nullptr), --g_live;
+                    std::fprintf(stderr, "[render-vk] filtragem: amostrador recusado; fica a do fiel\n");
+                    filterMode_ = 0;
+                    return;
+                }
+                ++g_live;
+            }
+            VkSampler old[kFilterSamplers];
+            std::copy(std::begin(filtSamplers_), std::end(filtSamplers_), old);
+            std::copy(std::begin(fresh), std::end(fresh), filtSamplers_);
+            for (auto& [id, t] : texs_)
+                if (t.levels > 1) writeFiltered(t);
+            for (VkSampler& s : old)
+                if (s) f_.vkDestroySampler(dev_, s, nullptr), --g_live;
+        }
+        if (want && !filterApplied_) {
+            struct Promo {
+                Tex*  t;
+                Image fresh;
+            };
+            std::vector<Promo> promos;
+            {
+                MemScope mc(telemetry::Mem::Textures);
+                for (auto& [id, t] : texs_) {
+                    if (t.levels > 1) continue;
+                    const uint32_t levels = mip_levels(t.desc.width, t.desc.height);
+                    if (levels < 2) continue;  // 1 x 1: nada a filtrar
+                    Image im = makeImage(t.desc.width, t.desc.height, VK_FORMAT_B8G8R8A8_UNORM,
+                                         VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+                                         VK_IMAGE_ASPECT_COLOR_BIT, levels);
+                    if (!im.img) {  // sem memoria: as restantes ficam so com o maior nivel (o desenho delas e o do fiel)
+                        if (!promoteWarned_) std::fprintf(stderr, "[render-vk] filtragem: sem memoria para os mipmaps de todas as texturas\n");
+                        promoteWarned_ = true;
+                        break;
+                    }
+                    promos.push_back({&t, im});
+                }
+            }
+            const bool sent = promos.empty() || oneShot([&](VkCommandBuffer c) {
+                for (const Promo& pr : promos) {
+                    const Tex&     t = *pr.t;
+                    const uint32_t L = mip_levels(t.desc.width, t.desc.height);
+                    mipBarrier(c, pr.fresh.img, 0, L, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                               VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 0, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT);
+                    if (!t.ready) {  // ainda sem dados: o envio pendente escreve o nivel 0 e gera os outros
+                        mipBarrier(c, pr.fresh.img, 0, L, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                                   VK_PIPELINE_STAGE_TRANSFER_BIT, 0, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_ACCESS_SHADER_READ_BIT);
+                        continue;
+                    }
+                    mipBarrier(c, t.image.img, 0, 1, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                               VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_READ_BIT);
+                    VkImageCopy cp{};
+                    cp.srcSubresource = cp.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+                    cp.extent = {t.desc.width, t.desc.height, 1};
+                    f_.vkCmdCopyImage(c, t.image.img, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, pr.fresh.img,
+                                      VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &cp);
+                    genMips(c, pr.fresh.img, t.desc.width, t.desc.height, L);
+                }
+            });
+            for (Promo& pr : promos) {
+                if (!sent) {  // o envio falhou: as imagens novas saem e as texturas ficam como estavam
+                    freeImage(pr.fresh);
+                    continue;
+                }
+                Tex& t = *pr.t;
+                freeImage(t.image);  // a copia ja terminou (a cerca)
+                t.image  = pr.fresh;
+                t.levels = mip_levels(t.desc.width, t.desc.height);
+                // um envio pendente (t.ready falso) sai do UNDEFINED: a imagem nova ja esta em leitura
+                if (!t.ready) t.ready = true;
+                VkDescriptorImageInfo ii{sampler_, t.image.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+                VkWriteDescriptorSet  w{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+                w.dstSet = t.set, w.descriptorCount = 1, w.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, w.pImageInfo = &ii;
+                f_.vkUpdateDescriptorSets(dev_, 1, &w, 0, nullptr);
+                writeFiltered(t);
+                ++st_.mip_textures, ++st_.mip_promotions;
+            }
+            if (!sent) return;  // tenta de novo no proximo submit
+        }
+        filterApplied_ = want, anisoApplied_ = want ? aniso : 0u;
+        static const char* names[] = {"a do fiel", "trilinear", "anisotropica"};
+        std::fprintf(stderr, "[render-vk] filtragem: %s%s (texturas com mipmaps: %llu)\n", names[want],
+                     want == 2 ? (" " + std::to_string(aniso) + "x").c_str() : "",
+                     static_cast<unsigned long long>(st_.mip_textures));
+    }
+
+    VkPipeline pipeline(PassMode mode, const DrawState& s, bool water = false, bool filtered = false) {
         uint32_t cmp = uint32_t(s.depth), zw = s.depth_write ? 1 : 0, src = 0, dst = 0;
         if (mode == PassMode::PunchThrough) cmp = 6, zw = 1;  // >= forcado; z-write disable ignorado
         if (mode == PassMode::TranslucentAutosort) cmp = 6, zw = 0;
         if (mode == PassMode::TranslucentOrdered) src = uint32_t(s.src), dst = uint32_t(s.dst);
-        const uint32_t key = uint32_t(mode) | (cmp << 2) | (zw << 5) | (src << 6) | (dst << 9) | (uint32_t(water) << 12);
+        const uint32_t key = uint32_t(mode) | (cmp << 2) | (zw << 5) | (src << 6) | (dst << 9) | (uint32_t(water) << 12) |
+                             (uint32_t(filtered) << 13);
         if (auto it = pipes_.find(key); it != pipes_.end()) return it->second;
 
         VkPipelineShaderStageCreateInfo st[2] = {
             {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_VERTEX_BIT, vert_, "main", nullptr},
             {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_FRAGMENT_BIT,
-             mode == PassMode::TranslucentAutosort ? (water ? waterFragList_ : fragList_) : (water ? waterFrag_ : frag_), "main",
-             nullptr}};
+             mode == PassMode::TranslucentAutosort ? (water ? waterFragList_ : filtered ? filtFragList_ : fragList_)
+                                                   : (water ? waterFrag_ : filtered ? filtFrag_ : frag_),
+             "main", nullptr}};
         VkVertexInputBindingDescription   vb{0, sizeof(GpuVertex), VK_VERTEX_INPUT_RATE_VERTEX};
         VkVertexInputAttributeDescription va[7] = {{0, 0, VK_FORMAT_R32G32_SFLOAT, 0},  {1, 0, VK_FORMAT_R32_SFLOAT, 8},
                                                    {2, 0, VK_FORMAT_R32G32_SFLOAT, 12}, {3, 0, VK_FORMAT_R32_UINT, 20},
@@ -1938,6 +2161,7 @@ private:
     Result<void> record(const CommandList& cl) {
         const FrameParams& fr = cl.frame;
         waterFramesRec_ = waterDrawsRec_ = 0;  // N9.7: os da tentativa (publicados no fim do submitFrame)
+        filteredDrawsRec_ = 0;                 // N9.8 fase 8.1
         const size_t       vbytes = std::max<size_t>(prep_.vertices.size() * sizeof(GpuVertex), 64);
         if (!ensureHost(verts_, vbytes, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT)) return fail("buffer de vertices");
         if (!prep_.vertices.empty()) std::memcpy(verts_.map, prep_.vertices.data(), prep_.vertices.size() * sizeof(GpuVertex));
@@ -2027,16 +2251,20 @@ private:
                 std::fprintf(stderr, "[render-vk] envio render %llu: textura %u %ux%u %s, deslocamento %zu de %zu\n",
                              static_cast<unsigned long long>(st_.frames + 1), u.tex, t->desc.width, t->desc.height,
                              t->ready ? "atualizada" : "nova", u.offset, uploadBytes_.size());
-            imageBarrier(t->image.img, t->ready ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_UNDEFINED,
-                         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
-                         VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT);
+            mipBarrier(cmd_, t->image.img, 0, t->levels,
+                       t->ready ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_UNDEFINED,
+                       VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
+                       VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT);
             VkBufferImageCopy c{};
             c.bufferOffset = u.offset, c.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
             c.imageExtent = {t->desc.width, t->desc.height, 1};
             f_.vkCmdCopyBufferToImage(cmd_, staging_.buf, t->image.img, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &c);
-            imageBarrier(t->image.img, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                         VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-                         VK_ACCESS_SHADER_READ_BIT);
+            // N9.8 fase 8.1: com a cadeia, os niveis menores sao gerados do maior (todos terminam para leitura)
+            if (t->levels > 1) genMips(cmd_, t->image.img, t->desc.width, t->desc.height, t->levels);
+            else
+                imageBarrier(t->image.img, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                             VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                             VK_ACCESS_SHADER_READ_BIT);
             t->ready = true;
         }
         // listas por pixel vazias: contador 0, capacidade, transbordo 0, largura; cabecas = nenhuma
@@ -2125,7 +2353,12 @@ private:
             // N9.7: um desenho de agua (translucido de uma textura com kMaterialWater) vai pela variante -DWATER
             const bool water = waterFrame && tex && (tex->material & kMaterialWater) &&
                                (b.mode == PassMode::TranslucentOrdered || b.mode == PassMode::TranslucentAutosort);
-            VkPipeline p = pipeline(b.mode, b.state, water);
+            Push pc = push(b, fr, tex);
+            // N9.8 fase 8.1: um desenho bilinear de uma textura com mipmaps, com a filtragem ligada, vai pela variante
+            // -DFILTERED (o ponto e a agua ficam como estao)
+            const bool filtered = filterApplied_ && tex && tex->levels > 1 && !water && ((pc.flags >> 10) & 3u) != 0;
+            filteredDrawsRec_ += filtered;
+            VkPipeline p = pipeline(b.mode, b.state, water, filtered);
             if (!p) return fail("pipeline");  // o buffer de comandos e recomecado (reset) no proximo quadro
             if (p != bound) f_.vkCmdBindPipeline(cmd_, VK_PIPELINE_BIND_POINT_GRAPHICS, p), bound = p;
             VkRect2D sc{{0, 0}, {w_, h_}};
@@ -2140,7 +2373,6 @@ private:
             f_.vkCmdSetScissor(cmd_, 0, 1, &sc);
             const VkDescriptorSet set = tex ? tex->set : dummy_.set;
             f_.vkCmdBindDescriptorSets(cmd_, VK_PIPELINE_BIND_POINT_GRAPHICS, gfxLayout_, 0, 1, &set, 0, nullptr);
-            Push pc = push(b, fr, tex);
             if (water) {
                 // so o build de validacao: BS_AGUA_DIAGNOSTICO=1 pinta os desenhos de agua de magenta, =2 de verde (as duas
                 // mascaras do dominio da agua, para a suite n97_agua); =3 e =4 o mesmo sem o movimento da textura (a pegada
@@ -2382,8 +2614,10 @@ private:
             for (VkShaderModule* m : {&aoMod_, &aoBlurMod_, &aoHalfMod_, &aoUpMod_, &aoBlurSurfMod_, &aoUpSurfMod_})
                 if (*m) f_.vkDestroyShaderModule(dev_, *m, nullptr), --g_live, *m = VK_NULL_HANDLE;
             if (resolve_) f_.vkDestroyPipeline(dev_, resolve_, nullptr), --g_live;
-            for (VkShaderModule m : {vert_, frag_, fragList_, comp_, waterFrag_, waterFragList_})
+            for (VkShaderModule m : {vert_, frag_, fragList_, comp_, waterFrag_, waterFragList_, filtFrag_, filtFragList_})
                 if (m) f_.vkDestroyShaderModule(dev_, m, nullptr), --g_live;
+            for (VkSampler& s : filtSamplers_)
+                if (s) f_.vkDestroySampler(dev_, s, nullptr), --g_live, s = VK_NULL_HANDLE;
             if (sampler_) f_.vkDestroySampler(dev_, sampler_, nullptr), --g_live;
             if (waterSampler_) f_.vkDestroySampler(dev_, waterSampler_, nullptr), --g_live;
             if (gfxLayout_) f_.vkDestroyPipelineLayout(dev_, gfxLayout_, nullptr), --g_live;

@@ -27,6 +27,7 @@
 #include "sound_adapter.h"
 #include "video_mw_core.h"
 #include "render_capture.h"
+#include "render/texture_packs.h"  // N9.8 fase 8.2
 #include "video_adapter.h"
 #include "audio/audio.h"
 #include "audio/voice_player.h"
@@ -423,6 +424,16 @@ void GameHost::setWaterQuality(uint32_t quality) {
     notifyRequest();
 }
 
+void GameHost::setFiltering(uint32_t mode, uint32_t anisotropy) {  // N9.8 fase 8.1
+    filterPending_.store(int(std::min(mode, 2u) * 32 + std::clamp(anisotropy, 1u, 16u)));
+    notifyRequest();
+}
+
+void GameHost::setHdTextures(bool on) {  // N9.8 fase 8.2
+    hdPending_.store(on ? 1 : 0);
+    notifyRequest();
+}
+
 void GameHost::setWideWidth(uint32_t width) {
     widePending_.store(int64_t(width));
     notifyRequest();
@@ -520,6 +531,19 @@ void GameHost::applyRequests() {
     if (const float s = scalePending_.exchange(0.f); s > 0 && s != transitional::render_capture::scale()) {
         transitional::render_capture::set_scale(s);
         std::fprintf(stderr, "[render] resolucao interna: escala %.3g (%ux%u)\n", s, unsigned(640 * s + 0.5f), unsigned(480 * s + 0.5f));
+    }
+    if (const int f = filterPending_.exchange(-1); f >= 0) {  // N9.8 fase 8.1
+        const uint32_t mode = uint32_t(f) / 32, an = uint32_t(f) % 32;
+        if (mode != transitional::render_capture::filtering() || (mode == 2 && an != transitional::render_capture::filtering_anisotropy())) {
+            transitional::render_capture::set_filtering(mode, an);
+            static const char* names[] = {"original", "trilinear", "anisotropica"};
+            std::fprintf(stderr, "[render] filtragem: %s%s\n", names[mode], mode == 2 ? (" " + std::to_string(an) + "x").c_str() : "");
+        }
+    }
+    if (const int hd = hdPending_.exchange(-1); hd >= 0 && (hd != 0 && packs_) != hdOn_) {  // N9.8 fase 8.2
+        hdOn_ = hd != 0 && packs_;
+        transitional::render_capture::set_texture_replacements(hdOn_ ? packs_ : nullptr);
+        std::fprintf(stderr, "[render] texturas HD: %s\n", hdOn_ ? "ligadas" : "desligadas");
     }
     if (const int q = waterPending_.exchange(-1); q >= 0 && uint32_t(q) != transitional::render_capture::water()) {
         transitional::render_capture::set_water(uint32_t(q));
@@ -1171,6 +1195,19 @@ void GameHost::threadMain() {
     if (opt_.input) opt_.input->set_transform({});
     if (transitional::render_capture::stats().renders)  // N7a: BS_RENDER_IR
         std::fputs(transitional::render_capture::summary().c_str(), stderr);
+    if (packs_ && (hdOn_ || packs_->stats().loaded || packs_->stats().rejected)) {  // N9.8 fase 8.2
+        const auto& ps = packs_->stats();
+        std::fprintf(stderr, "[texturas-hd] pacotes %zu, no indice %llu; carregadas %llu (%.1f MiB, fator ate %u); recusadas %llu; "
+                             "adiamentos pelo limite do quadro %llu\n",
+                     packs_->packages().size(), (unsigned long long)ps.indexed, (unsigned long long)ps.loaded,
+                     double(ps.bytes) / (1024.0 * 1024.0), ps.max_factor, (unsigned long long)ps.rejected,
+                     (unsigned long long)ps.deferred);
+        const auto& rj = packs_->rejections();
+        for (size_t i = 0; i < rj.size() && i < 8; ++i) std::fprintf(stderr, "[texturas-hd] recusada %s\n", rj[i].c_str());
+        if (rj.size() > 8) std::fprintf(stderr, "[texturas-hd] ... e mais %zu recusadas\n", rj.size() - 8);
+    }
+    transitional::render_capture::set_texture_replacements(nullptr);  // N9.8 fase 8.2: os pacotes sao de quem chamou
+    hdOn_ = false;
     transitional::render_capture::install(transitional::render_capture::Mode::Off);  // sempre (revisao Codex 2026-10-21)
     if (transitional::sound::installed()) {
         std::fputs(transitional::sound::summary().c_str(), stderr);

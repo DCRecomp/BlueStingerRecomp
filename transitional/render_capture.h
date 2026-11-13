@@ -115,6 +115,7 @@ struct Stats {
     std::string vk_device, vk_error;
     uint64_t    vk_frames = 0, vk_failures = 0, tex_uploads = 0, tex_legacy = 0, tex_evicted = 0;
     uint64_t    tex_replaced = 0, tex_replace_rejected = 0;  // substituicoes HD usadas / incompativeis (original)
+    uint64_t    tex_replace_deferred = 0, tex_exported = 0;  // N9.8 fase 8.2: adiadas pelo limite do quadro; exportadas
     uint64_t    vk_fragment_retries = 0, vk_negative_depth = 0;  // listas por pixel refeitas; quadros com 1/w negativo
     uint64_t    vk_recoveries = 0;                                 // dispositivo recriado depois de uma perda
     double      vk_gpu_ms_total = 0, vk_gpu_ms_max = 0;           // tempo de GPU por quadro (total e o pior)
@@ -127,6 +128,9 @@ struct Stats {
     uint32_t    vk_lights_max = 0;                                 // o maior numero de luzes num render
     uint64_t    vk_soft_shadow_frames = 0;                         // N9.6 fase 4: renders com a borda suave dos volumes
     uint64_t    vk_water_frames = 0, vk_water_draws = 0;           // N9.7: renders com a agua aprimorada e os desenhos dela
+    // N9.8 fase 8.1: desenhos pela variante filtrada, texturas vivas com mipmaps (o maior numero visto) e as que ganharam a
+    // cadeia ao ligar a filtragem
+    uint64_t    vk_filtered_draws = 0, vk_mip_textures_max = 0, vk_mip_promotions = 0;
     uint64_t    vk_water_scene_bytes_max = 0;                      // N9.7: o maior tamanho da imagem da cena para a agua
     uint64_t    cmp_frames = 0, cmp_pixels = 0, cmp_diff = 0, cmp_diff8 = 0, cmp_worst_render = 0;
     uint32_t    cmp_max = 0;
@@ -167,6 +171,11 @@ void  set_scale(float scale);
 float scale();
 void     set_water(uint32_t quality);  // native::render::WaterQuality (0 original, 1 aprimorada, 2 alta)
 uint32_t water();
+// N9.8 fase 8.1: a filtragem das texturas (0 = a do fiel; 1 = trilinear; 2 = anisotropica de `anisotropy`), so no
+// Mode::Native com o Vulkan (VulkanDevice::set_filtering). Vale a partir do proximo render; chamar na thread do jogo.
+void     set_filtering(uint32_t mode, uint32_t anisotropy);
+uint32_t filtering();
+uint32_t filtering_anisotropy();
 // N9.5 fase 1 (native/render/wide_frame.h): o quadro largo da Remastered (hor+), so no Mode::Native com o Vulkan. Com
 // largura > a do jogo, o Vulkan desenha a IR deslocada de (largura - 640) / 2 num alvo dessa largura (na escala), a
 // imagem inteira fica num slot para a apresentacao e o framebuffer emulado recebe o recorte central (o 4:3 do jogo).

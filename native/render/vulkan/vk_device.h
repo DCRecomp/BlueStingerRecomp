@@ -46,6 +46,13 @@ struct VulkanStats {
     // -DWATER), os desenhos de agua desenhados por ela, e a imagem da cena para a agua viva agora (bytes; 0 = nenhuma)
     uint64_t    water_frames = 0, water_draws = 0;
     uint64_t    water_scene_bytes = 0;
+    // N9.8 fase 8.1: a filtragem da Remastered. mipmaps = o formato das texturas aceita a geracao dos niveis pela GPU (blit
+    // linear); max_anisotropy = o maior nivel da anisotropica (1 = sem o recurso); filtered_draws = desenhos pela variante
+    // -DFILTERED; mip_textures = as texturas vivas com a cadeia de mipmaps; mip_promotions = as que ganharam a cadeia ao
+    // ligar a filtragem (o envio delas foi antes)
+    bool        mipmaps = false;
+    uint32_t    max_anisotropy = 1;
+    uint64_t    filtered_draws = 0, mip_textures = 0, mip_promotions = 0;
     uint64_t    negative_depth_frames = 0;  // quadros com 1/w negativo (profundidade deslocada, ver frame_prep)
     // garantias do modo fiel (igualdade bit a bit com o software): ambiente FP do software nos shaders
     // (VK_KHR_shader_float_controls) e profundidade crua (VK_EXT_depth_range_unrestricted)
@@ -153,6 +160,11 @@ public:
     // render, water.h). So os desenhos translucidos com kMaterialWater no catalogo, so no render do framebuffer. A imagem
     // da cena para a agua nasce no primeiro quadro que tiver um desses desenhos e sai com a agua desligada.
     virtual void     set_water(WaterQuality q, uint64_t render) = 0;
+    // N9.8 fase 8.1: a filtragem das texturas no proximo submit (0 = a do fiel, so o maior nivel; 1 = trilinear; 2 =
+    // trilinear com a anisotropica de `anisotropy`, limitada a stats().max_anisotropy). Ligada, as texturas ganham a cadeia
+    // de mipmaps (as ja enviadas, de uma vez, no submit seguinte) e os desenhos bilineares vao pela variante -DFILTERED. O
+    // ponto, a agua e a filtragem desligada ficam como o fiel. Sem stats().mipmaps, nada muda.
+    virtual void     set_filtering(uint32_t mode, uint32_t anisotropy) = 0;
     // N9.6 fase 1: a qualidade do AO (alta: o alvo inteiro, 8 direcoes x 4 passos, a primeira versao e o padrao do
     // dispositivo; media: meia resolucao com a reconstrucao pela profundidade, 8 x 4; baixa: meia resolucao, 4 x 3)
     virtual void     set_ambient_occlusion_quality(AoQuality q) = 0;

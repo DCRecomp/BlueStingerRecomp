@@ -57,6 +57,7 @@ execução) · **P** = processo externo · **F** = ferramenta de build · **T** 
 | pl_mpeg | do repositório (`third_party/pl_mpeg`) | MPEG-1 e MP2: conversão no Builder Windows; filmes no jogo Linux | MIT | github.com/phoboslab/pl_mpeg | E | sim | aviso e texto | MPEG-1 vídeo e MP2: patentes vencidas (README do pl_mpeg) | compatível | — |
 | Decodificador ADX (Sofdec) | próprio | áudio dos filmes | MIT (projeto) | este repositório | E | sim | — | formato da CRI; nenhuma patente conhecida em vigor; implementação própria | compatível; **análise** de baixa prioridade | — |
 | dr_flac | 0.13.4 | FLAC de mods de áudio | MIT-0 ou domínio público | github.com/mackron/dr_libs | E | sim | nenhuma (MIT-0) | FLAC livre de royalties | compatível | — |
+| stb_image | 2.30 (`third_party/stb`, commit `f58f558`) | PNG das texturas HD de mods (N9.8 fase 8.2); só o PNG, da memória | domínio público (escolhida) ou MIT | github.com/nothings/stb | E | sim (fontes no kit) | nenhuma (domínio público); o texto vai em `licencas/` | PNG livre | compatível | — |
 | libogg | 1.3.6 | OGG de mods de áudio | BSD-3-Clause | downloads.xiph.org (SHA-256 conferido) | E | sim | aviso e texto | Vorbis livre de royalties | compatível | — |
 | libvorbis | 1.3.7 | Vorbis de mods de áudio (só decodificação) | BSD-3-Clause | downloads.xiph.org | E | sim | aviso e texto | idem | compatível | — |
 | Vulkan-Headers | 1.3.282 | cabeçalhos do backend Vulkan | Apache-2.0 (partes MIT) | Khronos | E (só cabeçalhos) | sim (fontes) | texto; conferir se algum usado é MIT | — | compatível; **análise** leve | — |

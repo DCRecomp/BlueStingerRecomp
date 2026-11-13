@@ -34,6 +34,7 @@
 #include "platform/user_settings.h"
 #include "render/vulkan/vk_device.h"
 #include "render/wide_frame.h"
+#include "render/texture_packs.h"  // N9.8 fase 8.2
 #include "platform/telemetry.h"  // N9.5 fase 5C
 #include "render_capture.h"
 #include "gdfs_adapter.h"
@@ -111,6 +112,8 @@ struct Args {
     int      light  = 0;          // --iluminacao ligado|desligado (N9.6 fase 3; 0 = o do graficos.toml; so na Remastered)
     int      shadows = 0;         // --sombras original|aprimoradas (N9.6 fase 4; 0 = o do graficos.toml; so na Remastered)
     int      water = 0;           // --agua original|aprimorada|alta (N9.7; 0 = a do graficos.toml; 1 + qualidade; so na Remastered)
+    int      filter = 0;          // --filtragem original|bilinear|anisotropica (N9.8 fase 8.1; 0 = a do graficos.toml; 1 + modo)
+    int      hdTextures = 0;      // --texturas-hd desligado|ligado (N9.8 fase 8.2; 0 = a do graficos.toml; 1 desligado, 2 ligado)
     int      cameraMode = -1;     // --camera original|livre (N7c; -1 = a do controles.toml, ou Original sem janela)
     int      present = -1;        // --apresentacao vulkan|sdl (N7c; -1 = Vulkan quando houver)
     bs::AudioEffectsProvider audioEffects = bs::AudioEffectsProvider::Legacy;  // --audio-efeitos nativo|legado (N6)
@@ -202,6 +205,17 @@ bool parseArgs(Args& a) {
         else if (s == L"--ssao" && (v = next())) {  // N9.6 fase 1: so nesta execucao
             if (*v == L"desligado") a.ssao = 1;
             else if (*v == L"ligado") a.ssao = 2;
+            else return false;
+        }
+        else if (s == L"--filtragem" && (v = next())) {  // N9.8 fase 8.1: so nesta execucao (nao vai para o graficos.toml)
+            if (*v == L"original") a.filter = 1;
+            else if (*v == L"bilinear") a.filter = 2;
+            else if (*v == L"anisotropica") a.filter = 3;
+            else return false;
+        }
+        else if (s == L"--texturas-hd" && (v = next())) {  // N9.8 fase 8.2: so nesta execucao (nao vai para o graficos.toml)
+            if (*v == L"desligado") a.hdTextures = 1;
+            else if (*v == L"ligado") a.hdTextures = 2;
             else return false;
         }
         else if (s == L"--agua" && (v = next())) {  // N9.7: so nesta execucao (nao vai para o graficos.toml)
@@ -297,6 +311,18 @@ fs::path exeDir() { return bs::platform::exe_dir(); }
 // N9-L (A11): a pasta dos mods ao lado do executavel e as subpastas, sem diferenciar maiusculas ("Mods/Video" no Linux)
 fs::path modsPath(const wchar_t* sub = nullptr) {
     return bs::native::resolve_case(exeDir(), sub ? fs::path(L"mods") / sub : fs::path(L"mods"));
+}
+
+// N9.8 fase 8.2: os pacotes de texturas HD (mods\<pacote>\mod.toml com texturas\); os avisos no stderr
+bs::native::render::TexturePacks discoverTexturePacks() {
+    std::vector<std::string> problems;
+    auto packs = bs::native::render::TexturePacks::discover(modsPath(), "T13001N V1.000", &problems);
+    for (const auto& p : packs.packages())
+        std::fprintf(stderr, "[texturas-hd] pacote %s %s (prioridade %d): %u texturas\n", p.id.c_str(), p.version.c_str(),
+                     p.priority, p.textures);
+    for (const auto& pr : problems) std::fprintf(stderr, "[texturas-hd] %s\n", pr.c_str());
+    if (packs.empty()) std::fprintf(stderr, "[texturas-hd] nenhum pacote com texturas em mods\\: a opcao fica indisponivel\n");
+    return packs;
 }
 
 // Pasta dos arquivos do usuario (log): ao lado do executavel se der para gravar la; senao
@@ -860,6 +886,8 @@ public:
     void     set_light_override() { lightOverride_ = true; }  // nem --iluminacao (N9.6 fase 3)
     void     set_shadows_override() { shadowsOverride_ = true; }  // nem --sombras (N9.6 fase 4)
     void     set_water_override() { waterOverride_ = true; }  // nem --agua (N9.7)
+    void     set_filter_override() { filterOverride_ = true; }  // nem --filtragem (N9.8 fase 8.1)
+    void     set_hd_override() { hdOverride_ = true; }  // nem --texturas-hd (N9.8 fase 8.2)
     // antes do apply(prefs, true): a --resolucao-interna e o limite 4:3 da GPU (VulkanStats::max_internal_height)
     void     set_internal_height_override(uint32_t h, uint32_t gpuMax) { heightOverride_ = h, gpuMax_ = (std::max)(480u, gpuMax); }
     // a apresentacao recuou para o SDL (sem slots): o quadro largo deixa de existir nesta execucao
@@ -952,6 +980,11 @@ public:
         if (heightChanged && !heightFirst) sendHeight();
         if (start || g.vulkan != old.graphics.vulkan || g.water != old.graphics.water)
             host_.setWaterQuality(g.vulkan ? uint32_t(g.water) : 0);
+        // N9.8 fase 8.1: a filtragem (clamp_to ja a leva ao original sem o recurso: a Original e o software)
+        if (start || g.vulkan != old.graphics.vulkan || g.filter != old.graphics.filter || g.anisotropy != old.graphics.anisotropy)
+            host_.setFiltering(g.vulkan ? uint32_t(g.filter) : 0, g.anisotropy);
+        if (start || g.vulkan != old.graphics.vulkan || g.hd_textures != old.graphics.hd_textures)  // N9.8 fase 8.2
+            host_.setHdTextures(g.vulkan && g.hd_textures);
         // N9.6 fase 1: a oclusao ambiente (clamp_to ja a desliga sem o recurso: a Original e o recuo para o SDL)
         if (start || g.ssao != old.graphics.ssao || g.ssao_quality != old.graphics.ssao_quality || g.vulkan != old.graphics.vulkan)
             host_.setAmbientOcclusion(g.vulkan && g.ssao, uint32_t(g.ssao_quality));
@@ -1001,6 +1034,9 @@ public:
         if (lightOverride_) d.graphics.lighting = persisted_.graphics.lighting;  // N9.6 fase 3
         if (shadowsOverride_) d.graphics.shadows = persisted_.graphics.shadows;  // N9.6 fase 4
         if (waterOverride_) d.graphics.water = persisted_.graphics.water;  // N9.7
+        if (filterOverride_) d.graphics.filter = persisted_.graphics.filter, d.graphics.anisotropy = persisted_.graphics.anisotropy;
+        // N9.8 fase 8.2: sem pacote nesta execucao (a opcao nao existe) a escolha do arquivo fica para quando ele voltar
+        if (hdOverride_ || !menu_.capabilities().features.hd_textures) d.graphics.hd_textures = persisted_.graphics.hd_textures;
         // N9.5 fase 5A (D5-2, D5-4): a ultima proporcao aplicada de fato; a do arquivo na Original, com --proporcao ou
         // quando a escolha nao valeu (software, recuo para o SDL)
         d.graphics.aspect = st::aspect_for_file(applied_.graphics.aspect, wide_ ? st::Aspect::Wide16x9 : st::Aspect::Original4x3,
@@ -1053,7 +1089,8 @@ private:
     // proporcao veio da linha de comando (so nesta execucao)
     bool                              wideAllowed_ = false, aspectOverride_ = false, ssaoOverride_ = false,
                                       ssaoQualityOverride_ = false, lightOverride_ = false,
-                                      shadowsOverride_ = false, waterOverride_ = false;
+                                      shadowsOverride_ = false, waterOverride_ = false, filterOverride_ = false,
+                                      hdOverride_ = false;
     uint32_t                          wide_ = 0;
     // N9.5 fase 5B: a --resolucao-interna (0 = a do graficos.toml; so nesta execucao) e a altura interna enviada ao jogo
     uint32_t                          heightOverride_ = 0, appliedHeight_ = 0, gpuMax_ = 480;
@@ -1973,6 +2010,14 @@ int mainHeadless(Args& a) {
         std::fprintf(stderr, "erro: --sombras aprimoradas so na edicao Remastered com --render nativo\n");
         return 2;
     }
+    if (a.filter >= 2 && (!editionProfile().texture_filtering || opt.render != bs::RenderProvider::Native)) {  // N9.8 fase 8.1
+        std::fprintf(stderr, "erro: --filtragem bilinear|anisotropica so na edicao Remastered com --render nativo\n");
+        return 2;
+    }
+    if (a.hdTextures == 2 && (!editionProfile().hd_textures || opt.render != bs::RenderProvider::Native)) {  // N9.8 fase 8.2
+        std::fprintf(stderr, "erro: --texturas-hd ligado so na edicao Remastered com --render nativo\n");
+        return 2;
+    }
     if (a.water >= 2 && (!editionProfile().enhanced_water || opt.render != bs::RenderProvider::Native)) {  // N9.7
         std::fprintf(stderr, "erro: --agua aprimorada|alta so na edicao Remastered com --render nativo\n");
         return 2;
@@ -1987,12 +2032,19 @@ int mainHeadless(Args& a) {
     }
     opt.input           = input.get();
     if (assist) opt.vblankHook = [&assist](const bs::GameOptions::VblankView& v) { return assist->onVblank(v); };
+    bs::native::render::TexturePacks packs;  // N9.8 fase 8.2: antes do host (vive mais que a thread do jogo)
     bs::GameHost host;
     if (a.dumpEvery && !a.capture.empty()) opt.captureEvery = a.dumpEvery, opt.capture = headlessCapture(a);
     const bool headlessNative = opt.render == bs::RenderProvider::Native;
     // N9.6 fase 2b: o catalogo de materiais so na Remastered (a Original nao calcula identidade nenhuma para ele)
     bs::transitional::render_capture::set_materials(editionProfile().lighting_effects);
+    // N9.8 fase 8.2: as texturas HD sem janela so com --texturas-hd ligado (validado acima)
+    if (a.hdTextures == 2) {
+        packs = discoverTexturePacks();
+        host.setTexturePacks(&packs);
+    }
     host.start(std::move(opt));
+    if (a.hdTextures == 2) host.setHdTextures(true);
     if (a.internalHeight) {
         // N9.5 fase 5B: o mesmo limite da janela (o alvo largo tem outro); a altura desce pelos degraus do menu ate caber
         uint32_t h = a.internalHeight;
@@ -2013,6 +2065,7 @@ int mainHeadless(Args& a) {
     if (a.light == 2) host.setLighting(true);  // N9.6 fase 3 (validado acima)
     if (a.shadows == 2) host.setShadows(true);  // N9.6 fase 4 (validado acima)
     if (a.water >= 2) host.setWaterQuality(uint32_t(a.water - 1));  // N9.7 (validado acima)
+    if (a.filter >= 2) host.setFiltering(uint32_t(a.filter - 1), 16);  // N9.8 fase 8.1 (validado acima)
     if (a.ssao == 2)  // N9.6 fase 1 (validado acima); sem --ssao-qualidade, a media (o padrao do graficos.toml)
         host.setAmbientOcclusion(true, a.ssaoQuality >= 0 ? uint32_t(a.ssaoQuality) : uint32_t(st::SsaoQuality::Medium));
 #if BS_VALIDACAO
@@ -2264,6 +2317,7 @@ int mainWindow(Args& a) {
         }
     }
     st::Capabilities caps;  // o que o renderizador ja implementa (o resto: "em breve" no menu)
+    bs::native::render::TexturePacks texturePacks;  // N9.8 fase 8.2: vivo ate o fim do jogo (GameHost::setTexturePacks)
     uint32_t         gpuMaxHeight = 480;
     {
         std::string vkErr;
@@ -2284,6 +2338,17 @@ int mainWindow(Args& a) {
         caps.features.ssao = editionProfile().lighting_effects;  // N9.6 fase 1: a oclusao ambiente da Remastered
         caps.features.lighting = editionProfile().lighting_effects;  // N9.6 fase 3: a luz das fontes do catalogo
         caps.features.shadows = editionProfile().lighting_effects;   // N9.6 fase 4: as sombras aprimoradas
+        // N9.8 fase 8.1: a filtragem (mipmaps pela GPU, trilinear, anisotropica ate o limite do dispositivo)
+        const auto vk = bs::native::render::vulkan_shared(nullptr);
+        if (vk && vk->stats().mipmaps) {
+            caps.features.filtering = editionProfile().texture_filtering;
+            caps.max_anisotropy     = vk->stats().max_anisotropy;
+        }
+        // N9.8 fase 8.2: as texturas HD na Remastered, quando algum pacote de mods\ tem texturas
+        if (editionProfile().hd_textures) {
+            texturePacks            = discoverTexturePacks();
+            caps.features.hd_textures = !texturePacks.empty();
+        }
     }
     // N9.5 fase 5A: a edicao tem a opcao 4:3/16:9 (com o Vulkan): a escolha 16:9 fica guardada mesmo quando o quadro largo
     // nao existe nesta execucao (caps.wide_frame; o recuo para o SDL), e so a imagem fica em 4:3 (effective_aspect)
@@ -2294,6 +2359,8 @@ int mainWindow(Args& a) {
     if (a.light) prefs.graphics.lighting = a.light == 2;  // N9.6 fase 3: so nesta execucao
     if (a.shadows) prefs.graphics.shadows = a.shadows == 2 ? st::Shadows::Enhanced : st::Shadows::Original;  // N9.6 fase 4
     if (a.water) prefs.graphics.water = st::Water(a.water - 1);  // N9.7: so nesta execucao (clamp_to desliga sem o recurso)
+    if (a.filter) prefs.graphics.filter = st::Filter(a.filter - 1);  // N9.8 fase 8.1: so nesta execucao
+    if (a.hdTextures) prefs.graphics.hd_textures = a.hdTextures == 2;  // N9.8 fase 8.2: so nesta execucao
     // N9.5 (revisao Codex 20261105-180747; fase 5B): o limite da GPU (max_internal_height) e calculado para um alvo 4:3; o
     // quadro largo tem 854/640 da largura e o seu limite e outro (graphics_settings: max_internal_height). Antes da fase 5B
     // ele so valia com o 16:9 ja no inicio; agora vale na proporcao em uso, inclusive depois de uma troca pelo menu, e a
@@ -2341,6 +2408,7 @@ int mainWindow(Args& a) {
                 return true;
             };
         bs::transitional::render_capture::set_materials(editionProfile().lighting_effects);  // N9.6 fase 2b
+        host.setTexturePacks(texturePacks.empty() ? nullptr : &texturePacks);  // N9.8 fase 8.2
         host.start(std::move(opt));
         InGameMenu menu(host, *input, window, pres, prefsDir, prefs, persisted, renderOverride, subtitleOverride, cameraOverride, caps,
                         languages);
@@ -2355,6 +2423,8 @@ int mainWindow(Args& a) {
         if (a.light) menu.set_light_override();
         if (a.shadows) menu.set_shadows_override();
         if (a.water) menu.set_water_override();
+        if (a.filter) menu.set_filter_override();
+        if (a.hdTextures) menu.set_hd_override();
         menu.set_speakers_available(speakers);
         menu.set_internal_height_override(a.internalHeight, gpuMaxHeight);  // so nesta execucao (com o limite da proporcao em uso)
         menu.apply(prefs, true);

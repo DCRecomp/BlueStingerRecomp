@@ -4361,6 +4361,50 @@ O mantenedor testou a v0.9.7 e pediu três correções, numa worktree própria (
   - **ZIP:** `BlueStinger-Builder-v0.9.7-1-win-x64.zip`, 14 737 379 B, `c63eb13f…3ab2e8`. Extraído, os 2 927 arquivos são iguais aos do pacote.
   - **`test_builder`:** não rodou, por pedido do mantenedor.
 
+### N9.8 fases 8.1 e 8.2: a filtragem e as texturas HD (2026-11-12/13, worktree `tmp/wt-n97` branch `n9-8`, sem commit)
+
+Pedido do mantenedor: "Pode começar" (D8-1 a D8-6 como recomendados) e "Continua o 9.8". Detalhes em `docs/N9-8-AUDITORIA.md`
+seções 8 e 9. Só na Remastered com o Vulkan; a Original e o software recusam as opções (saída 2).
+- **8.1 (filtragem):** mipmaps gerados pela GPU, trilinear e anisotrópica pela variante `-DFILTERED`; provas na seção 8.2
+  (unitário Vulkan, camada Khronos 0 erros, `n98_filtragem.py` F1–F4).
+- **8.2 (texturas HD):** pacotes em `mods\<pacote>\texturas\` com `mod.toml`, PNG pelo `stb_image` 2.30 (domínio público),
+  carregamento no primeiro uso com limite por render e orçamento de 1 GiB na sessão, recuo por textura com o motivo,
+  `--texturas-hd ligado|desligado`, os presets sem HD; `BS_TEXTURAS_EXPORTAR` só validação.
+- **Integração:** a worktree avançou para o master `fbc6761`; a Original × `referencias_n87`: 10 iguais, 0 diferentes.
+- **Provas (2026-11-13, depois da revisão):** três presets compilam; unit 381/0, render 112/0, ctest 30/30 (6 sem o disco);
+  `n98_texturas.py` 29 verificações e 0 falhas (T2 e T4 iguais bit a bit à imagem sem pacote; T3 ×4 com 84,9 MiB e o
+  mesmo custo de GPU); `n96_presets` (janela) 32 verificações e 0 falhas.
+- **Revisão Codex** (`reviews/codex-20261113-112036.md`): três achados aceitos e corrigidos (a soma do limite do render,
+  o orçamento da sessão e a falta de memória, a prova de que o produto ignora a exportação). Nenhum rejeitado.
+- **Pendente:** a conferência visual com um pacote real (mantenedor); o alfa dos mipmaps (seção 8.3); fuzzing do PNG no N9.12;
+  as fases 8.3 (antialiasing com a máscara do HUD), 8.4 (pós e presets) e 8.5 (bateria final) vêm a seguir.
+
+### N9.13 registrada: a remasterização dos filmes com IA (2026-11-13, só planejamento)
+
+Pedido do mantenedor: uma etapa para os filmes em widescreen com IA e uma segunda versão com o 3D melhorado, movimento mais
+moderno e widescreen. Plano em `docs/N9-13-FILMES-IA.md`; `docs/N9-PLANO.md` seções 5, 7 e 17. Nenhum código, nenhum modelo
+baixado.
+- **Base levantada nos documentos:** 16 filmes MPEG-1 320x240 a 30 fps (N5); filme de mod por ID, de qualquer duração e
+  resolução (`MODS-VIDEO.md`); na Remastered 16:9 o filme fica em 4:3 com pilares (N9.5).
+- **Restrições:** os filmes gerados são derivados do jogo e nunca vão ao git nem à release; só modelos de licença aberta
+  conferida, sem API paga; a duração e o passo lógico do fim iguais aos do original.
+- **Decisões pendentes:** D13-1 a D13-6 (onde roda, modelos, liberdade da versão B, 60 fps, padrão no jogo, ordem).
+
+### N9.8 fase 0: texturas HD, antialiasing e pós-processamento (2026-11-12, só investigação)
+
+Pedido do mantenedor: "Inicia o 9.8". Detalhes em `docs/N9-8-AUDITORIA.md`. Nenhum código do produto mudou.
+- **Método:** leitura do código no `000e222` (contrato do N7, `render_core`, `vk_device`, `vk_post`, `vk_present`, shaders,
+  `graphics_settings`, capacidades em `main_sdl`) e o inventário das 27 cenas guardadas do N9.6/N9.7 (`desenhos.tsv`).
+- **Achados:** o contrato das texturas HD já troca a textura no envio e mantém o material do original, mas não há provedor
+  nem decodificador de PNG no produto; os dois renderizadores amostram só o maior nível (sem mipmaps), então a
+  minificação não tem filtro acima de 480 e os mipmaps são pré-requisito do HD; o antialiasing que existe é o supersampling
+  pela resolução interna, reduzido por um único bilinear na apresentação (pula pixels acima de 2:1); o MSAA exige o
+  autosort, os volumes, o N9.6 e a água por amostra; o pós já deixa o menu e as legendas de fora, o HUD do jogo não.
+- **Medidas:** 265 identidades em 27 cenas, 2 940 992 texels (11,2 MiB); com mipmaps, fator 2 ~60 MiB, 4 ~239 MiB, 8 ~957
+  MiB; 15 723 de 15 726 desenhos texturizados com o bilinear do PVR.
+- **Decisões pendentes:** D8-1 a D8-6 (formato, decodificador, filtragem primeiro, antialiasing, padrões, carregamento).
+  Fases 8.1–8.5 propostas; nenhuma começa sem autorização.
+
 ### Estabilização após o N9.7: a compilação do master e a perda do dispositivo Vulkan (2026-11-12, autorizada)
 
 Detalhes em `docs/N9-7-AGUA.md`, seção 11. Commits locais `3ec3b81` (diagnóstico, só validação), `ab28c5a` (correção) e o
