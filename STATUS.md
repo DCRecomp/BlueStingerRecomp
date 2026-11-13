@@ -4356,6 +4356,10 @@ O mantenedor testou a v0.9.7 e pediu três correções, numa worktree própria (
   - um arquivo de formato desconhecido fica intocado, e a desinstalação remove a entrada;
   - unitários `instalador_steam_formato_e_entradas` e `instalador_steam_desviada`.
 - **Testes:** por pedido do mantenedor ("Não precisa testar o 0.9.7-1"), nenhum teste rodou nesta versão. Só a compilação Release passou (`msvc-release`). Os unitários novos e as suítes P6 e P7 estão escritos e **não foram executados**.
+- **Publicação (pedido do mantenedor: "Já monta e publica o pacote"):** `v0.9.7-1`, só Windows.
+  - **Montagem:** `make_builder.ps1 -Versao v0.9.7-1 -LegendasLocais` em `3648e41`. O kit leva `legendas-en` e `legendas-pt-br`, só texto (`.srt`, `.tsv`, `.toml`, `.md`), sem caminho local.
+  - **ZIP:** `BlueStinger-Builder-v0.9.7-1-win-x64.zip`, 14 737 379 B, `c63eb13f…3ab2e8`. Extraído, os 2 927 arquivos são iguais aos do pacote.
+  - **`test_builder`:** não rodou, por pedido do mantenedor.
 
 ### Estabilização após o N9.7: a compilação do master e a perda do dispositivo Vulkan (2026-11-12, autorizada)
 
