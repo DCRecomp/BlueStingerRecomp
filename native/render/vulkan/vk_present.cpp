@@ -179,6 +179,10 @@ public:
                 post_.assign(r.post, r.post + r.post_count);
                 if (srcH < kCrtMinSourceHeight)
                     std::erase_if(post_, [&](const PostPass& p) { return p.shader == pc->builtin(PostBuiltin::Crt); });
+                // N9.8 fase 8.4: o modo da mascara do HUD so com um slot que a tem no alfa; a imagem da CPU (filmes, telas da
+                // CPU) e um slot sem ela passam pelos efeitos como antes
+                if (!(pinned_ >= 0 && slots_.slot_masked(pinned_)))
+                    for (PostPass& p : post_) p.hud_mask = false;
                 if (VkImageView v = pc->record(cmd_, gameView, gameLayout, srcW, srcH, post_)) {
                     // BS_VK_DIAG (so diagnostico, nada muda): a saida do pos depois de uma recriacao das imagens dele ja tem
                     // um conjunto no cache? (o conjunto foi escrito para a vista destruida que tinha o mesmo handle)

@@ -3,6 +3,7 @@
 // (limiar suave pelo canal mais forte) e borrado na horizontal, gaussiano de 9 amostras. O raio e uma fracao da altura da
 // imagem: o mesmo brilho em qualquer resolucao interna.
 // p[0].x limiar (0 a 1), p[0].y raio (fracao da altura, 0,005 a 0,05).
+// N9.8 fase 8.4: p[3].w = 1, o modo da mascara do HUD (hudmask.comp): so a cena 3D fora do HUD (o alfa da entrada) brilha.
 layout(set = 0, binding = 0) uniform sampler2D prev;
 layout(push_constant) uniform Post {
     vec4 size;
@@ -14,9 +15,10 @@ layout(location = 0) out vec4 outColor;
 const float kW[5] = float[](0.2270270270, 0.1945945946, 0.1216216216, 0.0540540541, 0.0162162162);
 
 vec3 bright(vec2 uv) {
-    const vec3  c = texture(prev, uv).rgb;
+    const vec4  t = texture(prev, uv);
+    const vec3  c = t.rgb;
     const float l = max(c.r, max(c.g, c.b));  // o canal mais forte: luzes coloridas (o azul do jogo) tambem brilham
-    return c * (max(l - pc.p[0].x, 0.0) / max(l, 1e-4));
+    return c * (max(l - pc.p[0].x, 0.0) / max(l, 1e-4)) * (pc.p[3].w > 0.5 ? t.a : 1.0);
 }
 
 void main() {

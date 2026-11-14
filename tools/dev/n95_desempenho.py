@@ -22,6 +22,9 @@ N9.6 fase 1: uma configuracao com o sufixo +ao (ex.: 16:9@1080+ao) liga a oclusa
 resolucao); +ao-alta (o alvo inteiro, a primeira versao), +ao-media e +ao-baixa escolhem a qualidade. Fase 3: +luz liga a
 luz das fontes do catalogo (combinavel: 16:9@1080+ao-media+luz). Fase 4: +sombras liga as sombras aprimoradas. N9.7:
 +agua-aprimorada e +agua-alta ligam a agua; o trecho "mar" (rota passo_cgate, VBlanks 30500 a 34300) e o do mar do cais.
+N9.8 fase 8.4: +cor, +nitidez (1,0), +bloom e +pos (cor, tonemapping, nitidez e bloom) ligam o pos-processamento (so na janela:
+ele e da apresentacao; o tempo de GPU de cada passe sai em saida.txt, "[apresentacao] pos"); +aa-area e +aa-bordas o
+antialiasing da fase 8.3.
 """
 import argparse
 import csv
@@ -121,6 +124,7 @@ def rodar(a, cfg, rota, de):
     base, *sufs = cfg.split("+")
     ao = luz = sombras = False
     agua = None  # N9.7
+    pos, aa = [], None  # N9.8 fase 8.4
     qual = "media"
     for suf in sufs:
         if suf == "ao" or suf.startswith("ao-"):
@@ -131,6 +135,10 @@ def rodar(a, cfg, rota, de):
             sombras = True
         elif suf in ("agua-aprimorada", "agua-alta"):  # N9.7
             agua = suf[5:]
+        elif suf in ("cor", "nitidez", "bloom", "pos"):  # N9.8 fase 8.4
+            pos += ["cor", "tonemap", "nitidez", "bloom"] if suf == "pos" else [suf]
+        elif suf in ("aa-area", "aa-bordas"):  # N9.8 fase 8.4 (o antialiasing da 8.3)
+            aa = suf[3:]
         else:
             raise SystemExit("configuracao invalida: %s" % cfg)
     if qual not in ("baixa", "media", "alta"):
@@ -139,7 +147,8 @@ def rodar(a, cfg, rota, de):
     alt = int(alt)
     roteiro, cartao, vblanks = ROTAS[rota]
     nome = "%s_%s_%d%s%s%s" % (rota, prop.replace(":", "x"), alt, "_ao_" + qual if ao else "", "_luz" if luz else "",
-                               "_sombras" if sombras else "") + ("_agua_" + agua if agua else "")
+                               "_sombras" if sombras else "") + ("_agua_" + agua if agua else "") + \
+        "".join("_" + p for p in pos) + ("_aa_" + aa if aa else "")
     d = os.path.join(a.saida, nome)
     if os.path.isdir(d):
         shutil.rmtree(d)
@@ -154,8 +163,12 @@ def rodar(a, cfg, rota, de):
         graf = graf.replace("[imagem]\n", "[imagem]\nsombras = \"aprimoradas\"\n", 1)
     if agua:  # N9.7
         graf = graf.replace("[imagem]\n", "[imagem]\nagua = \"%s\"\n" % agua, 1)
-    open(os.path.join(d, "graficos.toml"), "w").write(graf + ("[efeitos]\nssao = true\nssao_qualidade = \"%s\"\n" % qual
-                                                              if ao else ""))
+    if aa:  # N9.8 fase 8.4
+        graf = graf.replace("[imagem]\n", "[imagem]\nantialiasing = \"%s\"\n" % aa, 1)
+    efeitos = "ssao = true\nssao_qualidade = \"%s\"\n" % qual if ao else ""
+    efeitos += "".join({"cor": "cor = true\ncontraste = 1.1\nsaturacao = 1.15\n", "tonemap": "tonemap = true\n",
+                        "nitidez": "nitidez = 1.0\n", "bloom": "bloom = true\n"}[p] for p in pos)
+    open(os.path.join(d, "graficos.toml"), "w").write(graf + ("[efeitos]\n" + efeitos if efeitos else ""))
     saves = os.path.join(d, "saves")
     if cartao:
         shutil.copytree(a.cartao, saves)

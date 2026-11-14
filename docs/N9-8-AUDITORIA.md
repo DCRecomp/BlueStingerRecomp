@@ -367,3 +367,169 @@ válidos (`spirv-val`); o comentário de `edition.h` corrigido.
   continua sendo o antialiasing principal.
 - **A área só vale na janela:** as capturas e a telemetria sem janela não a usam (a imagem do jogo continua a do slot).
 - **A conferência visual** na janela fica com o mantenedor.
+
+## 11. Fase 8.4: o pós-processamento e os presets (2026-11-14)
+
+Pedido do mantenedor (2026-11-13): fechar a 8.3 (commit local `f0f56ab`) e executar a 8.4 sem iniciar a 8.5. Requisito oficial
+(seção 6): "a máscara do HUD na nitidez e no bloom, os presets revistos", aceitação "os presets sem regressão (`n96_presets`)".
+
+### 11.1 Escopo efetivo
+
+| | O que é | Decisão |
+|---|---|---|
+| Já existia (N7c) | correção de cor, tonemapping, nitidez, bloom, CRT e shaders de mod na cadeia da apresentação (`vk_post.cpp`), no menu, no `graficos.toml` e nos presets | não muda; nenhum efeito novo |
+| Previsto (P1) | a nitidez e o bloom fora do HUD | **feito** (11.2), só na Remastered com o Vulkan |
+| Previsto (P2) | os presets revistos | **revistos sem mudança de política** (11.3); uma inconsistência anterior fica para a decisão do mantenedor |
+| Não previsto | a correção de cor e o tonemapping fora do HUD | não feito: valem na imagem toda, como antes (o HUD acompanha o tom da cena) |
+| Correções de persistência | a escolha do menu depois da linha de comando | já corrigida na 8.3 para `--filtragem`, `--texturas-hd` e `--antialiasing`; a 8.4 não acrescenta opção nem linha de menu (a máscara é automática) |
+
+**Por que não a marca do N9.5 nem o bit da 8.3:** a marca do N9.5 cobre só o HUD do canto e só no 16:9. O bit da cena 3D (o do
+AO e das bordas da 8.3) é gravado só no passe A. O HUD translúcido é desenhado depois, no passe B, e um pixel de HUD sobre a
+cena continuaria marcado como cena. A nitidez e o bloom rodam na apresentação, depois de tudo, e precisam de uma máscara que
+inclua o passe B.
+
+### 11.2 O que mudou
+
+| Parte | Onde | O que faz |
+|---|---|---|
+| Máscara do HUD | `shaders/hudmask.comp`; `VulkanDevice::set_hud_mask`; `hudPrepare`, `hudApply` (`vk_device.cpp`) | depois da cópia do alvo para o slot da apresentação, grava no **alfa do slot** 1 na cena 3D (bit 1 do anexo de sombra) fora do HUD e 0 no resto. O HUD são os desenhos translúcidos 2D colados na câmera (1/w constante e ≥ `kHudInvW` = 0,05, ou o teste de profundidade "sempre"), pelo retângulo envolvente em blocos de 8×8 pixels do alvo, dilatado em um bloco, com a cobertura interpolada entre os centros dos blocos (sem degrau). O RGB do slot, o alvo e a imagem que volta para a CPU (o framebuffer emulado) não mudam |
+| Os passes no modo máscara | `post_sharpen`, `post_bloom_h`, `post_bloom_v`, `post_color`, `post_tonemap` (`p[3].w = 1`); `PostPass::hud_mask` | a nitidez age na proporção da máscara (as pontas exatas: 1 = a mesma conta de antes, 0 = a entrada); o bloom só extrai o brilho da cena; a cor e o tonemapping valem em tudo e repassam o alfa. Sem o modo, cada passe é o de antes (alfa 1) |
+| Quando liga | `window_present.cpp` (`build`), `PostSpec::hudMask`, `EditionProfile::post_hud_mask` | só na Remastered com o Vulkan, só com a nitidez ou o bloom ligados e sem shader de mod antes dos internos (ele não repassa o alfa). `build` roda também depois da recriação do dispositivo. Sem efeitos, nenhum compute e nenhuma conta na CPU |
+| A apresentação | `vk_present.cpp`, `SlotSource::slot_masked` | o modo só vale com um slot que tem a máscara; a imagem da CPU (filmes, telas da CPU) e um slot sem ela passam pelos efeitos como antes |
+| Descritores | um conjunto por slot | reescrito quando muda a **geração** (a versão da imagem do slot, a do alvo, a do buffer dos blocos), nunca pela comparação de handles (a lição do `ab28c5a`: o driver reaproveita valores de handle). Os slots ganham `STORAGE` só quando a máscara liga (recriados uma vez) |
+| Medida | `[apresentacao] pos, GPU medio por passe` na saída; `mascara do HUD em N slots` no resumo `[render-vk]` | |
+| Só validação | `BS_HUD_MASCARA=1` (a máscara também sem janela, gravada em `vNNNNNN_mascara.bmp`), `BS_HUD_MASCARA=0` (desliga na janela, para comparar), `BS_JANELA_SAIR_VBLANK=<n>` (fecha a janela pelo caminho normal, para o resumo sair) | o produto não lê as variáveis (P1) |
+
+**O limite `kHudInvW`, medido:** a primeira versão marcava todo translúcido 2D. No cais (VBlank 30 700) ela tirou dos efeitos a
+explosão e a fumaça, que são sprites da cena voltados para a câmera (1/w ≈ 6,6e-05). A segunda usava o maior 1/w da cena do
+quadro como limite e perdeu a barra de vida do HUD: vértices recortados no plano próximo levam esse máximo a 1. Nas rotas
+`passo_cgate` e `passo_load_slot1` o HUD fica entre 0,1 e 1 (z de 1,1 a 10) e os sprites da cena entre 6,6e-05 e 1,3e-03;
+0,05 fica entre as duas faixas. É um limite empírico deste jogo: um sprite da cena colado na câmera (z < 20) fica fora da
+nitidez e do bloom, o lado seguro.
+
+### 11.3 Presets (revistos, sem mudança)
+
+| | Original | Equilibrado | Alto | Padrões da Remastered (`remastered_best`, v0.9.7-1) |
+|---|---|---|---|---|
+| Resolução interna | 480 (fiel) | 1080 | 1440 | a do Alto |
+| Filtragem | a do fiel | bilinear | anisotrópica 16× | a do Alto |
+| Antialiasing | original | original | área | a do Alto (área) |
+| Correção de cor | — | contraste 1,05, saturação 1,10 | contraste 1,10, saturação 1,15 | a do Alto |
+| Nitidez | 0 | 0 | 0,25 (fora do HUD desde a 8.4) | a do Alto |
+| Proporção | 4:3 | 4:3 | 4:3 | **16:9** |
+| Sombras, luz, SSAO, água | originais, desligados | originais, desligados | originais, desligados | **aprimoradas, ligada, alto, alta** |
+| Texturas HD, bordas, bloom | desligados | desligados | desligados | desligados |
+
+- **O Alto não é o conjunto da primeira execução:** o Alto é o preset do menu (seguro: as melhorias do N9.6/N9.7 só por escolha
+  manual, decisão de 2026-11-11). Os padrões da Remastered (v0.9.7-1, "o melhor possível ao instalar") são o Alto mais o 16:9,
+  as sombras aprimoradas, a luz, o SSAO alto e a água alta, aplicados **uma vez** numa instalação nova (ou num `graficos.toml`
+  gravado pelo menu de uma versão anterior), e o arquivo fica "Personalizado". Escolher "Alto" no menu depois volta ao preset.
+- **Nada muda na 8.4:** o Alto continua com a nitidez 0,25; na Remastered ela passa a poupar o HUD (o único efeito visível da 8.4
+  no preset). A Original continua com os efeitos como antes (P8).
+- **A área da 8.3 e o resto do preset:** a redução por área só age acima de 2:1. O Alto (1440) numa janela de 720 linhas é 2:1:
+  a mesma imagem. Ela só aparece com o Alto numa janela menor que 720 linhas, ou com 2160 numa de 1080 ou menos. Não interfere
+  nos efeitos de pós (eles rodam antes, no slot).
+- **Inconsistência anterior (a decidir, sem mudança):** a chave `antialiasing` nasceu na 8.3. Uma instalação nova recebe
+  `area` (do Alto). Quem atualizar da v0.9.7-1 já tem a marca `[padroes] remastered = 1` e um arquivo "Personalizado" sem a
+  chave: fica com `original`. Impacto: só na janela menor que 720 linhas com o 1440 (ou 2160 em 1080 ou menos); nenhum efeito
+  no jogo, no som ou nos saves. Alternativas: (a) deixar como está (a escolha manual resolve); (b) migração pontual: um arquivo
+  com a marca 1 e sem a chave recebe `area` uma vez (não sobrescreve nada escolhido, porque a chave não existia); (c) subir
+  `kRemasterDefaults` para 2 (reaplicaria todos os padrões e **sobrescreveria** escolhas: não recomendado). Recomendação: (b),
+  só com a aprovação do mantenedor.
+
+### 11.4 Provas (2026-11-13 e 14)
+
+- **Builds:** `msvc-debug`, `msvc-validacao` e `msvc-release` compilam. `gera_spirv` mudou só os 5 cabeçalhos dos passes de cor e
+  criou `hudmask_comp.h`; `gera_spirv -Conferir` 53/53. Os SPIR-V do fiel (`pvr*`) não mudaram. **Erro de processo achado pela
+  conferência:** uma regeneração tinha falhado em silêncio e `post_sharpen_frag.h` ficou atrasado em relação ao shader (as pontas
+  exatas da mistura); os binários foram refeitos e toda a bateria desta seção rodou de novo com os cabeçalhos conferidos.
+- **Unitários:** unit 382/0 (a conferência do perfil da edição entrou num teste existente), render 115/0 (+2):
+  - `render_vulkan_hud_mask` (escalas 2 e 1,5): o RGB do slot e a imagem da CPU iguais com e sem a máscara; o alfa 255 na cena,
+    0 no HUD sobre a cena, no 2D opaco e no fundo; a rampa só perto do HUD; determinística; um sprite translúcido 2D dentro da
+    faixa da cena continua na cena com a sua cor; 1/w NaN, infinito, zero, negativo ou abaixo do limite não marca nenhum bloco
+    (a revisão Codex; a condição antiga marcava 2 809, provado por mutação); desligada, o alfa volta ao do alvo;
+  - `post_hud_mask_gpu`: a nitidez no modo deixa o HUD bit a bit e dá na cena o mesmo que sem a máscara; um ponto claro no HUD
+    não brilha e um na cena brilha; a cor e o tonemapping iguais nos dois modos, com o alfa repassado; sem o modo, alfa 255.
+- **Camada Khronos:** `bs_render_tests` 115/0 com a validação padrão e com a de sincronização (`VK_KHRONOS_VALIDATION_VALIDATE_SYNC`),
+  **0 mensagens**. A camada foi ligada por `VK_INSTANCE_LAYERS`: o terminal é elevado e ignora `VK_LOADER_LAYERS_ENABLE`. Uma
+  primeira execução com essa variável rodou sem a camada (a inserção conferida pelo `VK_LOADER_DEBUG`) e não foi contada.
+- **ctest** 30/30 (6 pulados, sem o disco: `boot_trace`, `real_disc`, `runtime_data`, `analysis_real`, `movie_manifest`,
+  `n0_fechamento`).
+- **No jogo** (`tools/dev/n98_pos.py`):
+  - **sem janela** (rota `passo_cgate`, 1440): **P1** validação com a máscara × produto: estado por passo e som idênticos, a
+    imagem do jogo e o RGB em 1440 iguais bit a bit, a máscara em 17 134 slots; no 030 700 a explosão e a fumaça na cena (100 %),
+    no 034 200 o HUD do canto fora (2,0 %) e o resto dentro; o produto ignora a variável. **P2** com o 16:9 em 1080, a
+    anisotrópica, o AO, a luz, as sombras aprimoradas, a água alta e as bordas: estado, som e RGB idênticos, os efeitos rodam.
+    **P3** com a perda do dispositivo injetada no 32 000: recriado, o 34 200 (imagem e máscara) igual ao sem a falha;
+  - **na janela** (rota `passo_load_slot1`, interna 720 numa janela de 960×720, o exe de validação): **P4** sem efeitos e com só a
+    cor, 0 slots (nada a mais); **P5** nitidez 1,0: 1 316 887 pixels realçados, 401 987 protegidos (realçados só sem a máscara),
+    111 mudados só com a máscara, todos na rampa (0 longe); o verde do HUD do canto intacto com a máscara (0 de 4 201, 4 176 e
+    4 078) e realçado sem ela (2 995, 2 796, 1 337); no VBlank coincidente (4 335, correlação 0,59) 0 protegidos fora da máscara;
+    **P6** o bloom roda com a máscara e difere do sem ela onde o brilho vinha do HUD; **P7** tudo junto (cor, tonemapping,
+    nitidez, bloom, área) sem erro do Vulkan; **P8** a Original: 0 slots e a imagem igual à com `BS_HUD_MASCARA=0`; **P9** a perda
+    na janela no 4 400: dispositivo e apresentação recriados, a máscara continua e as capturas depois iguais às sem a falha.
+  - **Critério do P5 corrigido (investigação registrada):** a primeira versão exigia que todo pixel mudado com a máscara também
+    mudasse sem ela; 121 de 1,44 milhão não cumpriram. Prova da causa: com a nitidez 0,001 as imagens com e sem a máscara são
+    iguais à sem efeitos (o mesmo render apresentado); a imagem do jogo tem 714 linhas e a janela 720, a apresentação mistura
+    duas linhas, e mudanças de sinal oposto da nitidez se cancelam sem a máscara mas não na fração dela, na rampa. O critério
+    novo: nenhum pixel mudado só com a máscara a mais de 16 px (a rampa) de um pixel protegido, e no máximo 0,01 % (121 de 144
+    permitidos; 0 longe). Negativo: 50 pixels "vazados" longe do HUD são todos reprovados.
+- **Bateria de fechamento (2026-11-14, `tmp/sessao-20261113/n98/gate84`, em sequência, com os binários do código final):**
+  `n98_pos` P1–P9 0 falhas; `n98_aa` A1–A6 0 falhas; `n96_presets` Q1–Q11 0 falhas; Original × `analysis/n8/referencias_n87`
+  10 casos iguais, 0 diferentes; a matriz de desempenho nas duas GPUs completa (11.5). Antes dela, com os mesmos binários:
+  `gera_spirv -Conferir` 53/53, unit 382/0, render 115/0 sob as duas camadas com 0 mensagens, ctest 30/30.
+
+### 11.5 Desempenho (janela 1280×720, 16:9 em 1440, trecho do corredor, `n95_desempenho.py`, produto)
+
+| Configuração | RTX 5080: fps | GPU do render (ms) | AMD integrada: fps | GPU do render (ms) | saída (ms) |
+|---|---|---|---|---|---|
+| sem efeitos | 59,8 | 1,17 | 50,3 | 44,9 | 1,44 |
+| + cor | 59,8 | 0,87 | 50,0 | 44,9 | 1,46 |
+| + nitidez (máscara) | 59,9 | 1,46 | 50,0 | 46,1 | 2,58 |
+| + bloom (máscara) | 59,8 | 1,00 | 46,7 | 44,7 | 2,36 |
+| + cor, tonemapping, nitidez, bloom | 59,8 | 1,21 | 28,6 | 44,2 | 2,31 |
+| + tudo e as bordas | 59,9 | 1,63 | 26,5 | 45,5 | 2,36 |
+
+Números da bateria de fechamento (`gate84/desempenho/<GPU>/matriz.tsv`), com os binários finais.
+- **Ruído:** na RTX 5080 o total do render oscila entre execuções iguais (a base deu 1,17 ms aqui e 1,67–2,32 ms em rodadas
+  anteriores; a cor sozinha mediu menos que a base): o custo da máscara fica dentro dele. Na AMD, a etapa de saída (a cópia
+  para o slot, onde roda a máscara) sobe de 1,44 para 2,3–2,6 ms com a máscara e não sobe com só a cor: **~1,0 ms em
+  2560×1440**. A queda de fps na AMD com o pós inteiro vem da apresentação (CPU da janela 37–46 %, a leitura dos passes), não
+  do render.
+- **Os passes do pós em 4K** (`post_cost_4k`): RTX 5080 de 0,025 (cor) a 0,069 ms (bloom vertical); AMD integrada 1,3 (cor), 2,7
+  (tonemapping), 2,2 (nitidez), 3,6 + 3,6 (bloom), 1,4 (CRT). Na AMD em 1440 o render já custa ~45 ms (o jogo anda abaixo do
+  tempo real nessa resolução); com o pós inteiro o fps cai a 28. É uma limitação da GPU integrada nessa resolução; os presets
+  não mudam e as escolhas manuais ficam disponíveis.
+- **Memória:** imagens intermediárias do pós 45,3 MiB (RTX) e 47,5 MiB (AMD) em 2560×1440, só com algum efeito ligado; o buffer
+  dos blocos ~57 KB; as bordas da 8.3 +15 MiB. Nenhuma imagem nova para a máscara (ela usa o alfa do slot).
+
+### 11.6 Revisão Codex (2026-11-14, `reviews/codex-20261114-010850.md`)
+
+Dois achados, aceitos e corrigidos:
+- **[média] 1/w inválido ou negativo contava como HUD:** a condição só recusava `0 < 1/w < 0,05`; NaN, infinito, zero e negativos
+  passavam. Agora: 1/w não finito nunca é HUD; sem o teste "sempre", só 1/w ≥ 0,05. Teste unitário com os cinco casos; a
+  condição antiga, por mutação, marca 2 809 blocos e o teste falha.
+- **[baixa] o P5 não provava que os protegidos eram o HUD:** acrescentados (a) os pixels do HUD do canto (o verde do nome, da
+  barra e do canto) intactos com a máscara e realçados sem ela, e (b) nos VBlanks em que a janela e o jogo sem janela mostram o
+  mesmo render (correlação das bordas ≥ 0,5), todo protegido dentro da máscara gravada sem janela. Na investigação: no VBlank
+  4 505 a captura da janela mostra outro render (o personagem em outra posição, correlação 0,36) e fica fora da comparação; nos
+  outros, 0 protegidos fora da máscara.
+
+Pontos conferidos sem problema pelo revisor: o cache de descritores pela geração; as barreiras cópia → compute →
+fragmento/transferência e a do anexo de sombra; o buffer do host com o quadro anterior terminado; a recriação do dispositivo
+reaplicando a máscara; o slot sobrescrito e `masked` limpo ao desligar; o RGB do slot e o framebuffer da CPU intactos; a
+Original sem a máscara; os shaders de mod antes desligam a máscara.
+
+### 11.7 Limitações
+
+- **Translúcidas 3D sobre o vazio ficam fora da nitidez e do bloom:** o bit da cena vem do passe A. Uma superfície 3D translúcida
+  sem nada opaco atrás (a grade do chão do elevador na rota `passo_load_slot1`) fica com a máscara 0, como no AO e nas bordas da
+  8.3. O lado seguro (nada é realçado por engano), registrado para a conferência visual.
+- **`kHudInvW` é empírico:** medido em duas rotas. Um sprite da cena colado na câmera (z < 20) fica fora dos efeitos; um HUD com
+  1/w abaixo de 0,05 (não visto) receberia os efeitos.
+- **Blocos de 8×8:** a máscara do HUD é retangular por desenho, com uma rampa de até 16 px do alvo: a cena logo em volta do HUD
+  recebe a nitidez e o bloom aos poucos.
+- **Só na janela:** a nitidez e o bloom são da apresentação; as capturas sem janela não os mostram (a máscara pode ser vista
+  sem janela só na validação, `BS_HUD_MASCARA=1`).
+- **AMD integrada em 1440:** o pós inteiro leva o corredor de 50 a 29 fps; os presets não mudam, as escolhas manuais ficam.
+- **A conferência visual** na janela fica com o mantenedor.

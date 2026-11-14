@@ -4361,7 +4361,27 @@ O mantenedor testou a v0.9.7 e pediu três correções, numa worktree própria (
   - **ZIP:** `BlueStinger-Builder-v0.9.7-1-win-x64.zip`, 14 737 379 B, `c63eb13f…3ab2e8`. Extraído, os 2 927 arquivos são iguais aos do pacote.
   - **`test_builder`:** não rodou, por pedido do mantenedor.
 
-### N9.8 fase 8.3: o antialiasing (2026-11-13, worktree `tmp/wt-n97` branch `n9-8`, sem commit; 8.1 e 8.2 em `710183d`)
+### N9.8 fase 8.4: a máscara do HUD na nitidez e no bloom, os presets revistos (2026-11-14, worktree `tmp/wt-n97` branch `n9-8`, sem commit)
+
+Pedido do mantenedor: fechar a 8.3 com commit local (`f0f56ab`) e executar a 8.4, sem a 8.5. Detalhes em
+`docs/N9-8-AUDITORIA.md` seção 11; plano da 8.5 (não executado, espera autorização) em `docs/N9-8-TESTES-FINAIS.md`.
+- **Máscara do HUD** (`hudmask.comp`, `set_hud_mask`): grava no alfa do slot da apresentação 1 na cena 3D fora do HUD (o
+  translúcido 2D com 1/w finito ≥ 0,05 ou o teste "sempre", em blocos de 8×8 com rampa). A nitidez age na proporção dela, o
+  bloom só extrai a cena; a cor e o tonemapping como antes. Só na Remastered com o Vulkan e com a nitidez ou o bloom ligados;
+  o RGB do slot e a imagem da CPU não mudam. Só validação: `BS_HUD_MASCARA=1|0`, `BS_JANELA_SAIR_VBLANK`.
+- **Presets:** revistos, sem mudança. Inconsistência anterior registrada (a atualização da v0.9.7-1 fica com `antialiasing =
+  original`, a instalação nova com `area`), com a migração pontual recomendada à espera do mantenedor.
+- **Provas** (código final, cabeçalhos SPIR-V conferidos depois de uma regeneração que tinha falhado em silêncio):
+  `gera_spirv -Conferir` 53/53; unit 382/0; render 115/0 sob a camada Khronos padrão e de sincronização (`VK_INSTANCE_LAYERS`),
+  0 mensagens; ctest 30/30 (6 pulados sem o disco). Bateria de fechamento em sequência (`tmp/sessao-20261113/n98/gate84`):
+  `n98_pos` P1–P9 0 falhas; `n98_aa` A1–A6 0 falhas; `n96_presets` Q1–Q11 0 falhas; Original × `referencias_n87` 10 iguais,
+  0 diferentes; `n95_desempenho` na janela, RTX 5080 e AMD integrada (máscara dentro do ruído na RTX; ~1,0 ms em 1440 na AMD).
+- **Revisão Codex** (`reviews/codex-20261114-010850.md`): dois achados aceitos e corrigidos (1/w inválido ou negativo como HUD,
+  provado por mutação; o P5 sem prova de que os protegidos eram o HUD). Nenhum rejeitado.
+- **Arquivos particulares:** hashes iguais aos do início da 8.4.
+- **Pendente:** a conferência visual (mantenedor); a decisão da migração do `antialiasing`; a fase 8.5.
+
+### N9.8 fase 8.3: o antialiasing (2026-11-13, worktree `tmp/wt-n97` branch `n9-8`, commit local `f0f56ab`; 8.1 e 8.2 em `710183d`)
 
 Pedido do mantenedor: "Pode salvar o 8.2 e iniciar o 8.3". Detalhes em `docs/N9-8-AUDITORIA.md` seção 10. Só na Remastered com
 o Vulkan; a Original e o software recusam (saída 2).

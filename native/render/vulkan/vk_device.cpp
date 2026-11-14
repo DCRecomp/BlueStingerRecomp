@@ -24,6 +24,7 @@
 #include "render/soft/soft_raster.h"
 #include "render/vulkan/spirv/pvr_vert.h"
 #include "render/vulkan/spirv/aa_comp.h"  // N9.8 fase 8.3
+#include "render/vulkan/spirv/hudmask_comp.h"  // N9.8 fase 8.4
 #include "render/vulkan/spirv/ao_blur_comp.h"
 #include "render/vulkan/spirv/ao_blur_surf_comp.h"
 #include "render/vulkan/spirv/ao_comp.h"
@@ -347,18 +348,25 @@ public:
                 // apresentacao) ja terminou, porque o slot so e reaproveitado sem fixacao (revisao Codex 2026-10-22).
                 // Com uma fila so, nenhum semaforo: a ordem de submissao da a dependencia.
                 if (presentQueue_ != queue_ && !remakeReady(writeSlot_)) writeSlot_ = -1;
-                if (sl.w != w_ || sl.h != h_) {
+                // N9.8 fase 8.4: com a mascara do HUD, o slot precisa aceitar a escrita do compute (recriado uma vez, se
+                // nasceu sem); desligada, ele fica como esta
+                const bool wantStorage = hudOn_.load(std::memory_order_relaxed) && !hudFailed_;
+                if (sl.w != w_ || sl.h != h_ || (wantStorage && !sl.storage)) {
                     MemScope mc(telemetry::Mem::Slots);  // N9.5 fase 5C
                     freeImage(sl.image);
                     sl.image = makeImage(w_, h_, VK_FORMAT_R8G8B8A8_UNORM,
-                                         VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+                                         VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                                             (wantStorage ? VK_IMAGE_USAGE_STORAGE_BIT : 0u),
                                          VK_IMAGE_ASPECT_COLOR_BIT);
                     sl.w = sl.image.img ? w_ : 0, sl.h = sl.image.img ? h_ : 0, sl.shaderRead = false, ++sl.version;
+                    sl.storage = sl.image.img && wantStorage;
                     if (!sl.image.img) writeSlot_ = -1;
                 }
+                sl.masked = false;  // a escrita atual decide (copySlot)
             }
             if (writeSlot_ < 0) ++st_.slots_skipped;
         }
+        hudPrepare(cl);  // N9.8 fase 8.4: os blocos do HUD deste quadro (antes da gravacao, que pode ser refeita)
         for (int attempt = 0; attempt < 2; ++attempt) {
             if (auto r = record(cl); !r) return r;
             const uint32_t* head = static_cast<const uint32_t*>(headerRead_.map);
@@ -376,6 +384,7 @@ public:
         // N9.7 (revisao Codex 20261111-121354): a agua conta so o render concluido (a tentativa que transbordou e refeita)
         st_.water_frames += waterFramesRec_, st_.water_draws += waterDrawsRec_;
         st_.filtered_draws += filteredDrawsRec_;  // N9.8 fase 8.1
+        if (writeSlot_ >= 0 && slots_[writeSlot_].masked) ++st_.hud_mask_frames;  // N9.8 fase 8.4
         st_.frames++, st_.triangles += prep_.triangles, st_.culled += prep_.culled;
         st_.nonfinite_depth += prep_.nonfinite_depth, st_.batches += prep_.batches.size();
         st_.negative_depth_frames += prep_.depth_bias != 0;  // so importa sem profundidade crua
@@ -396,6 +405,7 @@ public:
     void  set_lighting(bool on) override { lightOn_.store(on, std::memory_order_relaxed); }  // N9.6 fase 3
     void  set_shadows(bool on) override { shadowsOn_.store(on, std::memory_order_relaxed); }  // N9.6 fase 4
     void set_edge_antialiasing(bool on) override { aaOn_.store(on, std::memory_order_relaxed); }  // N9.8 fase 8.3
+    void set_hud_mask(bool on) override { hudOn_.store(on, std::memory_order_relaxed); }           // N9.8 fase 8.4
     void set_filtering(uint32_t mode, uint32_t anisotropy) override {  // N9.8 fase 8.1 (a thread do render, como o submit)
         filterMode_ = std::min(mode, 2u), filterAniso_ = std::clamp(anisotropy, 1u, 16u);
     }
@@ -623,6 +633,10 @@ public:
         std::lock_guard<std::mutex> lock(slotMutex_);
         if (idx >= 0 && idx < kSlots && slots_[idx].pins > 0) --slots_[idx].pins;
     }
+    bool slot_masked(int idx) override {  // N9.8 fase 8.4
+        std::lock_guard<std::mutex> lock(slotMutex_);
+        return idx >= 0 && idx < kSlots && slots_[idx].pins > 0 && slots_[idx].masked;
+    }
 
     Result<void> present_image(std::span<const uint32_t> argb, uint32_t width, uint32_t height) override {
         if (argb.size() < size_t(width) * height) return Error::OutOfRange;
@@ -678,6 +692,9 @@ private:
         uint32_t version = 0;  // muda quando a imagem e recriada
         VkSemaphore ready = VK_NULL_HANDLE;  // sinalizado pela escrita, esperado pela primeira apresentacao
         bool        readyPending = false;    // sinalizado e ainda nao esperado
+        // N9.8 fase 8.4: a imagem aceita escrita de compute (criada com a mascara do HUD ligada) e a escrita atual tem a
+        // mascara no alfa
+        bool        storage = false, masked = false;
     };
     static constexpr int kSlots = 4;
     Slot                 slots_[kSlots];
@@ -782,6 +799,27 @@ private:
     VkPipeline            aaPipe_ = VK_NULL_HANDLE;
     bool                  aaSetValid_ = false, aaFailed_ = false;
     std::atomic<bool>     aaOn_{false};
+    // N9.8 fase 8.4: a mascara do HUD no alfa do slot (hudmask.comp). Um conjunto por slot; cada um guarda a geracao do que
+    // descreve (a versao da imagem do slot, a do alvo e a do buffer dos blocos): as vistas recriadas podem repetir o valor
+    // do handle de uma destruida, entao a comparacao e pela geracao, nunca pelo handle (a licao do ab28c5a)
+    struct HudBound {
+        uint32_t slotVersion = 0;
+        uint64_t targetGen = 0, tilesGen = 0;
+        bool     valid = false;
+    };
+    VkDescriptorSetLayout hudLayout_ = VK_NULL_HANDLE;
+    VkDescriptorPool      hudPool_ = VK_NULL_HANDLE;
+    VkDescriptorSet       hudSet_[kSlots] = {};
+    HudBound              hudBound_[kSlots];
+    VkPipelineLayout      hudPipeLayout_ = VK_NULL_HANDLE;
+    VkShaderModule        hudMod_ = VK_NULL_HANDLE;
+    VkPipeline            hudPipe_ = VK_NULL_HANDLE;
+    Buffer                hudTiles_;               // os blocos do quadro (host, 4 por palavra)
+    uint64_t              hudTilesGen_ = 0, targetGen_ = 0;
+    uint32_t              hudTw_ = 0, hudTh_ = 0;  // blocos por linha e coluna do quadro atual
+    std::vector<uint8_t>  hudTileCpu_;
+    bool                  hudFrame_ = false, hudFailed_ = false;
+    std::atomic<bool>     hudOn_{false};
     std::atomic<uint8_t>  aoQuality_{uint8_t(AoQuality::High)};  // o padrao do dispositivo e o da primeira versao
     uint32_t        fragCapacity_ = 0;
     VkDescriptorSet fragSet_ = VK_NULL_HANDLE, resolveSet_ = VK_NULL_HANDLE;
@@ -1848,6 +1886,144 @@ private:
         return true;
     }
 
+    // N9.8 fase 8.4: os objetos da mascara do HUD nascem na primeira vez que ela liga; uma falha desliga so ela
+    bool hudObjects() {
+        if (hudPipe_) return true;
+        if (hudFailed_) return false;
+        std::string err;
+        auto fail_hud = [&](const std::string& why) {
+            hudFailed_ = true;
+            std::fprintf(stderr, "[render-vk] mascara do HUD desligada: %s\n", why.c_str());
+            return false;
+        };
+        VkDescriptorSetLayoutBinding b[3] = {
+            {0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+            {1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+            {2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr}};
+        VkDescriptorSetLayoutCreateInfo li{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
+        li.bindingCount = 3, li.pBindings = b;
+        if (!ok(f_.vkCreateDescriptorSetLayout(dev_, &li, nullptr, &hudLayout_), "layout da mascara do HUD", &err)) return fail_hud(err);
+        ++g_live;
+        VkDescriptorPoolSize ps[3] = {{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, uint32_t(kSlots)},
+                                      {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, uint32_t(kSlots)},
+                                      {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, uint32_t(kSlots)}};
+        VkDescriptorPoolCreateInfo pi{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
+        pi.maxSets = uint32_t(kSlots), pi.poolSizeCount = 3, pi.pPoolSizes = ps;
+        if (!ok(f_.vkCreateDescriptorPool(dev_, &pi, nullptr, &hudPool_), "pool da mascara do HUD", &err)) return fail_hud(err);
+        ++g_live;
+        VkDescriptorSetLayout       lays[kSlots];
+        for (VkDescriptorSetLayout& l : lays) l = hudLayout_;
+        VkDescriptorSetAllocateInfo ai{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
+        ai.descriptorPool = hudPool_, ai.descriptorSetCount = uint32_t(kSlots), ai.pSetLayouts = lays;
+        if (!ok(f_.vkAllocateDescriptorSets(dev_, &ai, hudSet_), "conjuntos da mascara do HUD", &err)) return fail_hud(err);
+        for (HudBound& hb : hudBound_) hb = {};
+        VkPushConstantRange        pr{VK_SHADER_STAGE_COMPUTE_BIT, 0, 16};
+        VkPipelineLayoutCreateInfo pl{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+        pl.setLayoutCount = 1, pl.pSetLayouts = &hudLayout_, pl.pushConstantRangeCount = 1, pl.pPushConstantRanges = &pr;
+        if (!ok(f_.vkCreatePipelineLayout(dev_, &pl, nullptr, &hudPipeLayout_), "layout da mascara do HUD", &err)) return fail_hud(err);
+        ++g_live;
+        hudMod_ = module(kHudMaskComp, sizeof kHudMaskComp);
+        if (!hudMod_) return fail_hud("shader da mascara do HUD");
+        VkComputePipelineCreateInfo cp{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
+        cp.stage  = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_COMPUTE_BIT, hudMod_, "main", nullptr};
+        cp.layout = hudPipeLayout_;
+        if (!ok(f_.vkCreateComputePipelines(dev_, VK_NULL_HANDLE, 1, &cp, nullptr, &hudPipe_), "pipeline da mascara do HUD", &err))
+            return fail_hud(err);
+        ++g_live;
+        return true;
+    }
+
+    // N9.8 fase 8.4 (docs/N9-8-AUDITORIA.md secao 11): os blocos de 8x8 pixels do alvo cobertos pelos desenhos translucidos
+    // 2D do quadro colados na camera (o HUD, os textos, as mensagens: 1/w constante e acima de kHudInvW,
+    // ou o teste de profundidade "sempre"; eles nao gravam o bit da cena 3D, que e so do passe A), pelo retangulo envolvente
+    // de cada desenho, dilatado em um bloco. Antes da gravacao (que pode ser refeita), no buffer
+    // do host; o quadro anterior terminou (a cerca de submitFrame). So no render do framebuffer, com um slot que aceita o
+    // compute. Desligada, nada e feito (nem a conta na CPU).
+    void hudPrepare(const CommandList& cl) {
+        hudFrame_ = false;
+        if (!hudOn_.load(std::memory_order_relaxed) || hudFailed_ || writeSlot_ < 0 || !slots_[writeSlot_].storage) return;
+        if (cl.frame.height != 480 || cl.frame.width < 640) return;
+        if (!hudObjects()) return;
+        const uint32_t tw = (w_ + 7) / 8, th = (h_ + 7) / 8;
+        hudTileCpu_.assign(size_t((tw * th + 3) / 4) * 4, 0);
+        uint64_t marked = 0;
+        // O HUD fica colado na camera: 1/w de 0,1 a 1 (z de 1,1 a 10) nas rotas passo_cgate e passo_load_slot1. Um desenho 2D
+        // longe dela e um sprite DA cena (fumaca, fogo, particulas voltadas para a camera: 6,6e-05 a 1,3e-03 nas mesmas rotas) e
+        // continua com os efeitos. O maior 1/w da cena do quadro nao serve de limite: vertices recortados no plano proximo
+        // chegam a 1. kHudInvW fica entre as duas faixas medidas (docs/N9-8-AUDITORIA.md secao 11)
+        constexpr float kHudInvW = 0.05f;
+        for (const Draw& d : cl.draws) {
+            if (d.state.list != ListType::Translucent || d.vertex_count < 3 || d.first_vertex > cl.vertices.size() ||
+                d.vertex_count > cl.vertices.size() - d.first_vertex || is_scene3d(cl, d))
+                continue;
+            const float iw = cl.vertices[d.first_vertex].inv_w;  // constante no desenho 2D
+            // revisao Codex 20261114-010850: 1/w nao finito (o desenho nem e feito), zero ou negativo nunca e HUD; sem o teste
+            // "sempre", so 1/w >= kHudInvW (abaixo: um sprite da cena)
+            if (!std::isfinite(iw) || (d.state.depth != DepthTest::Always && !(iw >= kHudInvW))) continue;
+            float x0 = INFINITY, y0 = INFINITY, x1 = -INFINITY, y1 = -INFINITY;
+            for (uint32_t k = 0; k < d.vertex_count; ++k) {
+                const Vertex& v = cl.vertices[d.first_vertex + k];
+                if (!std::isfinite(v.x) || !std::isfinite(v.y)) continue;
+                x0 = std::fmin(x0, v.x), y0 = std::fmin(y0, v.y), x1 = std::fmax(x1, v.x), y1 = std::fmax(y1, v.y);
+            }
+            if (!(x1 >= x0 && y1 >= y0)) continue;
+            // nas coordenadas do alvo (as do jogo vezes a escala, como prepare_frame), em blocos, mais um de cada lado
+            const auto blk = [&](float v, uint32_t n) {
+                return int64_t(std::clamp(std::floor(double(v) * scale_ / 8.0), -2.0, double(n) + 2.0));
+            };
+            const int64_t bx0 = std::max<int64_t>(0, blk(x0, tw) - 1), bx1 = std::min<int64_t>(tw - 1, blk(x1, tw) + 1);
+            const int64_t by0 = std::max<int64_t>(0, blk(y0, th) - 1), by1 = std::min<int64_t>(th - 1, blk(y1, th) + 1);
+            for (int64_t by = by0; by <= by1; ++by)
+                for (int64_t bx = bx0; bx <= bx1; ++bx) {
+                    uint8_t& t = hudTileCpu_[size_t(by) * tw + size_t(bx)];
+                    marked += t == 0, t = 255;
+                }
+        }
+        const VkDeviceSize bytes = hudTileCpu_.size();
+        if (!hudTiles_.map || hudTiles_.size < bytes) {
+            freeBuffer(hudTiles_);  // o quadro anterior terminou (a cerca)
+            hudTiles_ = makeBuffer(bytes, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, true);
+            ++hudTilesGen_;
+            if (!hudTiles_.map) {
+                std::fprintf(stderr, "[render-vk] mascara do HUD: sem o buffer dos blocos neste quadro\n");
+                return;
+            }
+        }
+        std::memcpy(hudTiles_.map, hudTileCpu_.data(), size_t(bytes));
+        hudTw_ = tw, hudTh_ = th, hudFrame_ = true, st_.hud_mask_tiles = marked;
+    }
+
+    // N9.8 fase 8.4: depois da copia do alvo para o slot, a mascara no alfa dele (hudmask.comp). true = gravada (a barreira
+    // seguinte parte do compute)
+    bool hudApply(Slot& sl, int idx) {
+        if (!hudFrame_ || !sl.storage || idx < 0 || idx >= kSlots) return false;
+        HudBound& hb = hudBound_[idx];
+        if (!hb.valid || hb.slotVersion != sl.version || hb.targetGen != targetGen_ || hb.tilesGen != hudTilesGen_) {
+            VkDescriptorImageInfo  si{sampler_, shadow_.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+            VkDescriptorImageInfo  ii{VK_NULL_HANDLE, sl.image.view, VK_IMAGE_LAYOUT_GENERAL};
+            VkDescriptorBufferInfo bi{hudTiles_.buf, 0, VK_WHOLE_SIZE};
+            VkWriteDescriptorSet   w[3] = {};
+            for (uint32_t i = 0; i < 3; ++i)
+                w[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, w[i].dstSet = hudSet_[idx], w[i].dstBinding = i,
+                w[i].descriptorCount = 1;
+            w[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, w[0].pImageInfo = &si;
+            w[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, w[1].pImageInfo = &ii;
+            w[2].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, w[2].pBufferInfo = &bi;
+            f_.vkUpdateDescriptorSets(dev_, 3, w, 0, nullptr);  // o uso anterior do conjunto terminou (a cerca)
+            hb = {sl.version, targetGen_, hudTilesGen_, true};
+        }
+        imageBarrier(sl.image.img, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                     VK_ACCESS_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                     VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT);
+        const uint32_t pc[4] = {w_, h_, hudTw_, hudTh_};
+        f_.vkCmdBindPipeline(cmd_, VK_PIPELINE_BIND_POINT_COMPUTE, hudPipe_);
+        f_.vkCmdBindDescriptorSets(cmd_, VK_PIPELINE_BIND_POINT_COMPUTE, hudPipeLayout_, 0, 1, &hudSet_[idx], 0, nullptr);
+        f_.vkCmdPushConstants(cmd_, hudPipeLayout_, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof pc, pc);
+        f_.vkCmdDispatch(cmd_, (w_ + 7) / 8, (h_ + 7) / 8, 1);
+        sl.masked = true;
+        return true;
+    }
+
     uint32_t downW_ = 0, downH_ = 0;  // tamanho do jogo do alvo atual
     void freeTarget() {
         freeBuffer(down_);
@@ -1861,6 +2037,7 @@ private:
             freeImage(aoHalf_), freeImage(aoSurf_);
         freeImage(shadowMask_);
         freeImage(aaSrc_), aaSetValid_ = false, st_.aa_image_bytes = 0;  // N9.8 fase 8.3
+        ++targetGen_;  // N9.8 fase 8.4: os conjuntos da mascara do HUD descreviam o anexo de sombra destruido
         st_.ao_image_bytes = 0, aoSurfBound_ = false, lightSetValid_ = false, vmSetValid_ = softSetValid_ = false;
         waterSceneReady_ = false, waterBound_ = false, waterFailed_ = false, st_.water_scene_bytes = 0;  // N9.7
         aoSetValid_ = false;
@@ -2565,8 +2742,11 @@ private:
             VkImageCopy ic{};
             ic.srcSubresource = ic.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1}, ic.extent = {w_, h_, 1};
             f_.vkCmdCopyImage(cmd_, color_.img, VK_IMAGE_LAYOUT_GENERAL, sl.image.img, VK_IMAGE_LAYOUT_GENERAL, 1, &ic);
-            imageBarrier(sl.image.img, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                         VK_ACCESS_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
+            const bool hud = hudApply(sl, writeSlot_);  // N9.8 fase 8.4: a mascara do HUD no alfa do slot
+            imageBarrier(sl.image.img, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL,
+                         hud ? VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT : VK_PIPELINE_STAGE_TRANSFER_BIT,
+                         hud ? VK_ACCESS_SHADER_WRITE_BIT : VK_ACCESS_TRANSFER_WRITE_BIT,
+                         VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
                          VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_TRANSFER_READ_BIT);
             sl.shaderRead = true;
         };
@@ -2739,6 +2919,14 @@ private:
             if (aaPool_) f_.vkDestroyDescriptorPool(dev_, aaPool_, nullptr), --g_live, aaPool_ = VK_NULL_HANDLE;
             if (aaLayout_) f_.vkDestroyDescriptorSetLayout(dev_, aaLayout_, nullptr), --g_live, aaLayout_ = VK_NULL_HANDLE;
             if (aaMod_) f_.vkDestroyShaderModule(dev_, aaMod_, nullptr), --g_live, aaMod_ = VK_NULL_HANDLE;
+            // N9.8 fase 8.4: a mascara do HUD
+            if (hudPipe_) f_.vkDestroyPipeline(dev_, hudPipe_, nullptr), --g_live, hudPipe_ = VK_NULL_HANDLE;
+            if (hudPipeLayout_) f_.vkDestroyPipelineLayout(dev_, hudPipeLayout_, nullptr), --g_live, hudPipeLayout_ = VK_NULL_HANDLE;
+            if (hudPool_) f_.vkDestroyDescriptorPool(dev_, hudPool_, nullptr), --g_live, hudPool_ = VK_NULL_HANDLE;
+            if (hudLayout_) f_.vkDestroyDescriptorSetLayout(dev_, hudLayout_, nullptr), --g_live, hudLayout_ = VK_NULL_HANDLE;
+            if (hudMod_) f_.vkDestroyShaderModule(dev_, hudMod_, nullptr), --g_live, hudMod_ = VK_NULL_HANDLE;
+            freeBuffer(hudTiles_);
+            for (HudBound& hb : hudBound_) hb = {};
             // N9.6 fase 4: as sombras aprimoradas
             for (VkPipeline* p : {&vmPipe_, &softPipe_})
                 if (*p) f_.vkDestroyPipeline(dev_, *p, nullptr), --g_live, *p = VK_NULL_HANDLE;

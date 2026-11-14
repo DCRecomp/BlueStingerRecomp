@@ -56,6 +56,8 @@ struct VulkanStats {
     // N9.8 fase 8.3 (A2): renders com o antialiasing das bordas da cena 3D aplicado (aa.comp) e a imagem de saida dele viva
     // agora (bytes; 0 = nenhuma: sai com o antialiasing desligado)
     uint64_t    aa_frames = 0, aa_image_bytes = 0;
+    // N9.8 fase 8.4: slots com a mascara do HUD no alfa (hudmask.comp) e os blocos de 8x8 marcados como HUD no ultimo deles
+    uint64_t    hud_mask_frames = 0, hud_mask_tiles = 0;
     uint64_t    negative_depth_frames = 0;  // quadros com 1/w negativo (profundidade deslocada, ver frame_prep)
     // garantias do modo fiel (igualdade bit a bit com o software): ambiente FP do software nos shaders
     // (VK_KHR_shader_float_controls) e profundidade crua (VK_EXT_depth_range_unrestricted)
@@ -86,6 +88,10 @@ struct PostPass {
     // binding 1 do passe: -1 = a imagem original do jogo (antes da cadeia); k = a ENTRADA do passe k, que so pode ser o
     // imediatamente anterior (o bloom compoe o borrado sobre a imagem de antes dele)
     int   original = -1;
+    // N9.8 fase 8.4: o passe interno no modo da mascara do HUD (o alfa da imagem e a mascara de hudmask.comp: a nitidez e
+    // o bloom so na cena 3D, os outros repassam o alfa). A apresentacao so o mantem quando a fonte e um slot com a mascara
+    // (VulkanDevice::set_hud_mask); senao o passe roda como antes. Os shaders de mod nao o usam
+    bool  hud_mask = false;
 };
 
 // Passes internos (secao 21), na interface dos de mods. Os ainda nao implementados devolvem -1 em post_builtin.
@@ -175,6 +181,10 @@ public:
     // translucidas; so os pixels com o bit 1 do anexo de sombra mudam). So no render do framebuffer. Desligado = a imagem de
     // antes
     virtual void     set_edge_antialiasing(bool on) = 0;
+    // N9.8 fase 8.4: a mascara do HUD no alfa de cada slot escrito daqui em diante (hudmask.comp: 1 na cena 3D fora dos
+    // desenhos translucidos 2D, 0 no resto). O RGB do slot, o alvo e a imagem que volta para a CPU nao mudam. Desligada, o
+    // slot fica como antes (sem o compute)
+    virtual void     set_hud_mask(bool on) = 0;
     // N9.6 fase 1: a qualidade do AO (alta: o alvo inteiro, 8 direcoes x 4 passos, a primeira versao e o padrao do
     // dispositivo; media: meia resolucao com a reconstrucao pela profundidade, 8 x 4; baixa: meia resolucao, 4 x 3)
     virtual void     set_ambient_occlusion_quality(AoQuality q) = 0;

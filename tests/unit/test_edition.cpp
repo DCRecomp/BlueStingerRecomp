@@ -67,6 +67,8 @@ BS_TEST(edition_names_and_profiles) {
     BS_CHECK(!ed::profile_for(ed::Edition::Original).texture_filtering && ed::profile_for(ed::Edition::Remastered).texture_filtering);
     BS_CHECK(!ed::profile_for(ed::Edition::Original).hd_textures && ed::profile_for(ed::Edition::Remastered).hd_textures);  // N9.8 fase 8.2
     BS_CHECK(!ed::profile_for(ed::Edition::Original).antialiasing && ed::profile_for(ed::Edition::Remastered).antialiasing);  // N9.8 fase 8.3
+    // N9.8 fase 8.4: a nitidez e o bloom so na cena 3D (a mascara do HUD) so na Remastered; a Original com os efeitos como antes
+    BS_CHECK(!ed::profile_for(ed::Edition::Original).post_hud_mask && ed::profile_for(ed::Edition::Remastered).post_hud_mask);
 }
 
 BS_TEST(edition_read_from_install_config) {

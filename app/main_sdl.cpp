@@ -456,6 +456,16 @@ bool validateData(const fs::path& dir, bs::FilesProvider files, std::string& err
     }
 }
 
+#if BS_VALIDACAO
+// N9.8 fase 8.4, so validacao: BS_HUD_MASCARA=1 liga a mascara do HUD tambem sem a janela e grava o alfa do slot nas
+// capturas (vNNNNNN_mascara.bmp); BS_HUD_MASCARA=0 a desliga na janela (os efeitos como antes, para a comparacao). -1 = sem
+// a variavel. O produto nao le a variavel.
+int hudMaskEnv() {
+    const char* v = std::getenv("BS_HUD_MASCARA");
+    return v && *v == '1' ? 1 : v && *v == '0' ? 0 : -1;
+}
+#endif
+
 // Capturas do headless (--dump-every N --capture <dir>), na thread do jogo, nos VBlanks multiplos de N (exatos: a mesma
 // rota em duas execucoes captura os mesmos quadros). BS_CAPTURA_VBLANKS=a-b,c-d limita a essas faixas; BS_CAPTURA_CRUA=1
 // grava tambem o quadro sem a legenda (vNNNNNN_crua.bmp) quando ha legenda; com a resolucao interna, vNNNNNN_hd.bmp.
@@ -472,8 +482,13 @@ std::function<void(const bs::GameFrame&)> headlessCapture(const Args& a) {
             if (*q == ',') ++q;
         }
     const bool raw  = std::getenv("BS_CAPTURA_CRUA") != nullptr;
+#if BS_VALIDACAO
+    const bool hudMaskDump = hudMaskEnv() == 1;  // N9.8 fase 8.4: o alfa do slot (a mascara do HUD) em vNNNNNN_mascara.bmp
+#else
+    const bool hudMaskDump = false;
+#endif
     auto       subs = std::make_shared<bs::SubtitleOverlay>();  // N7c: a captura mostra a legenda como o jogador a ve
-    return [dir = a.capture, ranges, raw, subs](const bs::GameFrame& f) {
+    return [dir = a.capture, ranges, raw, subs, hudMaskDump](const bs::GameFrame& f) {
         const uint64_t v = f.vblank;
         bool           want = ranges.empty();
         for (const auto& [x, y] : ranges) want = want || (v >= x && v <= y);
@@ -492,6 +507,11 @@ std::function<void(const bs::GameFrame&)> headlessCapture(const Args& a) {
             hd.width = f.hiresWidth, hd.height = f.hiresRows;
             std::snprintf(name, sizeof name, "v%06llu_hd.bmp", (unsigned long long)v);
             writeBmp(dir / name, hd);
+            if (hudMaskDump) {  // N9.8 fase 8.4 (so validacao): o alfa em cinza
+                for (uint32_t& p : hd.argb) p = 0xFF000000u | (p >> 24) * 0x010101u;
+                std::snprintf(name, sizeof name, "v%06llu_mascara.bmp", (unsigned long long)v);
+                writeBmp(dir / name, hd);
+            }
             // N9.5 fase 4: o estado do pilar dinamico nesta captura (o criterio H6 de tools/dev/n95_headless.py)
             if (hd.width > hd.height * 4 / 3) {
                 const auto p = bs::transitional::render_capture::pillar_sides();
@@ -955,6 +975,10 @@ public:
             ps.crt = g.crt && g.vulkan && height >= st::kCrtMinHeight;
             ps.crtScanlines = g.crt_scanlines, ps.crtMask = g.crt_mask, ps.crtVignette = g.crt_vignette;
             ps.areaFilter = g.vulkan && g.antialiasing != st::Antialiasing::Original;  // N9.8 fase 8.3 (A1)
+            ps.hudMask    = g.vulkan && editionProfile().post_hud_mask;                 // N9.8 fase 8.4
+#if BS_VALIDACAO
+            if (hudMaskEnv() == 0) ps.hudMask = false;  // so validacao: BS_HUD_MASCARA=0, os efeitos como antes (comparacao)
+#endif
             for (const auto& pkg : shaders_)
                 if (pkg.error.empty() && pkg.name == g.shader) {
                     ps.shader = &pkg;
@@ -1585,6 +1609,15 @@ int runWindow(bs::GameHost& host, ni::InputSystem& input, const Args& a, SDL_Win
             writeBmp(fs::path(winDir) / name, f);
         }
 #if BS_VALIDACAO
+        // N9.8 fase 8.4 (so validacao): BS_JANELA_SAIR_VBLANK=<n> fecha a janela pelo caminho normal depois do VBlank n (as
+        // suites da janela leem o resumo do render, que so sai no fim do processo)
+        static const uint64_t quitAt = [] {
+            const char* v = std::getenv("BS_JANELA_SAIR_VBLANK");
+            return v && *v ? std::strtoull(v, nullptr, 10) : 0ull;
+        }();
+        if (quitAt && frame.vblank >= quitAt) quit = true;
+#endif
+#if BS_VALIDACAO
         // N9.5 fase 5 (so validacao, revisao Codex 20261110-004711): BS_APRESENTACAO_FALHAR=<n> da a apresentacao Vulkan como
         // falha a partir do n-esimo quadro apresentado: o caminho real do recuo para o SDL (fallbackToSdl, drop_wide)
         static const uint64_t failFrom = [] {
@@ -2087,6 +2120,12 @@ int mainHeadless(Args& a) {
     if (a.water >= 2) host.setWaterQuality(uint32_t(a.water - 1));  // N9.7 (validado acima)
     if (a.filter >= 2) host.setFiltering(uint32_t(a.filter - 1), 16);  // N9.8 fase 8.1 (validado acima)
     if (a.aa == 3) host.setEdgeAntialiasing(true);  // N9.8 fase 8.3: sem janela so as bordas (a area e da apresentacao)
+#if BS_VALIDACAO
+    if (hudMaskEnv() == 1) {  // N9.8 fase 8.4: so validacao, a mascara do HUD tambem sem a janela (o alfa do slot)
+        bs::transitional::render_capture::set_hud_mask_diagnostic();
+        std::fprintf(stderr, "[render] BS_HUD_MASCARA=1: a mascara do HUD no alfa do slot (so validacao)\n");
+    }
+#endif
     if (a.ssao == 2)  // N9.6 fase 1 (validado acima); sem --ssao-qualidade, a media (o padrao do graficos.toml)
         host.setAmbientOcclusion(true, a.ssaoQuality >= 0 ? uint32_t(a.ssaoQuality) : uint32_t(st::SsaoQuality::Medium));
 #if BS_VALIDACAO

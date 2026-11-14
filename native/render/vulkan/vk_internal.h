@@ -348,6 +348,8 @@ struct SlotSource {
     virtual bool pin(uint64_t seq, VkImage& img, VkImageView& view, uint32_t& w, uint32_t& h, int& idx, VkSemaphore& wait,
                      uint64_t& version) = 0;
     virtual void unpin(int idx) = 0;
+    // N9.8 fase 8.4: o slot fixado (idx) tem a mascara do HUD no alfa (so enquanto fixado: a escrita seguinte e outra)
+    virtual bool slot_masked(int idx) = 0;
     virtual class PostChain* post_chain() = 0;  // a cadeia de pos-processamento do dispositivo (nullptr = indisponivel)
 
 protected:

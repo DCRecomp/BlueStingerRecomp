@@ -49,6 +49,7 @@ bool                      g_shadows      = false;  // N9.6 fase 4: as sombras ap
 nr::WaterQuality          g_water        = nr::WaterQuality::Original;  // N9.7: a agua aprimorada (set_water)
 uint32_t                  g_filter       = 0, g_aniso = 16;  // N9.8 fase 8.1: a filtragem das texturas (set_filtering)
 bool                      g_edgeAa       = false;  // N9.8 fase 8.3: o antialiasing das bordas (set_edge_antialiasing)
+bool                      g_hudMaskDiag  = false;  // N9.8 fase 8.4: so validacao (hud_mask_diagnostic)
 
 std::unique_ptr<Renderer> g_core;
 
@@ -212,6 +213,7 @@ bool Renderer::ensure_vk() {
         return false;
     }
     st.vk_device = vk_->stats().device;
+    if (g_hudMaskDiag) vk_->set_hud_mask(true);  // N9.8 fase 8.4: so validacao (sem janela; a janela pede a sua)
     const auto& vs = vk_->stats();
     // garantido bit a bit com arredondamento ao par (RTE) e profundidade crua; os subnormais (abaixo de 1,2e-38) ficam
     // no padrao do dispositivo quando ele nao garante preserva-los
@@ -538,6 +540,7 @@ bool Renderer::vk_attempt(uint32_t w, uint32_t h, std::vector<uint32_t>& out, st
         st.vk_filtered_draws = vk_->stats().filtered_draws, st.vk_mip_promotions = vk_->stats().mip_promotions;  // N9.8 fase 8.1
         st.vk_mip_textures_max = std::max(st.vk_mip_textures_max, vk_->stats().mip_textures);
         st.vk_aa_frames = vk_->stats().aa_frames;  // N9.8 fase 8.3
+        st.vk_hud_mask_frames = vk_->stats().hud_mask_frames;  // N9.8 fase 8.4
         st.vk_water_scene_bytes_max = std::max(st.vk_water_scene_bytes_max, vk_->stats().water_scene_bytes);
         return true;
     }
@@ -781,6 +784,7 @@ uint32_t filtering() { return g_filter; }
 uint32_t filtering_anisotropy() { return g_aniso; }
 void     set_edge_antialiasing(bool on) { g_edgeAa = on; }  // N9.8 fase 8.3
 bool     edge_antialiasing() { return g_edgeAa; }
+void     set_hud_mask_diagnostic() { g_hudMaskDiag = true; }  // N9.8 fase 8.4
 bool     shadows() { return g_shadows; }
 bool     lighting() { return g_lighting; }
 bool     materials() { return g_materials; }
@@ -996,7 +1000,7 @@ std::string summary() {
                       "descartadas do cache %llu, HD %llu, HD incompativeis %llu, HD adiadas %llu, exportadas %llu); dispositivo recriado %llu vez(es); comparados %llu: pixels diferentes %.4f%% (> 8 niveis %.4f%%), maior "
                       "diferenca %u, pior render %llu (%.3f%%); PSNR minimo %.1f dB, medio %.1f dB, quadros abaixo de 40 dB %llu; GPU por "
                       "quadro: media %.2f ms, pior %.1f ms; camadas translucidas por pixel ate %llu; AO em %llu renders (meia resolucao %llu); catalogo de materiais: %llu "
-                      "envios, AO nas translucidas em %llu renders; luz das fontes em %llu renders (ate %u luzes); borda suave dos volumes em %llu renders; agua em %llu renders (%llu desenhos, imagem da cena ate %llu KiB); filtragem: %llu desenhos, texturas com mipmaps ate %llu (%llu promovidas); antialiasing das bordas em %llu renders%s%s\n",
+                      "envios, AO nas translucidas em %llu renders; luz das fontes em %llu renders (ate %u luzes); borda suave dos volumes em %llu renders; agua em %llu renders (%llu desenhos, imagem da cena ate %llu KiB); filtragem: %llu desenhos, texturas com mipmaps ate %llu (%llu promovidas); antialiasing das bordas em %llu renders; mascara do HUD em %llu slots%s%s\n",
                       s.vk_device.empty() ? "indisponivel" : s.vk_device.c_str(), (unsigned long long)s.vk_frames,
                       (unsigned long long)s.vk_failures, (unsigned long long)s.tex_uploads, (unsigned long long)s.tex_legacy,
                       (unsigned long long)s.tex_evicted, (unsigned long long)s.tex_replaced,
@@ -1015,6 +1019,7 @@ std::string summary() {
                       (unsigned long long)s.vk_water_draws, (unsigned long long)(s.vk_water_scene_bytes_max / 1024),
                       (unsigned long long)s.vk_filtered_draws, (unsigned long long)s.vk_mip_textures_max,
                       (unsigned long long)s.vk_mip_promotions, (unsigned long long)s.vk_aa_frames,
+                      (unsigned long long)s.vk_hud_mask_frames,
                       s.vk_error.empty() ? "" : "; ",
                       s.vk_error.c_str());
         out += v;

@@ -14,6 +14,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -422,7 +423,7 @@ nr::CommandList aa_scene(uint32_t w = 640, uint32_t h = 480) {
     tri({420, 300, 0.01f, 0, 0, 0xFFF0F0F0, 0}, {620, 330, 0.01f, 0, 0, 0xFFF0F0F0, 0}, {450, 460, 0.01f, 0, 0, 0xFFF0F0F0, 0});
     // revisao Codex 20261113-135423: um desenho da lista translucida (alfa 255, a mistura do jogo) sobre a borda esquerda do
     // triangulo projetado: desenhado no passe B, depois das bordas, os pixels dele ficam iguais com e sem o antialiasing
-    tri({60, 120, 0.01f, 0, 0, 0xFF8040C0, 0}, {200, 140, 0.01f, 0, 0, 0xFF8040C0, 0}, {70, 330, 0.01f, 0, 0, 0xFF8040C0, 0});
+    tri({60, 120, 0.5f, 0, 0, 0xFF8040C0, 0}, {200, 140, 0.5f, 0, 0, 0xFF8040C0, 0}, {70, 330, 0.5f, 0, 0, 0xFF8040C0, 0});
     cl.draws.back().state.list = nr::ListType::Translucent;
     cl.draws.back().state.src = nr::Blend::SrcAlpha, cl.draws.back().state.dst = nr::Blend::InvSrcAlpha;
     cl.draws.back().state.use_alpha = true;
@@ -478,6 +479,111 @@ BS_TEST(render_vulkan_edge_antialiasing) {
         std::vector<uint32_t> back;
         BS_CHECK(d->submit(cl).ok() && d->read_frame(back, w, h).ok() && back == off);
         BS_CHECK(d->stats().aa_image_bytes == 0);
+    }
+    BS_CHECK(nr::vulkan_live_objects() == 0);
+}
+
+// N9.8 fase 8.4: a mascara do HUD no alfa do slot (hudmask.comp). A cena de aa_scene na escala 2 (o slot): o triangulo
+// projetado (cena), o 2D opaco e o translucido 2D (o HUD) sobre a borda do projetado. Ligada: o RGB do slot e a imagem que
+// volta para a CPU ficam iguais; o alfa e 255 no meio da cena, 0 sobre o translucido, no 2D opaco e no fundo, com uma
+// rampa (valores intermediarios) so perto do HUD. Outra escala com a mascara (o slot recriado: os conjuntos reescritos pela
+// geracao) e desligada de novo (o slot como antes).
+BS_TEST(render_vulkan_hud_mask) {
+    std::string err;
+    {
+        auto d = nr::VulkanDevice::create(&err);
+        if (!d) BS_SKIP("dispositivo Vulkan");
+        const nr::CommandList cl = aa_scene();
+        auto readSlot = [&](std::vector<uint32_t>& out, uint32_t& sw, uint32_t& sh) {
+            const uint64_t seq = d->last_slot(sw, sh);
+            uint32_t       width = 0;
+            return seq && d->read_slot(seq, 0, sh, out, width) && width == sw;
+        };
+        for (float scale : {2.f, 1.5f}) {
+            d->set_scale(scale);
+            d->set_hud_mask(false);
+            std::vector<uint32_t> base, cpu0, masked, cpu1, again;
+            uint32_t              sw = 0, sh = 0, w = 0, h = 0;
+            BS_CHECK(d->submit(cl).ok() && readSlot(base, sw, sh) && d->read_frame(cpu0, w, h).ok());
+            const uint64_t f0 = d->stats().hud_mask_frames;
+            d->set_hud_mask(true);
+            BS_CHECK(d->submit(cl).ok() && readSlot(masked, sw, sh) && d->read_frame(cpu1, w, h).ok());
+            BS_CHECK(d->stats().hud_mask_frames == f0 + 1 && d->stats().hud_mask_tiles > 0);
+            BS_CHECK(cpu1 == cpu0);  // a imagem que volta para a CPU (o framebuffer emulado) nao muda
+            BS_CHECK(masked.size() == base.size() && sw == uint32_t(640 * scale + 0.5f));
+            if (masked.size() != base.size() || base.empty()) continue;
+            uint32_t rgbDiff = 0;
+            for (size_t i = 0; i < base.size(); ++i) rgbDiff += (masked[i] & 0xFFFFFF) != (base[i] & 0xFFFFFF);
+            BS_CHECK(rgbDiff == 0);
+            auto alpha = [&](float gx, float gy) {  // nas coordenadas do jogo
+                return masked[size_t(gy * scale) * sw + size_t(gx * scale)] >> 24;
+            };
+            const uint32_t aScene = alpha(300, 160), aHud = alpha(150, 200), aOpaque2d = alpha(500, 380), aBack = alpha(600, 40);
+            uint32_t       ramp = 0, rampFar = 0;
+            for (uint32_t y = 0; y < sh; ++y)
+                for (uint32_t x = 0; x < sw; ++x) {
+                    const uint32_t a = masked[size_t(y) * sw + x] >> 24;
+                    if (a == 0 || a == 255) continue;
+                    ++ramp;
+                    const float gx = x / scale, gy = y / scale;  // longe do retangulo do translucido (60..200, 120..330)
+                    if (gx < 60 - 16 || gx > 200 + 16 || gy < 120 - 16 || gy > 330 + 16) ++rampFar;
+                }
+            std::fprintf(stderr, "  mascara do HUD (escala %.1f): alfa cena %u, HUD %u, 2D opaco %u, fundo %u; rampa %u pixels (%u longe do HUD)\n",
+                         scale, aScene, aHud, aOpaque2d, aBack, ramp, rampFar);
+            BS_CHECK(aScene == 255 && aHud == 0 && aOpaque2d == 0 && aBack == 0 && ramp > 0 && rampFar == 0);
+            BS_CHECK(d->submit(cl).ok() && readSlot(again, sw, sh) && again == masked);  // determinismo
+        }
+        // um sprite da cena (translucido, 1/w constante DENTRO da faixa da cena: fumaca, fogo) sobre o projetado continua na
+        // cena (os efeitos valem nele); o HUD (1/w 0,5, colado na camera) continua fora
+        {
+            d->set_scale(2.f);
+            nr::CommandList sp = aa_scene();
+            nr::Draw        dr;
+            dr.first_vertex = uint32_t(sp.vertices.size()), dr.vertex_count = 3;
+            for (const nr::Vertex& v : {nr::Vertex{330, 140, 1.f / 510, 0, 0, 0xFFFFA040, 0}, nr::Vertex{420, 150, 1.f / 510, 0, 0, 0xFFFFA040, 0},
+                                         nr::Vertex{350, 210, 1.f / 510, 0, 0, 0xFFFFA040, 0}})
+                sp.vertices.push_back(v);
+            dr.state.list = nr::ListType::Translucent, dr.state.src = nr::Blend::SrcAlpha, dr.state.dst = nr::Blend::InvSrcAlpha;
+            dr.state.use_alpha = true;
+            sp.draws.push_back(dr);
+            std::vector<uint32_t> m;
+            uint32_t              sw = 0, sh = 0;
+            BS_CHECK(d->submit(sp).ok() && readSlot(m, sw, sh) && m.size() == size_t(sw) * sh);
+            if (m.size() == size_t(sw) * sh) {
+                const uint32_t aSprite = m[size_t(170 * 2) * sw + 360 * 2] >> 24, aHud = m[size_t(200 * 2) * sw + 150 * 2] >> 24;
+                const uint32_t color   = m[size_t(170 * 2) * sw + 360 * 2] & 0xFFFFFF;
+                std::fprintf(stderr, "  mascara do HUD: sprite da cena alfa %u (cor %06X), HUD %u\n", aSprite, color, aHud);
+                BS_CHECK(aSprite == 255 && color == 0xFFA040 && aHud == 0);
+            }
+        }
+        // revisao Codex 20261114-010850: 1/w nao finito, zero, negativo ou abaixo do limite nunca marca o HUD (nenhum bloco)
+        {
+            nr::CommandList bad = aa_scene();
+            bad.draws.pop_back(), bad.vertices.resize(bad.vertices.size() - 3);  // sem o HUD de aa_scene
+            for (float iw : {std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::infinity(), 0.f, -0.5f, 0.01f}) {
+                nr::Draw dr;
+                dr.first_vertex = uint32_t(bad.vertices.size()), dr.vertex_count = 3;
+                for (const nr::Vertex& v : {nr::Vertex{100, 100, iw, 0, 0, 0xFF20FF20, 0}, nr::Vertex{300, 110, iw, 0, 0, 0xFF20FF20, 0},
+                                             nr::Vertex{120, 300, iw, 0, 0, 0xFF20FF20, 0}})
+                    bad.vertices.push_back(v);
+                dr.state.list = nr::ListType::Translucent, dr.state.src = nr::Blend::SrcAlpha, dr.state.dst = nr::Blend::InvSrcAlpha;
+                dr.state.use_alpha = true;
+                bad.draws.push_back(dr);
+            }
+            uint32_t sw = 0, sh = 0;
+            BS_CHECK(d->submit(bad).ok() && d->last_slot(sw, sh) != 0);
+            std::fprintf(stderr, "  mascara do HUD: 1/w invalido ou abaixo do limite, %llu blocos\n",
+                         (unsigned long long)d->stats().hud_mask_tiles);
+            BS_CHECK(d->stats().hud_mask_tiles == 0);
+        }
+        d->set_hud_mask(false);
+        std::vector<uint32_t> off;
+        uint32_t              sw = 0, sh = 0;
+        BS_CHECK(d->submit(cl).ok() && readSlot(off, sw, sh));
+        uint32_t alphaMasked = 0;  // desligada: o alfa volta a ser o do alvo (nenhum pixel com a rampa)
+        for (uint32_t p : off) alphaMasked += (p >> 24) != 0 && (p >> 24) != 255;
+        BS_CHECK(!off.empty() && alphaMasked == 0);
+        d->set_scale(1.f);
     }
     BS_CHECK(nr::vulkan_live_objects() == 0);
 }

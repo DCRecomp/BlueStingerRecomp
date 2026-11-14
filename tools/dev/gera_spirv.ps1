@@ -66,6 +66,8 @@ $jobs = @(
     @("soft_shadows_comp.h", "soft_shadows.comp", "kSoftShadowsComp", @()),
     # N9.8 fase 8.3 (A2): o antialiasing das bordas da cena 3D
     @("aa_comp.h", "aa.comp", "kAaComp", @()),
+    # N9.8 fase 8.4: a mascara do HUD no alfa do slot (a nitidez e o bloom so na cena 3D)
+    @("hudmask_comp.h", "hudmask.comp", "kHudMaskComp", @()),
     # N7c: apresentacao direta e reducao da resolucao interna
     @("present_vert.h", "present.vert", "kPresentVert", @()),
     @("present_frag.h", "present.frag", "kPresentFrag", @()),

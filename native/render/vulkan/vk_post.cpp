@@ -184,6 +184,7 @@ public:
             PostPush q{};
             q.size[0] = float(w_), q.size[1] = float(h_), q.size[2] = 1.f / float(w_), q.size[3] = 1.f / float(h_);
             std::memcpy(q.p, p.params, sizeof q.p);
+            if (p.hud_mask) q.p[kPostParams - 1] = 1.f;  // N9.8 fase 8.4: p[3].w, o modo da mascara do HUD (so os internos)
             f_.vkCmdPushConstants(cmd, layout_, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof q, &q);
             f_.vkCmdDraw(cmd, 3, 1, 0, 0);
             f_.vkCmdEndRenderPass(cmd);

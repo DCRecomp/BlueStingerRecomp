@@ -2,6 +2,7 @@
 // N7c: bloom interno, passe 2 de 2: borra na vertical o resultado do passe 1 e soma a imagem de antes do bloom
 // (binding 1, a entrada do passe 1).
 // p[0].y raio (o mesmo do passe 1), p[0].z intensidade (0 a 2).
+// N9.8 fase 8.4: p[3].w = 1, o modo da mascara do HUD: o alfa da imagem de antes (a mascara) passa adiante.
 layout(set = 0, binding = 0) uniform sampler2D prev;
 layout(set = 0, binding = 1) uniform sampler2D before;
 layout(push_constant) uniform Post {
@@ -18,5 +19,6 @@ void main() {
     vec3        s    = texture(prev, vUv).rgb * kW[0];
     for (int i = 1; i < 5; ++i)
         s += (texture(prev, vUv + vec2(0.0, step * float(i))).rgb + texture(prev, vUv - vec2(0.0, step * float(i))).rgb) * kW[i];
-    outColor = vec4(clamp(texture(before, vUv).rgb + s * pc.p[0].z, 0.0, 1.0), 1.0);
+    const vec4 b = texture(before, vUv);
+    outColor     = vec4(clamp(b.rgb + s * pc.p[0].z, 0.0, 1.0), pc.p[3].w > 0.5 ? b.a : 1.0);
 }
