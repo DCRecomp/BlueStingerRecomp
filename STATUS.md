@@ -4361,6 +4361,23 @@ O mantenedor testou a v0.9.7 e pediu três correções, numa worktree própria (
   - **ZIP:** `BlueStinger-Builder-v0.9.7-1-win-x64.zip`, 14 737 379 B, `c63eb13f…3ab2e8`. Extraído, os 2 927 arquivos são iguais aos do pacote.
   - **`test_builder`:** não rodou, por pedido do mantenedor.
 
+### N9.8 fase 8.3: o antialiasing (2026-11-13, worktree `tmp/wt-n97` branch `n9-8`, sem commit; 8.1 e 8.2 em `710183d`)
+
+Pedido do mantenedor: "Pode salvar o 8.2 e iniciar o 8.3". Detalhes em `docs/N9-8-AUDITORIA.md` seção 10. Só na Remastered com
+o Vulkan; a Original e o software recusam (saída 2).
+- **Opção:** `[imagem] antialiasing = "original" | "area" | "bordas"` e `--antialiasing`; a linha do MSAA (avaliado e não feito)
+  virou "Antialiasing"; o Alto com `area`.
+- **A1:** redução por área na apresentação, só acima de 2:1 (até 2:1, a mesma imagem de antes).
+- **A2:** antialiasing das bordas da cena 3D (`aa.comp`), antes das translúcidas e só nos pixels da cena (o bit do AO): o HUD,
+  os textos e as telas 2D ficam de fora no 4:3 e no 16:9. Desvio da D8-4 registrado (não é o SMAA nem a marca do N9.5).
+- **Provas:** três presets compilam; unit 382/0, render 113/0, ctest 30/30; `n98_aa.py` A1–A6 sem falhas (estado e som
+  idênticos; 0,37 % e 1,17 % dos pixels mudam em 1440; validação = produto; a área a 3:1 com menos alta frequência e a 1,5:1
+  igual bit a bit); `n96_presets` 32/0.
+- **Revisão Codex** (`reviews/codex-20261113-135423.md`): dois achados aceitos e corrigidos (a escolha do menu depois da linha de
+  comando, também na filtragem e nas texturas HD; os testes da translúcida e da perda do dispositivo). Nenhum rejeitado.
+- **Pendente:** a conferência visual (mantenedor); as opções antigas do N9.6/N9.7 com a mesma regra da linha de comando
+  (N9.12); as fases 8.4 e 8.5.
+
 ### N9.8 fases 8.1 e 8.2: a filtragem e as texturas HD (2026-11-12/13, worktree `tmp/wt-n97` branch `n9-8`, sem commit)
 
 Pedido do mantenedor: "Pode começar" (D8-1 a D8-6 como recomendados) e "Continua o 9.8". Detalhes em `docs/N9-8-AUDITORIA.md`

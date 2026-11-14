@@ -292,3 +292,78 @@ arquivo e as dimensões antes de decodificar; o adiamento sem perder a textura; 
 - **O decodificador não passou por fuzzing:** o `stb_image` confere a aritmética das alocações; um fuzzing com ASan fica
   para o N9.12.
 - **A conferência visual** de um pacote de verdade fica com o mantenedor: nenhuma arte vem com o projeto.
+
+## 10. Fase 8.3: o antialiasing (2026-11-13)
+
+Pedido do mantenedor: "Pode salvar o 8.2 e iniciar o 8.3" (2026-11-13; o 8.1 e o 8.2 no commit local `710183d`). D8-4 e D8-5
+já aprovadas (seção 8): A1 + A2, o MSAA avaliado e não feito; a redução no Alto e o antialiasing das bordas só por escolha
+manual.
+
+### 10.1 O que mudou
+
+| Parte | Onde | O que faz |
+|---|---|---|
+| Opção | `GraphicsSettings::antialiasing` (`original`, `area`, `bordas`; `[imagem] antialiasing` no `graficos.toml`); `--antialiasing` (só nesta execução; a Original e o software recusam `area` e `bordas`, saída 2) | a linha "Antialiasing (MSAA)" do menu, sempre "em breve", virou "Antialiasing" (original, redução por área, área e bordas), só na Remastered com o Vulkan e a apresentação direta (`EditionProfile::antialiasing`, `Features::antialiasing`). A chave `msaa` continua no arquivo, sem efeito. Um arquivo antigo sem a chave fica com a do preset |
+| Preset (D8-5) | `graphics_settings.cpp` | o Alto com `area`; o Equilibrado e o Original com `original`; as bordas só pela escolha manual |
+| A1: redução por área | `present.frag` (bit 1 das flags), `vk_present.cpp` (`kAreaFilter`), `PresentRequest::area_filter`, `PostSpec::areaFilter` | quando a imagem do jogo é mais de 2× maior que a área dela na janela (texels por pixel pela derivada da coordenada), a média de N×N amostras bilineares (cada uma a média de 2×2 texels) cobre a área do pixel, até 16:1. Até 2:1 o bilinear de sempre (a mesma imagem de antes) |
+| A2: bordas da cena 3D | `shaders/aa.comp`; `VulkanDevice::edgeAntialiasing` | um compute **depois dos volumes e antes do passe B** (as translúcidas). Lê uma cópia da cor (`aaSrc_`) e o bit 1 do anexo de sombra (a cena 3D: 1/w variando no desenho, o mesmo critério do AO) e escreve na cor só os pixels misturados. O método é o conhecido antialiasing por pós-processamento (borda pela luminância, direção pelo gradiente, procura das pontas e mistura com o vizinho), escrito de forma independente. Só no render do framebuffer |
+| Desvio do texto da D8-4 | — | a D8-4 falava em SMAA com a máscara do HUD do N9.5. A marca do N9.5 só cobre o HUD do canto e só no 16:9. O bit da cena 3D, antes das translúcidas, deixa de fora todo o HUD, os textos, as telas 2D do jogo, as translúcidas, a água e os efeitos, no 4:3 e no 16:9, sem uma marca nova. O nome da opção é "bordas" (não é o SMAA) |
+| Diagnóstico (só validação) | `BS_AA_DIAGNOSTICO=1` | os pixels misturados em magenta; o produto ignora a variável |
+| Resumo | `[render-vk] ... antialiasing das bordas em N renders`; `[render] antialiasing das bordas: ligado/desligado` | |
+
+### 10.2 Provas (nível 1, 2026-11-13)
+
+- **Builds:** `msvc-debug`, `msvc-validacao` e `msvc-release` compilam; `gera_spirv` (SDK em `C:\VulkanSDK\1.4.363.0`) mudou só
+  `present_frag.h` e criou `aa_comp.h`; os outros cabeçalhos ficaram idênticos.
+- **Unitários:** unit 382/0, render 113/0.
+  - `render_vulkan_edge_antialiasing`: um triângulo projetado e um 2D, os dois claros com bordas inclinadas, e um desenho da lista
+    translúcida sobre a borda do projetado. Desligado, a imagem do software. Ligado: 504 pixels misturados, nenhum no 2D, nenhum
+    longe do projetado, todos entre o menor e o maior luma da vizinhança 3×3 (nenhuma cor nova); o desenho translúcido (14 590
+    pixels) igual bit a bit; determinístico; o render de 256×256 igual ao fiel; desligado de novo, o fiel e a imagem auxiliar
+    devolvida;
+  - `render_capture`: uma perda transitória do dispositivo com as bordas ligadas: recriado, o render sai pelo Vulkan com as
+    bordas;
+  - `graphics_antialiasing_fase83`, `edition` e o menu: o preset, o arquivo, o valor desconhecido, o recuo sem o recurso, a
+    aplicação no quadro seguinte.
+- **No jogo, sem janela** (`tools/dev/n98_aa.py`, rota `passo_cgate` até o cais, Remastered em 1440):
+  - **A1:** a Original com `area` e com `bordas` e a Remastered no software com `bordas` saem com 2;
+  - **A2:** estado por passo e efeitos sonoros idênticos com e sem as bordas; as bordas em 17 136 renders; em 1440, 0,37 % e
+    1,17 % dos pixels mudam nos quadros da cena (VBlanks 30 700 e 34 200), a alta frequência cai de 1,81 para 1,74 e de 3,19
+    para 3,12; as telas da CPU (4 000 e 12 000) iguais bit a bit;
+  - **A3:** a validação igual bit a bit ao produto (imagem do jogo e 1440); o diagnóstico pinta 55 762 e 196 583 pixels sem
+    mudar o estado; o produto com a variável não pinta nenhum;
+  - **A4:** com o 16:9 em 1080, a anisotrópica, o AO, a luz, as sombras aprimoradas e a água alta: estado e som idênticos aos
+    mesmos sem as bordas; AO, borda suave, água, filtragem e bordas rodam. A rota não tem fontes do catálogo: a luz liga e
+    fica em 0 renders, igual sem as bordas (a primeira versão do critério pedia luz > 0 e falhou por isso; corrigido).
+- **Na janela** (`n98_aa.py`, rota `passo_load_slot1`, Remastered 4:3, interna 1440):
+  - **A5:** janela 640×480 (3:1): a área difere do bilinear e tem menos alta frequência (3,38 → 2,97, 6,04 → 5,45, 10,03 →
+    8,69); janela 1280×960 (1,5:1): igual bit a bit ao bilinear. A primeira execução falhou: a flag não chegava ao shader
+    (`vk_present.cpp`), corrigido;
+  - **A6:** `--antialiasing bordas` com o Alto no arquivo e, no menu, a linha duas vezes para a esquerda: as bordas ligam e
+    desligam e o arquivo grava `original`; sem mexer na linha, o arquivo fica como estava.
+- **ctest** 30/30 (6 sem o disco); **`n96_presets`** (janela, Q1–Q11) 32 verificações, 0 falhas: a linha do menu manteve a
+  posição da do MSAA, e o Alto gravado pelo menu leva `antialiasing = "area"`.
+
+### 10.3 Revisão Codex (2026-11-13, `reviews/codex-20261113-135423.md`)
+
+Dois achados, aceitos e corrigidos:
+- **[média] a mudança no menu depois do `--antialiasing` não ia para o arquivo:** a marca da linha de comando não era limpa.
+  Corrigido para o antialiasing e, pelo mesmo defeito, para a `--filtragem` (8.1) e a `--texturas-hd` (8.2); provado pelo A6.
+  As opções do N9.6/N9.7 (`--agua`, `--sombras`, `--iluminacao`, `--ssao`) seguem o mesmo padrão antigo e ficam como estão
+  (registrado para o N9.12).
+- **[baixa] faltavam testes da translúcida sobre a borda e da perda do dispositivo com as bordas:** os dois foram escritos
+  (seção 10.2).
+
+Pontos conferidos sem problema pelo revisor: as barreiras e os layouts (a cor em `GENERAL`, o anexo de sombra em
+`SHADER_READ_ONLY_OPTIMAL`, a cópia antes do compute); nenhuma corrida (lê só a cópia, escreve só a cor); o passe B depois;
+a recriação do alvo e a destruição; a Original bloqueada; os arquivos antigos compatíveis; a área só acima de 2:1; os SPIR-V
+válidos (`spirv-val`); o comentário de `edition.h` corrigido.
+
+### 10.4 Limitações
+
+- **As bordas só pegam a cena opaca e o punch-through:** as translúcidas (vidros, efeitos, a água) e a parede exatamente de
+  frente para a câmera (1/w constante, o mesmo limite do AO) ficam sem o antialiasing.
+- **As bordas não são temporais:** o serrilhado em movimento (cintilação de linhas finas) diminui pouco; a resolução interna
+  continua sendo o antialiasing principal.
+- **A área só vale na janela:** as capturas e a telemetria sem janela não a usam (a imagem do jogo continua a do slot).
+- **A conferência visual** na janela fica com o mantenedor.

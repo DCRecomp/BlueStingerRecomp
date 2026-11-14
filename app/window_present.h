@@ -42,6 +42,7 @@ struct PostSpec {
     float crtScanlines = 0.6f, crtMask = 0.3f, crtVignette = 0.3f;
     const native::render::PostShaderPackage* shader = nullptr;  // shader de mod (ja validado) ou nenhum
     std::vector<float>                       shaderParams;      // na ordem dos parametros do manifesto
+    bool areaFilter = false;  // N9.8 fase 8.3 (A1): a reducao por area da imagem do jogo (so o Vulkan)
     bool operator==(const PostSpec&) const = default;
 };
 

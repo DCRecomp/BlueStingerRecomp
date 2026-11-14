@@ -139,6 +139,32 @@ BS_TEST(graphics_presets_safe_defaults) {
 }
 
 // O que o renderizador ainda nao implementa volta ao original (o menu o mostra indisponivel), com o motivo
+// N9.8 fase 8.3 (D8-4, D8-5): o antialiasing. A reducao por area no Alto; as bordas so na escolha manual; no arquivo como
+// "original" | "area" | "bordas"; sem o recurso (a Original, o software, a apresentacao pelo SDL), o original
+BS_TEST(graphics_antialiasing_fase83) {
+    BS_CHECK(st::preset(st::Preset::Original).antialiasing == st::Antialiasing::Original);
+    BS_CHECK(st::preset(st::Preset::Balanced).antialiasing == st::Antialiasing::Original);
+    BS_CHECK(st::preset(st::Preset::High).antialiasing == st::Antialiasing::Area);
+    st::GraphicsSettings e = st::preset(st::Preset::High);
+    e.antialiasing         = st::Antialiasing::Edges;
+    BS_CHECK(st::classify(e) == st::Preset::Custom);  // as bordas sobre o Alto: personalizado
+    const std::string t = st::to_toml(e);
+    BS_CHECK(t.find("antialiasing = \"bordas\"") != std::string::npos && st::from_toml(t) == e);
+    std::string warn;
+    BS_CHECK(st::from_toml("[imagem]\nantialiasing = \"fxaa\"\n", &warn).antialiasing == st::Antialiasing::Original && !warn.empty());
+    st::Capabilities gpu;
+    gpu.vulkan = true, gpu.max_anisotropy = 16, gpu.max_height = 2160, gpu.features = st::Features::all();
+    BS_CHECK(st::clamp_to(e, gpu).antialiasing == st::Antialiasing::Edges);
+    gpu.features.antialiasing = false;  // a Original (o perfil nao libera) ou a apresentacao sem o Vulkan
+    std::vector<std::string> notes;
+    BS_CHECK(st::clamp_to(e, gpu, &notes).antialiasing == st::Antialiasing::Original && !notes.empty());
+    st::Capabilities soft;  // o software
+    BS_CHECK(st::clamp_to(e, soft).antialiasing == st::Antialiasing::Original);
+    // vale no quadro seguinte (nao recria alvos)
+    st::GraphicsSettings a = st::preset(st::Preset::High);
+    BS_CHECK(st::apply_kind(a, e) == st::Apply::Immediate);
+}
+
 BS_TEST(graphics_unimplemented_features_fall_back) {
     st::GraphicsSettings s = st::preset(st::Preset::High);
     s.bloom = true, s.window = st::WindowMode::Fullscreen;

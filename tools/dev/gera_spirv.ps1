@@ -64,6 +64,8 @@ $jobs = @(
     @("volumes_mask_comp_fc.h", "volumes.comp", "kVolumesMaskCompFc", @("-DMASK", "-DFLOAT_CONTROLS")),
     @("volumes_mask_comp_fcd.h", "volumes.comp", "kVolumesMaskCompFcd", @("-DMASK", "-DFLOAT_CONTROLS", "-DDENORM_PRESERVE")),
     @("soft_shadows_comp.h", "soft_shadows.comp", "kSoftShadowsComp", @()),
+    # N9.8 fase 8.3 (A2): o antialiasing das bordas da cena 3D
+    @("aa_comp.h", "aa.comp", "kAaComp", @()),
     # N7c: apresentacao direta e reducao da resolucao interna
     @("present_vert.h", "present.vert", "kPresentVert", @()),
     @("present_frag.h", "present.frag", "kPresentFrag", @()),

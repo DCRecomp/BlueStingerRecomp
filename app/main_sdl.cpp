@@ -114,6 +114,7 @@ struct Args {
     int      water = 0;           // --agua original|aprimorada|alta (N9.7; 0 = a do graficos.toml; 1 + qualidade; so na Remastered)
     int      filter = 0;          // --filtragem original|bilinear|anisotropica (N9.8 fase 8.1; 0 = a do graficos.toml; 1 + modo)
     int      hdTextures = 0;      // --texturas-hd desligado|ligado (N9.8 fase 8.2; 0 = a do graficos.toml; 1 desligado, 2 ligado)
+    int      aa = 0;              // --antialiasing original|area|bordas (N9.8 fase 8.3; 0 = o do graficos.toml; 1 + modo)
     int      cameraMode = -1;     // --camera original|livre (N7c; -1 = a do controles.toml, ou Original sem janela)
     int      present = -1;        // --apresentacao vulkan|sdl (N7c; -1 = Vulkan quando houver)
     bs::AudioEffectsProvider audioEffects = bs::AudioEffectsProvider::Legacy;  // --audio-efeitos nativo|legado (N6)
@@ -211,6 +212,12 @@ bool parseArgs(Args& a) {
             if (*v == L"original") a.filter = 1;
             else if (*v == L"bilinear") a.filter = 2;
             else if (*v == L"anisotropica") a.filter = 3;
+            else return false;
+        }
+        else if (s == L"--antialiasing" && (v = next())) {  // N9.8 fase 8.3: so nesta execucao (nao vai para o graficos.toml)
+            if (*v == L"original") a.aa = 1;
+            else if (*v == L"area") a.aa = 2;
+            else if (*v == L"bordas") a.aa = 3;
             else return false;
         }
         else if (s == L"--texturas-hd" && (v = next())) {  // N9.8 fase 8.2: so nesta execucao (nao vai para o graficos.toml)
@@ -888,6 +895,7 @@ public:
     void     set_water_override() { waterOverride_ = true; }  // nem --agua (N9.7)
     void     set_filter_override() { filterOverride_ = true; }  // nem --filtragem (N9.8 fase 8.1)
     void     set_hd_override() { hdOverride_ = true; }  // nem --texturas-hd (N9.8 fase 8.2)
+    void     set_aa_override() { aaOverride_ = true; }  // nem --antialiasing (N9.8 fase 8.3)
     // antes do apply(prefs, true): a --resolucao-interna e o limite 4:3 da GPU (VulkanStats::max_internal_height)
     void     set_internal_height_override(uint32_t h, uint32_t gpuMax) { heightOverride_ = h, gpuMax_ = (std::max)(480u, gpuMax); }
     // a apresentacao recuou para o SDL (sem slots): o quadro largo deixa de existir nesta execucao
@@ -946,6 +954,7 @@ public:
             // revisao Codex 20261110-011045: pela altura em uso (o limite do 16:9 pode reduzi-la abaixo de 1080)
             ps.crt = g.crt && g.vulkan && height >= st::kCrtMinHeight;
             ps.crtScanlines = g.crt_scanlines, ps.crtMask = g.crt_mask, ps.crtVignette = g.crt_vignette;
+            ps.areaFilter = g.vulkan && g.antialiasing != st::Antialiasing::Original;  // N9.8 fase 8.3 (A1)
             for (const auto& pkg : shaders_)
                 if (pkg.error.empty() && pkg.name == g.shader) {
                     ps.shader = &pkg;
@@ -983,6 +992,8 @@ public:
         // N9.8 fase 8.1: a filtragem (clamp_to ja a leva ao original sem o recurso: a Original e o software)
         if (start || g.vulkan != old.graphics.vulkan || g.filter != old.graphics.filter || g.anisotropy != old.graphics.anisotropy)
             host_.setFiltering(g.vulkan ? uint32_t(g.filter) : 0, g.anisotropy);
+        if (start || g.vulkan != old.graphics.vulkan || g.antialiasing != old.graphics.antialiasing)  // N9.8 fase 8.3 (A2)
+            host_.setEdgeAntialiasing(g.vulkan && g.antialiasing == st::Antialiasing::Edges);
         if (start || g.vulkan != old.graphics.vulkan || g.hd_textures != old.graphics.hd_textures)  // N9.8 fase 8.2
             host_.setHdTextures(g.vulkan && g.hd_textures);
         // N9.6 fase 1: a oclusao ambiente (clamp_to ja a desliga sem o recurso: a Original e o recuo para o SDL)
@@ -1015,6 +1026,10 @@ public:
         if (g.aspect != old.graphics.aspect) aspectOverride_ = false;  // N9.5 fase 5A: escolhida no menu, deixa de ser da linha de comando
         if (p.camera.mode != old.camera.mode) cameraOverride_ = false;
         if (p.subtitles.enabled != old.subtitles.enabled || p.subtitles.language != old.subtitles.language) subtitleOverride_ = false;
+        // N9.8 (revisao Codex 20261113-135423): a filtragem, as texturas HD e o antialiasing mudados no menu tambem
+        if (g.filter != old.graphics.filter || g.anisotropy != old.graphics.anisotropy) filterOverride_ = false;
+        if (g.hd_textures != old.graphics.hd_textures) hdOverride_ = false;
+        if (g.antialiasing != old.graphics.antialiasing) aaOverride_ = false;
         persist();
     }
 
@@ -1035,6 +1050,7 @@ public:
         if (shadowsOverride_) d.graphics.shadows = persisted_.graphics.shadows;  // N9.6 fase 4
         if (waterOverride_) d.graphics.water = persisted_.graphics.water;  // N9.7
         if (filterOverride_) d.graphics.filter = persisted_.graphics.filter, d.graphics.anisotropy = persisted_.graphics.anisotropy;
+        if (aaOverride_) d.graphics.antialiasing = persisted_.graphics.antialiasing;  // N9.8 fase 8.3
         // N9.8 fase 8.2: sem pacote nesta execucao (a opcao nao existe) a escolha do arquivo fica para quando ele voltar
         if (hdOverride_ || !menu_.capabilities().features.hd_textures) d.graphics.hd_textures = persisted_.graphics.hd_textures;
         // N9.5 fase 5A (D5-2, D5-4): a ultima proporcao aplicada de fato; a do arquivo na Original, com --proporcao ou
@@ -1090,7 +1106,7 @@ private:
     bool                              wideAllowed_ = false, aspectOverride_ = false, ssaoOverride_ = false,
                                       ssaoQualityOverride_ = false, lightOverride_ = false,
                                       shadowsOverride_ = false, waterOverride_ = false, filterOverride_ = false,
-                                      hdOverride_ = false;
+                                      hdOverride_ = false, aaOverride_ = false;
     uint32_t                          wide_ = 0;
     // N9.5 fase 5B: a --resolucao-interna (0 = a do graficos.toml; so nesta execucao) e a altura interna enviada ao jogo
     uint32_t                          heightOverride_ = 0, appliedHeight_ = 0, gpuMax_ = 480;
@@ -2014,6 +2030,10 @@ int mainHeadless(Args& a) {
         std::fprintf(stderr, "erro: --filtragem bilinear|anisotropica so na edicao Remastered com --render nativo\n");
         return 2;
     }
+    if (a.aa >= 2 && (!editionProfile().antialiasing || opt.render != bs::RenderProvider::Native)) {  // N9.8 fase 8.3
+        std::fprintf(stderr, "erro: --antialiasing area|bordas so na edicao Remastered com --render nativo\n");
+        return 2;
+    }
     if (a.hdTextures == 2 && (!editionProfile().hd_textures || opt.render != bs::RenderProvider::Native)) {  // N9.8 fase 8.2
         std::fprintf(stderr, "erro: --texturas-hd ligado so na edicao Remastered com --render nativo\n");
         return 2;
@@ -2066,6 +2086,7 @@ int mainHeadless(Args& a) {
     if (a.shadows == 2) host.setShadows(true);  // N9.6 fase 4 (validado acima)
     if (a.water >= 2) host.setWaterQuality(uint32_t(a.water - 1));  // N9.7 (validado acima)
     if (a.filter >= 2) host.setFiltering(uint32_t(a.filter - 1), 16);  // N9.8 fase 8.1 (validado acima)
+    if (a.aa == 3) host.setEdgeAntialiasing(true);  // N9.8 fase 8.3: sem janela so as bordas (a area e da apresentacao)
     if (a.ssao == 2)  // N9.6 fase 1 (validado acima); sem --ssao-qualidade, a media (o padrao do graficos.toml)
         host.setAmbientOcclusion(true, a.ssaoQuality >= 0 ? uint32_t(a.ssaoQuality) : uint32_t(st::SsaoQuality::Medium));
 #if BS_VALIDACAO
@@ -2338,6 +2359,7 @@ int mainWindow(Args& a) {
         caps.features.ssao = editionProfile().lighting_effects;  // N9.6 fase 1: a oclusao ambiente da Remastered
         caps.features.lighting = editionProfile().lighting_effects;  // N9.6 fase 3: a luz das fontes do catalogo
         caps.features.shadows = editionProfile().lighting_effects;   // N9.6 fase 4: as sombras aprimoradas
+        caps.features.antialiasing = editionProfile().antialiasing;  // N9.8 fase 8.3: a reducao por area e as bordas
         // N9.8 fase 8.1: a filtragem (mipmaps pela GPU, trilinear, anisotropica ate o limite do dispositivo)
         const auto vk = bs::native::render::vulkan_shared(nullptr);
         if (vk && vk->stats().mipmaps) {
@@ -2361,6 +2383,7 @@ int mainWindow(Args& a) {
     if (a.water) prefs.graphics.water = st::Water(a.water - 1);  // N9.7: so nesta execucao (clamp_to desliga sem o recurso)
     if (a.filter) prefs.graphics.filter = st::Filter(a.filter - 1);  // N9.8 fase 8.1: so nesta execucao
     if (a.hdTextures) prefs.graphics.hd_textures = a.hdTextures == 2;  // N9.8 fase 8.2: so nesta execucao
+    if (a.aa) prefs.graphics.antialiasing = st::Antialiasing(a.aa - 1);  // N9.8 fase 8.3: so nesta execucao
     // N9.5 (revisao Codex 20261105-180747; fase 5B): o limite da GPU (max_internal_height) e calculado para um alvo 4:3; o
     // quadro largo tem 854/640 da largura e o seu limite e outro (graphics_settings: max_internal_height). Antes da fase 5B
     // ele so valia com o 16:9 ja no inicio; agora vale na proporcao em uso, inclusive depois de uma troca pelo menu, e a
@@ -2425,6 +2448,7 @@ int mainWindow(Args& a) {
         if (a.water) menu.set_water_override();
         if (a.filter) menu.set_filter_override();
         if (a.hdTextures) menu.set_hd_override();
+        if (a.aa) menu.set_aa_override();
         menu.set_speakers_available(speakers);
         menu.set_internal_height_override(a.internalHeight, gpuMaxHeight);  // so nesta execucao (com o limite da proporcao em uso)
         menu.apply(prefs, true);

@@ -30,6 +30,7 @@ struct QuadPush {  // o layout de `Quad` em present.vert/present.frag
 static_assert(sizeof(QuadPush) == 36);
 
 constexpr uint32_t kOpaque  = 1;  // imagem do jogo: o alfa nao conta
+constexpr uint32_t kAreaFilter = 2;  // N9.8 fase 8.3 (A1): a reducao por area (present.frag)
 constexpr float    kFull[4] = {0, 0, 1, 1};
 
 class Presenter final : public PresenterImpl {
@@ -214,7 +215,9 @@ public:
         if (gameView) {
             const float x0 = area[0] / float(sw_) * 2 - 1, y0 = area[1] / float(sh_) * 2 - 1;
             const float x1 = (area[0] + area[2]) / float(sw_) * 2 - 1, y1 = (area[1] + area[3]) / float(sh_) * 2 - 1;
-            quad(opaque_, gameView, gameLayout, linear ? linear_ : nearest_, {x0, y0, x1, y1}, uv, kOpaque);
+            // N9.8 fase 8.3 (A1): a reducao por area (present.frag, bit 1) so com o bilinear; o shader so a usa acima de 2:1
+            quad(opaque_, gameView, gameLayout, linear ? linear_ : nearest_, {x0, y0, x1, y1}, uv,
+                 kOpaque | (linear && r.area_filter ? kAreaFilter : 0u));
         }
         for (int i = 0; i < 2; ++i)
             if (layerOn[i]) quad(blend_, layer_[i].image.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, nearest_, {-1, -1, 1, 1}, kFull, 0);

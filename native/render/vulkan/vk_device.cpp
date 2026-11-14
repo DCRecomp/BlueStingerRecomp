@@ -23,6 +23,7 @@
 #include "render/vulkan/spirv/pvr_frag_autosort_fcd_filtered.h"
 #include "render/soft/soft_raster.h"
 #include "render/vulkan/spirv/pvr_vert.h"
+#include "render/vulkan/spirv/aa_comp.h"  // N9.8 fase 8.3
 #include "render/vulkan/spirv/ao_blur_comp.h"
 #include "render/vulkan/spirv/ao_blur_surf_comp.h"
 #include "render/vulkan/spirv/ao_comp.h"
@@ -394,6 +395,7 @@ public:
     void  set_ambient_occlusion_quality(AoQuality q) override { aoQuality_.store(uint8_t(q), std::memory_order_relaxed); }
     void  set_lighting(bool on) override { lightOn_.store(on, std::memory_order_relaxed); }  // N9.6 fase 3
     void  set_shadows(bool on) override { shadowsOn_.store(on, std::memory_order_relaxed); }  // N9.6 fase 4
+    void set_edge_antialiasing(bool on) override { aaOn_.store(on, std::memory_order_relaxed); }  // N9.8 fase 8.3
     void set_filtering(uint32_t mode, uint32_t anisotropy) override {  // N9.8 fase 8.1 (a thread do render, como o submit)
         filterMode_ = std::min(mode, 2u), filterAniso_ = std::clamp(anisotropy, 1u, 16u);
     }
@@ -769,6 +771,17 @@ private:
     VkPipeline            aoPipe_ = VK_NULL_HANDLE, aoBlurPipe_ = VK_NULL_HANDLE, aoHalfPipe_ = VK_NULL_HANDLE, aoUpPipe_ = VK_NULL_HANDLE;
     bool                  aoSetValid_ = false, aoFailed_ = false;
     std::atomic<bool>     aoOn_{false};
+    // N9.8 fase 8.3 (A2): o antialiasing das bordas (aa.comp): a copia da cor (criada na primeira vez que liga, no tamanho
+    // do alvo), o conjunto e o pipeline
+    Image                 aaSrc_;
+    VkDescriptorSetLayout aaLayout_ = VK_NULL_HANDLE;
+    VkDescriptorPool      aaPool_ = VK_NULL_HANDLE;
+    VkDescriptorSet       aaSet_ = VK_NULL_HANDLE;
+    VkPipelineLayout      aaPipeLayout_ = VK_NULL_HANDLE;
+    VkShaderModule        aaMod_ = VK_NULL_HANDLE;
+    VkPipeline            aaPipe_ = VK_NULL_HANDLE;
+    bool                  aaSetValid_ = false, aaFailed_ = false;
+    std::atomic<bool>     aaOn_{false};
     std::atomic<uint8_t>  aoQuality_{uint8_t(AoQuality::High)};  // o padrao do dispositivo e o da primeira versao
     uint32_t        fragCapacity_ = 0;
     VkDescriptorSet fragSet_ = VK_NULL_HANDLE, resolveSet_ = VK_NULL_HANDLE;
@@ -1711,6 +1724,130 @@ private:
         return true;
     }
 
+    // N9.8 fase 8.3: os objetos do antialiasing das bordas nascem na primeira vez que ele liga; uma falha desliga so ele
+    bool aaObjects() {
+        if (aaPipe_) return true;
+        if (aaFailed_) return false;
+        std::string err;
+        auto fail_aa = [&](const std::string& why) {
+            aaFailed_ = true;
+            std::fprintf(stderr, "[render-vk] antialiasing das bordas desligado: %s\n", why.c_str());
+            return false;
+        };
+        VkDescriptorSetLayoutBinding b[3] = {
+            {0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+            {1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+            {2, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr}};
+        VkDescriptorSetLayoutCreateInfo li{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
+        li.bindingCount = 3, li.pBindings = b;
+        if (!ok(f_.vkCreateDescriptorSetLayout(dev_, &li, nullptr, &aaLayout_), "layout do antialiasing", &err)) return fail_aa(err);
+        ++g_live;
+        VkDescriptorPoolSize       ps[2] = {{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1}, {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 2}};
+        VkDescriptorPoolCreateInfo pi{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
+        pi.maxSets = 1, pi.poolSizeCount = 2, pi.pPoolSizes = ps;
+        if (!ok(f_.vkCreateDescriptorPool(dev_, &pi, nullptr, &aaPool_), "pool do antialiasing", &err)) return fail_aa(err);
+        ++g_live;
+        VkDescriptorSetAllocateInfo ai{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
+        ai.descriptorPool = aaPool_, ai.descriptorSetCount = 1, ai.pSetLayouts = &aaLayout_;
+        if (!ok(f_.vkAllocateDescriptorSets(dev_, &ai, &aaSet_), "conjunto do antialiasing", &err)) return fail_aa(err);
+        VkPushConstantRange        pr{VK_SHADER_STAGE_COMPUTE_BIT, 0, 24};
+        VkPipelineLayoutCreateInfo pl{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+        pl.setLayoutCount = 1, pl.pSetLayouts = &aaLayout_, pl.pushConstantRangeCount = 1, pl.pPushConstantRanges = &pr;
+        if (!ok(f_.vkCreatePipelineLayout(dev_, &pl, nullptr, &aaPipeLayout_), "layout do antialiasing", &err)) return fail_aa(err);
+        ++g_live;
+        aaMod_ = module(kAaComp, sizeof kAaComp);
+        if (!aaMod_) return fail_aa("shader do antialiasing");
+        VkComputePipelineCreateInfo cp{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
+        cp.stage  = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_COMPUTE_BIT, aaMod_, "main", nullptr};
+        cp.layout = aaPipeLayout_;
+        if (!ok(f_.vkCreateComputePipelines(dev_, VK_NULL_HANDLE, 1, &cp, nullptr, &aaPipe_), "pipeline do antialiasing", &err))
+            return fail_aa(err);
+        ++g_live;
+        return true;
+    }
+
+    // N9.8 fase 8.3 (A2, docs/N9-8-AUDITORIA.md secao 10): o antialiasing das bordas da cena 3D depois dos volumes e antes do
+    // passe B (as translucidas: o HUD, os textos, os efeitos e a agua ficam fora), so no render do framebuffer e so quando
+    // ligado (a Remastered com o Vulkan). A cor e copiada para aaSrc_; aa.comp le a copia e o bit 1 do anexo de sombra (a
+    // cena 3D) e escreve na cor so os pixels misturados. Desligado, nada muda (a copia sai).
+    bool edgeAntialiasing(const CommandList& cl) {
+        const FrameParams& fr = cl.frame;
+        if (!aaOn_.load(std::memory_order_relaxed)) {
+            if (aaSrc_.img) freeImage(aaSrc_), aaSetValid_ = false;  // o quadro anterior ja terminou (a cerca)
+            st_.aa_image_bytes = 0;
+            return true;
+        }
+        if (fr.height != 480 || fr.width < 640) return true;
+        if (!aaObjects()) return true;
+        if (!aaSrc_.img) {
+            MemScope mc(telemetry::Mem::Targets);
+            aaSrc_ = makeImage(w_, h_, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+                               VK_IMAGE_ASPECT_COLOR_BIT);
+            if (!aaSrc_.img) {
+                std::fprintf(stderr, "[render-vk] antialiasing das bordas: sem a imagem neste alvo\n");
+                return true;
+            }
+            aaSetValid_ = false;
+        }
+        st_.aa_image_bytes = uint64_t(w_) * h_ * 4;
+        if (!aaSetValid_) {
+            VkDescriptorImageInfo si{sampler_, shadow_.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+            VkDescriptorImageInfo ri{VK_NULL_HANDLE, aaSrc_.view, VK_IMAGE_LAYOUT_GENERAL};
+            VkDescriptorImageInfo ci{VK_NULL_HANDLE, color_.view, VK_IMAGE_LAYOUT_GENERAL};
+            VkWriteDescriptorSet  w[3] = {};
+            const VkDescriptorImageInfo* inf[3] = {&si, &ri, &ci};
+            for (uint32_t i = 0; i < 3; ++i) {
+                w[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, w[i].dstSet = aaSet_, w[i].dstBinding = i, w[i].descriptorCount = 1;
+                w[i].descriptorType = i == 0 ? VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER : VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+                w[i].pImageInfo     = inf[i];
+            }
+            f_.vkUpdateDescriptorSets(dev_, 3, w, 0, nullptr);
+            aaSetValid_ = true;
+        }
+        // a cor do passe A e dos computes antes (AO, luz, volumes) pronta para a copia
+        imageBarrier(color_.img, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL,
+                     VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                     VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_SHADER_WRITE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                     VK_ACCESS_TRANSFER_READ_BIT);
+        imageBarrier(aaSrc_.img, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0,
+                     VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT);
+        VkImageCopy c{};
+        c.srcSubresource = c.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+        c.extent = {w_, h_, 1};
+        f_.vkCmdCopyImage(cmd_, color_.img, VK_IMAGE_LAYOUT_GENERAL, aaSrc_.img, VK_IMAGE_LAYOUT_GENERAL, 1, &c);
+        imageBarrier(aaSrc_.img, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                     VK_ACCESS_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_READ_BIT);
+        imageBarrier(color_.img, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                     VK_ACCESS_TRANSFER_READ_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT);
+        // so o build de validacao: BS_AA_DIAGNOSTICO=1 pinta de magenta os pixels misturados
+        static const uint32_t debug = [] {
+#if BS_VALIDACAO
+            const char* v = std::getenv("BS_AA_DIAGNOSTICO");
+            return v && *v == '1' ? 1u : 0u;
+#else
+            return 0u;
+#endif
+        }();
+        struct {
+            uint32_t w, h;
+            float    threshold, thresholdMin, subpix;
+            uint32_t debug;
+        } pc{w_, h_, 0.125f, 0.0312f, 0.75f, debug};
+        static_assert(sizeof pc == 24);
+        f_.vkCmdBindPipeline(cmd_, VK_PIPELINE_BIND_POINT_COMPUTE, aaPipe_);
+        f_.vkCmdBindDescriptorSets(cmd_, VK_PIPELINE_BIND_POINT_COMPUTE, aaPipeLayout_, 0, 1, &aaSet_, 0, nullptr);
+        f_.vkCmdPushConstants(cmd_, aaPipeLayout_, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof pc, &pc);
+        f_.vkCmdDispatch(cmd_, (w_ + 7) / 8, (h_ + 7) / 8, 1);
+        // a cor escrita pelo compute: lida e escrita pelo passe B, pelas copias e pelos computes seguintes
+        imageBarrier(color_.img, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                     VK_ACCESS_SHADER_WRITE_BIT,
+                     VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                     VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_TRANSFER_READ_BIT |
+                         VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT);
+        ++st_.aa_frames;
+        return true;
+    }
+
     uint32_t downW_ = 0, downH_ = 0;  // tamanho do jogo do alvo atual
     void freeTarget() {
         freeBuffer(down_);
@@ -1723,6 +1860,7 @@ private:
         freeImage(color_), freeImage(depth_), freeImage(shadow_), freeImage(waterScene_), freeImage(aoImg_),
             freeImage(aoHalf_), freeImage(aoSurf_);
         freeImage(shadowMask_);
+        freeImage(aaSrc_), aaSetValid_ = false, st_.aa_image_bytes = 0;  // N9.8 fase 8.3
         st_.ao_image_bytes = 0, aoSurfBound_ = false, lightSetValid_ = false, vmSetValid_ = softSetValid_ = false;
         waterSceneReady_ = false, waterBound_ = false, waterFailed_ = false, st_.water_scene_bytes = 0;  // N9.7
         aoSetValid_ = false;
@@ -2303,7 +2441,7 @@ private:
         auto toB = [&]() -> bool {
             f_.vkCmdEndRenderPass(cmd_);
             diagMark(cmd_, "render: AO, luz e volumes");
-            if (!ambientOcclusion(cl) || !lighting(cl) || !volumes(cl)) return false;
+            if (!ambientOcclusion(cl) || !lighting(cl) || !volumes(cl) || !edgeAntialiasing(cl)) return false;
             diagMark(cmd_, "render: depois dos volumes");
             if (waterFrame) {
                 // N9.7: fotografia da cena opaca depois dos volumes. A agua, desenhada no passe B, pode entao refletir
@@ -2396,7 +2534,8 @@ private:
         }
         if (!inB) {  // sem translucidas: so o passe A (e os volumes)
             f_.vkCmdEndRenderPass(cmd_);
-            if (!ambientOcclusion(cl) || !lighting(cl) || !volumes(cl)) return fail("AO, luz ou volumes");
+            if (!ambientOcclusion(cl) || !lighting(cl) || !volumes(cl) || !edgeAntialiasing(cl))
+                return fail("AO, luz, volumes ou antialiasing");
         } else {
             if (!second) f_.vkCmdNextSubpass(cmd_, VK_SUBPASS_CONTENTS_INLINE);
             f_.vkCmdEndRenderPass(cmd_);  // cor em GENERAL (dependencia externa: compute e transferencia)
@@ -2594,6 +2733,12 @@ private:
             if (aoPipeLayout_) f_.vkDestroyPipelineLayout(dev_, aoPipeLayout_, nullptr), --g_live, aoPipeLayout_ = VK_NULL_HANDLE;
             if (aoPool_) f_.vkDestroyDescriptorPool(dev_, aoPool_, nullptr), --g_live, aoPool_ = VK_NULL_HANDLE;
             if (aoLayout_) f_.vkDestroyDescriptorSetLayout(dev_, aoLayout_, nullptr), --g_live, aoLayout_ = VK_NULL_HANDLE;
+            // N9.8 fase 8.3: o antialiasing das bordas
+            if (aaPipe_) f_.vkDestroyPipeline(dev_, aaPipe_, nullptr), --g_live, aaPipe_ = VK_NULL_HANDLE;
+            if (aaPipeLayout_) f_.vkDestroyPipelineLayout(dev_, aaPipeLayout_, nullptr), --g_live, aaPipeLayout_ = VK_NULL_HANDLE;
+            if (aaPool_) f_.vkDestroyDescriptorPool(dev_, aaPool_, nullptr), --g_live, aaPool_ = VK_NULL_HANDLE;
+            if (aaLayout_) f_.vkDestroyDescriptorSetLayout(dev_, aaLayout_, nullptr), --g_live, aaLayout_ = VK_NULL_HANDLE;
+            if (aaMod_) f_.vkDestroyShaderModule(dev_, aaMod_, nullptr), --g_live, aaMod_ = VK_NULL_HANDLE;
             // N9.6 fase 4: as sombras aprimoradas
             for (VkPipeline* p : {&vmPipe_, &softPipe_})
                 if (*p) f_.vkDestroyPipeline(dev_, *p, nullptr), --g_live, *p = VK_NULL_HANDLE;

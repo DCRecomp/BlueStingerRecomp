@@ -151,6 +151,7 @@ public:
         r.slot_seq = f.hiresSeq, r.slot_y0 = f.hiresY0, r.slot_rows = f.hiresRows;
         if (f.width && f.height) r.argb = f.argb.data(), r.width = f.width, r.height = f.height, r.argb_version = frameSeq;
         r.post = passes_.data(), r.post_count = uint32_t(passes_.size());
+        r.area_filter = spec_.areaFilter;  // N9.8 fase 8.3 (A1)
         // indice fixo por camada (0 legendas, 1 menu): a versao de uma nunca e confundida com a da outra
         r.layer_count = 2;
         for (size_t i = 0; i < layers.size() && i < 2; ++i) {

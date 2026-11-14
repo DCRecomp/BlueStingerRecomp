@@ -22,6 +22,7 @@ EditionProfile profile_for(Edition e) {
     p.lighting_effects     = e == Edition::Remastered;
     p.texture_filtering    = e == Edition::Remastered;
     p.hd_textures          = e == Edition::Remastered;
+    p.antialiasing         = e == Edition::Remastered;
     return p;
 }
 

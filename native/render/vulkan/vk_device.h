@@ -53,6 +53,9 @@ struct VulkanStats {
     bool        mipmaps = false;
     uint32_t    max_anisotropy = 1;
     uint64_t    filtered_draws = 0, mip_textures = 0, mip_promotions = 0;
+    // N9.8 fase 8.3 (A2): renders com o antialiasing das bordas da cena 3D aplicado (aa.comp) e a imagem de saida dele viva
+    // agora (bytes; 0 = nenhuma: sai com o antialiasing desligado)
+    uint64_t    aa_frames = 0, aa_image_bytes = 0;
     uint64_t    negative_depth_frames = 0;  // quadros com 1/w negativo (profundidade deslocada, ver frame_prep)
     // garantias do modo fiel (igualdade bit a bit com o software): ambiente FP do software nos shaders
     // (VK_KHR_shader_float_controls) e profundidade crua (VK_EXT_depth_range_unrestricted)
@@ -117,6 +120,9 @@ struct PresentRequest {
     uint32_t        width = 0, height = 0;
     uint64_t        argb_version = 0;            // muda a cada quadro novo
     bool            linear = true;               // filtragem ao ampliar (a imagem da CPU na resolucao do jogo)
+    // N9.8 fase 8.3 (A1): a reducao por area na imagem do jogo quando ela e mais de 2x maior que a area na janela (so com
+    // `linear`); ate 2:1 o bilinear de sempre
+    bool            area_filter = false;
     // pos-processamento: so na imagem do jogo, antes das camadas (texto nitido); vazio = a imagem como esta
     const PostPass* post = nullptr;
     uint32_t        post_count = 0;
@@ -165,6 +171,10 @@ public:
     // de mipmaps (as ja enviadas, de uma vez, no submit seguinte) e os desenhos bilineares vao pela variante -DFILTERED. O
     // ponto, a agua e a filtragem desligada ficam como o fiel. Sem stats().mipmaps, nada muda.
     virtual void     set_filtering(uint32_t mode, uint32_t anisotropy) = 0;
+    // N9.8 fase 8.3 (A2): o antialiasing das bordas da cena 3D no proximo submit (aa.comp, depois dos volumes e antes das
+    // translucidas; so os pixels com o bit 1 do anexo de sombra mudam). So no render do framebuffer. Desligado = a imagem de
+    // antes
+    virtual void     set_edge_antialiasing(bool on) = 0;
     // N9.6 fase 1: a qualidade do AO (alta: o alvo inteiro, 8 direcoes x 4 passos, a primeira versao e o padrao do
     // dispositivo; media: meia resolucao com a reconstrucao pela profundidade, 8 x 4; baixa: meia resolucao, 4 x 3)
     virtual void     set_ambient_occlusion_quality(AoQuality q) = 0;

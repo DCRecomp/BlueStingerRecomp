@@ -622,6 +622,18 @@ BS_TEST(render_capture_wide_frame_on_vulkan) {
         BS_CHECK(h.seq != 0 && h.width == 854 && h.height == 480);
         rc::set_wide(0);
     }
+    {  // N9.8 fase 8.3 (revisao Codex 20261113-135423): perda transitoria com o antialiasing das bordas ligado: o dispositivo
+       // novo recebe a opcao de novo e o render sai pelo Vulkan com ela
+        CaptureScene s(rc::Mode::Native);
+        tela640(s);
+        rc::set_edge_antialiasing(true);
+        rc::inject_fault(rc::Fault::DeviceOnce);
+        quad(s);
+        rc::inject_fault(rc::Fault::None);
+        BS_CHECK(rc::stats().vk_recoveries == 1 && rc::stats().vk_frames == 1 && rc::stats().vk_error.empty());
+        BS_CHECK(rc::stats().vk_aa_frames == 1);
+        rc::set_edge_antialiasing(false);
+    }
     {  // perda que se repete: software ate o fim da sessao, em 4:3 (sem slot largo), e o framebuffer continua certo
         CaptureScene s(rc::Mode::Native);
         tela640(s);

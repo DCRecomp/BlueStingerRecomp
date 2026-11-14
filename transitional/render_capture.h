@@ -131,6 +131,7 @@ struct Stats {
     // N9.8 fase 8.1: desenhos pela variante filtrada, texturas vivas com mipmaps (o maior numero visto) e as que ganharam a
     // cadeia ao ligar a filtragem
     uint64_t    vk_filtered_draws = 0, vk_mip_textures_max = 0, vk_mip_promotions = 0;
+    uint64_t    vk_aa_frames = 0;  // N9.8 fase 8.3: renders com o antialiasing das bordas
     uint64_t    vk_water_scene_bytes_max = 0;                      // N9.7: o maior tamanho da imagem da cena para a agua
     uint64_t    cmp_frames = 0, cmp_pixels = 0, cmp_diff = 0, cmp_diff8 = 0, cmp_worst_render = 0;
     uint32_t    cmp_max = 0;
@@ -176,6 +177,10 @@ uint32_t water();
 void     set_filtering(uint32_t mode, uint32_t anisotropy);
 uint32_t filtering();
 uint32_t filtering_anisotropy();
+// N9.8 fase 8.3 (A2): o antialiasing das bordas da cena 3D, so no Mode::Native com o Vulkan e no render do framebuffer
+// (VulkanDevice::set_edge_antialiasing). Vale a partir do proximo render; chamar na thread do jogo.
+void set_edge_antialiasing(bool on);
+bool edge_antialiasing();
 // N9.5 fase 1 (native/render/wide_frame.h): o quadro largo da Remastered (hor+), so no Mode::Native com o Vulkan. Com
 // largura > a do jogo, o Vulkan desenha a IR deslocada de (largura - 640) / 2 num alvo dessa largura (na escala), a
 // imagem inteira fica num slot para a apresentacao e o framebuffer emulado recebe o recorte central (o 4:3 do jogo).

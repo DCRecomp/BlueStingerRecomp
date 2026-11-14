@@ -44,14 +44,14 @@ BS_TEST(settings_menu_navigation_and_unavailable_options) {
     BS_CHECK(m.page() == bs::SettingsMenu::Page::Graphics);
     const auto g = m.view();
     // nada implementado alem do fiel: as opcoes de melhoria aparecem indisponiveis ("em breve") e nao mudam
-    for (const char* l : {"Resolu\u00e7\u00e3o interna", "Antialiasing (MSAA)", "Efeitos de imagem"}) {
+    for (const char* l : {"Resolu\u00e7\u00e3o interna", "Antialiasing", "Efeitos de imagem"}) {
         const int i = find(g, l);
         BS_CHECK(i >= 0 && !g.items[size_t(i)].enabled && g.items[size_t(i)].value.find("em breve") != std::string::npos);
     }
     BS_CHECK(find(g, "Predefini\u00e7\u00e3o") < 0);  // retirada (2026-10-23): so mostrava "Personalizado"
-    go(m, "Antialiasing (MSAA)");
+    go(m, "Antialiasing");
     m.input(MenuAction::Right, 0);
-    BS_CHECK(m.prefs().graphics.msaa == 1);
+    BS_CHECK(m.prefs().graphics.antialiasing == st::Antialiasing::Original);
     bs::Preferences out;
     BS_CHECK(!m.take_changes(out));
     m.input(MenuAction::Back, 0);
@@ -230,7 +230,7 @@ BS_TEST(settings_menu_aspect_fase5) {
 BS_TEST(settings_menu_renderer_default_and_submenus) {
     st::Capabilities caps;
     caps.vulkan = true, caps.max_msaa = 8, caps.max_anisotropy = 16, caps.max_height = 2160;
-    caps.features.scaling = caps.features.filtering = caps.features.msaa = caps.features.color = true;
+    caps.features.scaling = caps.features.filtering = caps.features.antialiasing = caps.features.color = true;
     bs::SettingsMenu m(pt(), caps, {"en-US", "pt-BR"});
     BS_CHECK(m.prefs().graphics.vulkan);
     m.open();
@@ -246,8 +246,8 @@ BS_TEST(settings_menu_renderer_default_and_submenus) {
     go(m, "Resolução interna"), m.input(MenuAction::Right, 0);  // as opcoes individuais continuam
     BS_CHECK(m.prefs().graphics.resolution == st::Resolution::P720 && !m.view().prompt.empty());
     m.input(MenuAction::Confirm, 0);  // a resolucao pede confirmacao (como a tela)
-    go(m, "Antialiasing (MSAA)"), m.input(MenuAction::Right, 0);
-    BS_CHECK(m.prefs().graphics.msaa == 2);
+    go(m, "Antialiasing"), m.input(MenuAction::Right, 0);  // N9.8 fase 8.3: a linha do MSAA virou a do antialiasing
+    BS_CHECK(m.prefs().graphics.antialiasing == st::Antialiasing::Area);
     go(m, "Renderizador"), m.input(MenuAction::Confirm, 0);
     BS_CHECK(!m.prefs().graphics.vulkan);
     go(m, "Efeitos de imagem"), m.input(MenuAction::Right, 0);  // submenu: Direita nao muda nada, Confirmar abre

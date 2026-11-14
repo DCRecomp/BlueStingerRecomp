@@ -429,6 +429,11 @@ void GameHost::setFiltering(uint32_t mode, uint32_t anisotropy) {  // N9.8 fase 
     notifyRequest();
 }
 
+void GameHost::setEdgeAntialiasing(bool on) {  // N9.8 fase 8.3
+    aaPending_.store(on ? 1 : 0);
+    notifyRequest();
+}
+
 void GameHost::setHdTextures(bool on) {  // N9.8 fase 8.2
     hdPending_.store(on ? 1 : 0);
     notifyRequest();
@@ -539,6 +544,10 @@ void GameHost::applyRequests() {
             static const char* names[] = {"original", "trilinear", "anisotropica"};
             std::fprintf(stderr, "[render] filtragem: %s%s\n", names[mode], mode == 2 ? (" " + std::to_string(an) + "x").c_str() : "");
         }
+    }
+    if (const int aa = aaPending_.exchange(-1); aa >= 0 && (aa != 0) != transitional::render_capture::edge_antialiasing()) {
+        transitional::render_capture::set_edge_antialiasing(aa != 0);  // N9.8 fase 8.3
+        std::fprintf(stderr, "[render] antialiasing das bordas: %s\n", aa ? "ligado" : "desligado");
     }
     if (const int hd = hdPending_.exchange(-1); hd >= 0 && (hd != 0 && packs_) != hdOn_) {  // N9.8 fase 8.2
         hdOn_ = hd != 0 && packs_;

@@ -38,6 +38,10 @@ enum class Water : uint8_t { Original, Enhanced, High };
 // N9.6 fase 1: a qualidade do SSAO (baixa: meia resolucao, 4 direcoes x 3 passos; media: meia resolucao, 8 x 4; alta: o
 // alvo inteiro, 8 x 4). O mesmo numero de native::render::AoQuality
 enum class SsaoQuality : uint8_t { Low, Medium, High };
+// N9.8 fase 8.3 (D8-4): Area = a reducao por area na apresentacao (A1, so acima de 2:1); Edges = a reducao e o antialiasing
+// das bordas da cena 3D (A2, um compute entre as opacas e as translucidas, o HUD e as telas 2D fora). O MSAA foi avaliado e
+// nao foi feito (`msaa` fica no arquivo, sem efeito)
+enum class Antialiasing : uint8_t { Original, Area, Edges };
 
 struct GraphicsSettings {
     // do preset
@@ -45,7 +49,8 @@ struct GraphicsSettings {
     uint32_t   scale_pct   = 100;  // escala sobre a resolucao interna (50 a 200)
     Filter     filter      = Filter::Original;
     uint32_t   anisotropy  = 16;   // 2 a 16 (so com Filter::Anisotropic)
-    uint32_t   msaa        = 1;    // 1, 2, 4, 8
+    uint32_t   msaa        = 1;    // 1, 2, 4, 8 (avaliado e nao feito: sem efeito)
+    Antialiasing antialiasing = Antialiasing::Original;  // N9.8 fase 8.3
     bool       hd_textures = false;  // substituicoes HD por conteudo, quando houver pacote (N9)
     bool       lighting    = false;  // iluminacao aprimorada (so com dados confiaveis)
     Shadows    shadows     = Shadows::Original;
@@ -87,9 +92,10 @@ struct Features {
     bool crt = false;      // N7c: filtro CRT (so com resolucao interna >= kCrtMinHeight)
     bool water = false;    // N9.7: a agua aprimorada (Remastered com o Vulkan; a Original nunca)
     bool ssao = false;     // N9.6 fase 1: oclusao ambiente (Remastered com o Vulkan e a apresentacao direta)
+    bool antialiasing = false;  // N9.8 fase 8.3: a reducao por area e as bordas (Remastered com o Vulkan e a apresentacao direta)
     static Features all() {
         Features f{true, true, true, true, true, true, true, true, true, true, true};
-        f.color = f.tonemap = f.sharpen = f.bloom = f.crt = f.water = f.ssao = true;
+        f.color = f.tonemap = f.sharpen = f.bloom = f.crt = f.water = f.ssao = f.antialiasing = true;
         return f;
     }
 };

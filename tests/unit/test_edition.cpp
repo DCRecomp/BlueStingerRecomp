@@ -66,6 +66,7 @@ BS_TEST(edition_names_and_profiles) {
     // N9.8 fase 8.1: a filtragem (mipmaps, trilinear, anisotropica) so na Remastered
     BS_CHECK(!ed::profile_for(ed::Edition::Original).texture_filtering && ed::profile_for(ed::Edition::Remastered).texture_filtering);
     BS_CHECK(!ed::profile_for(ed::Edition::Original).hd_textures && ed::profile_for(ed::Edition::Remastered).hd_textures);  // N9.8 fase 8.2
+    BS_CHECK(!ed::profile_for(ed::Edition::Original).antialiasing && ed::profile_for(ed::Edition::Remastered).antialiasing);  // N9.8 fase 8.3
 }
 
 BS_TEST(edition_read_from_install_config) {

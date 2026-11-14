@@ -195,6 +195,8 @@ public:
     void           setWaterQuality(uint32_t quality);  // N9.7: 0 original, 1 aprimorada, 2 alta
     // N9.8 fase 8.1: a filtragem das texturas (0 a do fiel, 1 trilinear, 2 anisotropica de `anisotropy`)
     void           setFiltering(uint32_t mode, uint32_t anisotropy);
+    // N9.8 fase 8.3 (A2): o antialiasing das bordas da cena 3D (so o Vulkan; a reducao por area e da apresentacao)
+    void           setEdgeAntialiasing(bool on);
     // N9.8 fase 8.2: os pacotes de texturas HD (de quem chama, vivos ate o fim do jogo; antes de start) e a escolha do menu.
     // So o Vulkan as usa (o software e a referencia, com os originais)
     void           setTexturePacks(native::render::TexturePacks* packs) { packs_ = packs; }
@@ -262,6 +264,7 @@ private:
     std::atomic<int>                               waterPending_{-1};         // N9.7: -1 = nenhum pedido
     std::atomic<int>                               filterPending_{-1};        // N9.8 fase 8.1: -1 = nenhum; modo x 32 + aniso
     std::atomic<int>                               hdPending_{-1};            // N9.8 fase 8.2: -1 = nenhum pedido, 0/1
+    std::atomic<int>                               aaPending_{-1};            // N9.8 fase 8.3: -1 = nenhum pedido, 0/1
     native::render::TexturePacks*                  packs_ = nullptr;          // N9.8 fase 8.2 (setTexturePacks)
     bool                                           hdOn_  = false;            // N9.8 fase 8.2: na thread do jogo
     std::atomic<int64_t>                           widePending_{-1};           // N9.5: -1 = nenhum pedido

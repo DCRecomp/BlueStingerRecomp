@@ -398,6 +398,90 @@ BS_TEST(render_vulkan_ambient_occlusion) {
     BS_CHECK(nr::vulkan_live_objects() == 0);
 }
 
+// N9.8 fase 8.3 (A2): o antialiasing das bordas da cena 3D. Um triangulo projetado claro (1/w variando: cena) e um triangulo
+// 2D claro (1/w constante: o HUD), os dois com bordas inclinadas sobre o fundo preto. Desligado: o fiel (igual ao software).
+// Ligado: so pixels da cena mudam, todos na regiao do triangulo projetado; cada um fica entre o menor e o maior luma da sua
+// vizinhanca 3x3 (mistura, nenhuma cor nova); o 2D fica bit a bit; o render de outro tamanho nao muda; desligado de novo
+// volta ao fiel e a imagem auxiliar sai.
+namespace {
+nr::CommandList aa_scene(uint32_t w = 640, uint32_t h = 480) {
+    nr::CommandList cl;
+    cl.frame.width = w, cl.frame.height = h, cl.frame.clear_color = 0xFF000000;
+    auto proj = [&](float x, float y, float z) {
+        nr::Vertex v;
+        v.x = float(w) / 2 + 500.f * x / z, v.y = float(h) / 2 + 500.f * y / z, v.inv_w = 1.f / z, v.color = 0xFFF0F0F0;
+        return v;
+    };
+    auto tri = [&](nr::Vertex a, nr::Vertex b, nr::Vertex c) {
+        nr::Draw d;
+        d.first_vertex = uint32_t(cl.vertices.size()), d.vertex_count = 3;
+        cl.vertices.push_back(a), cl.vertices.push_back(b), cl.vertices.push_back(c);
+        cl.draws.push_back(d);
+    };
+    tri(proj(-300, -200, 500), proj(250, -150, 700), proj(-100, 200, 600));  // a cena: bordas inclinadas
+    tri({420, 300, 0.01f, 0, 0, 0xFFF0F0F0, 0}, {620, 330, 0.01f, 0, 0, 0xFFF0F0F0, 0}, {450, 460, 0.01f, 0, 0, 0xFFF0F0F0, 0});
+    // revisao Codex 20261113-135423: um desenho da lista translucida (alfa 255, a mistura do jogo) sobre a borda esquerda do
+    // triangulo projetado: desenhado no passe B, depois das bordas, os pixels dele ficam iguais com e sem o antialiasing
+    tri({60, 120, 0.01f, 0, 0, 0xFF8040C0, 0}, {200, 140, 0.01f, 0, 0, 0xFF8040C0, 0}, {70, 330, 0.01f, 0, 0, 0xFF8040C0, 0});
+    cl.draws.back().state.list = nr::ListType::Translucent;
+    cl.draws.back().state.src = nr::Blend::SrcAlpha, cl.draws.back().state.dst = nr::Blend::InvSrcAlpha;
+    cl.draws.back().state.use_alpha = true;
+    return cl;
+}
+} // namespace
+
+BS_TEST(render_vulkan_edge_antialiasing) {
+    std::string err;
+    {
+        auto d = nr::VulkanDevice::create(&err);
+        if (!d) BS_SKIP("dispositivo Vulkan");
+        const nr::CommandList cl = aa_scene();
+        nr::soft::SoftwareDevice sw;
+        std::vector<uint32_t>    soft, off, on, again;
+        uint32_t                 w = 0, h = 0;
+        BS_CHECK(sw.submit(cl).ok() && sw.read_frame(soft, w, h).ok());
+        BS_CHECK(d->submit(cl).ok() && d->read_frame(off, w, h).ok());
+        BS_CHECK(off == soft && !off.empty());
+        const uint64_t before = d->stats().aa_frames;
+        d->set_edge_antialiasing(true);
+        BS_CHECK(d->submit(cl).ok() && d->read_frame(on, w, h).ok() && w == 640 && h == 480);
+        BS_CHECK(d->stats().aa_frames == before + 1 && d->stats().aa_image_bytes == 640ull * 480 * 4);
+        BS_CHECK(d->submit(cl).ok() && d->read_frame(again, w, h).ok() && again == on);  // determinismo
+        if (on.size() != off.size()) return;
+        auto     at = [&](const std::vector<uint32_t>& img, int x, int y) { return img[size_t(y) * 640 + x]; };
+        uint32_t changed = 0, outside = 0, newColor = 0, hud = 0;
+        for (int y = 1; y < 479; ++y)
+            for (int x = 1; x < 639; ++x) {
+                if (at(on, x, y) == at(off, x, y)) continue;
+                ++changed;
+                if (x >= 410 && y >= 290) ++hud;       // a regiao do triangulo 2D
+                else if (x < 15 || x > 600 || y < 15 || y > 420) ++outside;  // longe do triangulo projetado
+                double lo = 1e9, hi = -1;
+                for (int j = -1; j <= 1; ++j)
+                    for (int i = -1; i <= 1; ++i) lo = std::min(lo, lum(at(off, x + i, y + j))), hi = std::max(hi, lum(at(off, x + i, y + j)));
+                const double l = lum(at(on, x, y));
+                if (l < lo - 1.0 || l > hi + 1.0) ++newColor;
+            }
+        std::fprintf(stderr, "  bordas: %u pixels misturados (2D %u, fora %u, fora da vizinhanca %u)\n", changed, hud, outside, newColor);
+        BS_CHECK(changed > 100 && hud == 0 && outside == 0 && newColor == 0);
+        uint32_t cover = 0, coverDiff = 0;  // os pixels do desenho translucido (a cor dele sem o antialiasing)
+        for (size_t i = 0; i < off.size(); ++i)
+            if ((off[i] & 0xFFFFFF) == 0x8040C0) ++cover, coverDiff += on[i] != off[i];
+        std::fprintf(stderr, "  bordas: desenho translucido %u pixels, %u diferentes\n", cover, coverDiff);
+        BS_CHECK(cover > 1000 && coverDiff == 0);
+        // o render de outro tamanho (o desenho em textura) fica como o fiel
+        const nr::CommandList small = aa_scene(256, 256);
+        std::vector<uint32_t> s_soft, s_on;
+        BS_CHECK(sw.submit(small).ok() && sw.read_frame(s_soft, w, h).ok());
+        BS_CHECK(d->submit(small).ok() && d->read_frame(s_on, w, h).ok() && s_on == s_soft);
+        d->set_edge_antialiasing(false);
+        std::vector<uint32_t> back;
+        BS_CHECK(d->submit(cl).ok() && d->read_frame(back, w, h).ok() && back == off);
+        BS_CHECK(d->stats().aa_image_bytes == 0);
+    }
+    BS_CHECK(nr::vulkan_live_objects() == 0);
+}
+
 // N9.6 fase 1: as tres qualidades (alta: o alvo inteiro, a primeira versao; media e baixa: meia resolucao com a reconstrucao
 // pela profundidade). Uma parede estreita (x de -150 a 150, z de 580 a 620) na frente de um plano distante (z ~3000): a
 // quina com o chao escurece nas tres; o plano distante logo ao lado da borda da parede nao recebe o AO dela (nenhum
