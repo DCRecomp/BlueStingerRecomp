@@ -246,9 +246,12 @@ só como histórico:
 ### N9.4 — Controles e experiência de PC (E, M)
 
 - Remapeamento por ação no menu; teclado, mouse, Xbox e PlayStation, com ícones pelo dispositivo; sensibilidade e
-  zonas mortas; inversão; vibração configurável; vários monitores; janela, tela cheia e sem bordas; cursor e foco
+  zonas mortas; inversão; vários monitores; janela, tela cheia e sem bordas; cursor e foco
   corretos (regra de 2026-10-23, `app/cursor_policy.h`); escala da interface em 1080p, 1440p, 4K e ultrawide.
 - Conforto não muda velocidade, física nem combate.
+- **Vibração fora do escopo (D4, aprovada pelo mantenedor em 2026-11-15):** o `pdVib` está ligado ao executável, mas sem
+  chamadores, e nenhuma rota medida pede vibração. A Original não muda. A Remastered pode ganhar a vibração no futuro só com
+  uma prova de que o jogo a pede ou com uma nova autorização. Evidência e etapas em `docs/N9-4-A-N9-12-PLANEJAMENTO.md`.
 - **Aceitação:** cada ação remapeável e persistida; troca de dispositivo troca os ícones na hora; estado por passo
   igual ao do mapa padrão com o mesmo roteiro lógico; testes em 1 e 2 monitores.
 

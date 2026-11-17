@@ -1,0 +1,34 @@
+{
+  "$schema": "https://recomplauncher.com/schema/recomplauncher.json",
+  "format": 1,
+  "name": "Blue Stinger Recompiled",
+  "repo": "DCRecomp/BlueStingerRecomp",
+  "inputs": [
+    {
+      "id": "disc",
+      "label": "Your Blue Stinger disc image (.cdi), USA release T13001N V1.000.",
+      "role": "game",
+      "formats": [{ "type": "file", "extensions": ["cdi"] }]
+    }
+  ],
+  "prepare": {
+    "program": ["bs-builder.exe"],
+    "args": ["--disc", "{input:disc}", "--out", "{install}/jogo", "--edicao", "remastered", "--progresso-launcher"],
+    "label": "Building the native game from your disc (needs the free Build Tools for Visual Studio)",
+    "timeout": 3600,
+    "done": ["{install}/jogo/BlueStinger/BlueStinger.exe"],
+    "version": "1",
+    "options": [
+      {
+        "id": "original",
+        "label": "Original edition",
+        "note": "Faithful to the Dreamcast: 4:3 and the original look. Without it, the Remastered edition.",
+        "args": ["--edicao", "original"]
+      }
+    ]
+  },
+  "start": {
+    "program": ["jogo/BlueStinger/BlueStinger.exe"]
+  },
+  "saves": ["{documents}/DC-Recomp/Blue Stinger/saves"]
+}
