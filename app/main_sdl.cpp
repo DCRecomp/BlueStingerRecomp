@@ -1510,8 +1510,9 @@ int runWindow(bs::GameHost& host, ni::InputSystem& input, const Args& a, SDL_Win
                              frame.vblank >= winRange.first && frame.vblank <= winRange.second;
         std::vector<uint32_t> image;
         // v0.9.7-2: uma imagem da CPU mais larga que 4:3 so vem de um filme de mod (os filmes widescreen: o jogo e os filmes do
-        // disco sao 4:3) e ocupa a propria proporcao na janela, em vez de ser espremida na area 4:3
-        const bool      wideCpu = !frame.hiresSeq && bs::native::render::is_wide_slot(frame.width, frame.height);
+        // disco sao 4:3) e ocupa a propria proporcao na janela, em vez de ser espremida na area 4:3. So acima de 640 de largura:
+        // o framebuffer do jogo nunca passa de 640 (640x476 e 640x240 tambem contam como "largos" para o is_wide_slot)
+        const bool      wideCpu = !frame.hiresSeq && frame.width > 640 && bs::native::render::is_wide_slot(frame.width, frame.height);
         const SDL_FRect cpuArea = wideCpu ? bs::frame_area(ow, oh, frame.width, frame.height) : area;
         const bool presented = pres.p->present(frame, seq, wideImage ? wideArea : area, cpuArea, layers, shot || winShot ? &image : nullptr);
         ok &= presented;
