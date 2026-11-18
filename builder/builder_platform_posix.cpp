@@ -220,4 +220,10 @@ const char* cli_usage_extra() {
 
 bool env_present(const wchar_t* name) { return std::getenv(narrow(name).c_str()) != nullptr; }
 
+bool http_download(const std::string&, const std::filesystem::path&, const std::atomic<bool>*,
+                   const std::function<void(uint64_t, uint64_t)>&, std::string* err) {
+    if (err) *err = "download ainda nao disponivel no Linux";
+    return false;
+}
+
 } // namespace bs::builder::plat

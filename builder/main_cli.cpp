@@ -64,6 +64,7 @@ int main(int argc, char** argv) {
         else if (a == L"--sem-filmes") req.movies = false;
         else if (a == L"--edicao" && more && parseEdition(args[i + 1], req)) ++i;
         else if (a == L"--somente-exportar") req.exportOnly = true;
+        else if (a == L"--filmes-widescreen") req.widescreenMovies = true;  // v0.9.7-2: baixa o mod (so a Remastered)
         else if (a == L"--tipo" && more) req.buildType = narrow(args[++i]);
         else if (plat::cli_toolchain_options() && a == L"--compilador" && more) req.toolchainDir = P(args[++i]);  // so Linux
         else if (plat::cli_toolchain_options() && a == L"--compilador-sistema") req.systemToolchain = true;
@@ -71,7 +72,7 @@ int main(int argc, char** argv) {
             std::fprintf(stderr,
                          "uso: bs-builder --disc <imagem.cdi> --out <pasta> [--kit <pasta>] [--sdl3 <pasta>]\n"
                          "                [--vcvars <vcvars64.bat> | --vswhere <vswhere.exe>] [--clean] [--name <subpasta>]\n"
-                         "                [--edicao original|remastered]\n"
+                         "                [--edicao original|remastered] [--filmes-widescreen]\n"
                          "                [--projeto <pasta>]      exporta o projeto C++ editavel\n"
                          "  bs-builder --de-projeto <pasta> --out <pasta> [--disc <cdi>]   compila o projeto (mods)\n"
                          "                [--verify-vblanks N] [--sem-filmes] [--tipo Release|Debug]\n"
@@ -109,6 +110,9 @@ int main(int argc, char** argv) {
     }
     if (r.ok) {
         out("instalado: " + path_text(r.exe) + "\n");
+        if (r.widescreenDownloaded >= 0)
+            out("filmes widescreen: " + std::to_string(r.widescreenDownloaded) + " baixados, " + std::to_string(r.widescreenPresent) +
+                " ja presentes\n");
         if (!r.warning.empty()) out("aviso: " + r.warning + "\n");
         return 0;
     }

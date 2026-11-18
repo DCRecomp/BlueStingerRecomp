@@ -4337,6 +4337,27 @@ não por uma única bateria contínua** (decisão do mantenedor, 2026-11-02).
 - **Pendências:** H9; D-N8-4 no gate pós-N9; ressalva do 7.1 e D-K1(a); limite de 3 h de `n6_h` no executor, defeito a
   corrigir antes de uma futura integral, sem enfraquecer os testes. N9 e N10 não iniciados.
 
+### v0.9.7-2: o instalador baixa o mod "filmes widescreen" (2026-11-18, pedido do mantenedor)
+
+Pedido: "Publica no github uma nova versão que já faz o download dos vídeos". Worktree `tmp/wt-0972`, branch `v0.9.7-2`
+sobre a v0.9.7-1 publicada (`fbc6761`); o N9.8 (branch `n9-8`, sem a bateria 8.5) não entra.
+- **Decisão do mantenedor (2026-11-17):** os filmes widescreen do N9.13 são um mod publicado à parte no Internet Archive
+  (`bluestinger-recompiled-widescreen-movies`, 12 filmes aprovados pelo v5 em 2026-11-17, MD5 conferido depois do envio);
+  nada deles entra no git nem no ZIP (`LEGAL.md`, `docs/MODS-VIDEO.md`).
+- **Download** (`builder/filmes_widescreen.*`, `plat::http_download` pelo WinHTTP do sistema; Linux ainda não): depois da
+  troca da instalação, só na Remastered e só pedido (`Request::widescreenMovies`; `--filmes-widescreen` no `bs-builder` e no
+  `--auto`; caixa marcada por padrão no instalador). Lista `SHA256SUMS.txt` do item, cada `<NOME>.mp4` como `.part` e só no
+  lugar com o SHA-256 da lista; `mods\video\.filmes-widescreen` registra o que pusemos (um filme do jogador com o mesmo nome
+  nunca é trocado). Rede, hash ou cancelamento viram aviso, com a instalação valendo.
+- **Jogo** (`app/main_sdl.cpp`): uma imagem da CPU mais larga que 4:3 (só um filme de mod) é apresentada na própria
+  proporção (`frame_area`), em vez de espremida na área 4:3. Os filmes do disco e o jogo são 4:3 e não mudam.
+- **Testes (2026-11-18):** compilação `msvc-release` sem erros; unitários novos `widescreen_*` 5/5 (servidor falso: lista,
+  hash errado, filme do jogador, atualização, sem rede, cancelamento); `bs_unit_tests`, `bs_ui_tests` 25/0 e
+  `bs_instalador_tests` 14/0. Instalação real pelo `bs-builder --edicao remastered --filmes-widescreen` com o CDI: o jogo
+  compilou e verificou, e os 12 filmes vieram do archive.org com o SHA-256 conferido (0 falhas).
+- **Não verificado:** o filme widescreen visto dentro do jogo (a janela foi bloqueada pelo controle de permissões desta
+  sessão); `test_builder` e a revisão Codex não rodaram.
+
 ### v0.9.7-1: legendas no pacote, a Remastered no máximo e "Adicionar à Steam" (2026-11-12, pedido do mantenedor)
 
 O mantenedor testou a v0.9.7 e pediu três correções, numa worktree própria (`tmp/wt-0971`, branch `v0.9.7-1` sobre `000e222`), com a publicação como `v0.9.7-1`.

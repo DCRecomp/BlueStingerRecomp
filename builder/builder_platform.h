@@ -10,6 +10,7 @@
 #include <atomic>
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <string>
 #include <system_error>
 #include <utility>
@@ -99,5 +100,10 @@ bool                      env_present(const wchar_t* name);
 // mostra o mesmo de antes; revisao Codex 20261103-105354)
 bool        cli_toolchain_options();
 const char* cli_usage_extra();
+
+// v0.9.7-2 (filmes widescreen, filmes_widescreen.h): baixa `url` (so HTTPS, redirecionamentos HTTPS seguidos) para `dst`.
+// Windows: WinHTTP (do sistema). Linux: ainda nao (falso com a mensagem). onBytes(recebidos, total ou 0) pode ser nulo.
+bool http_download(const std::string& url, const std::filesystem::path& dst, const std::atomic<bool>* cancel,
+                   const std::function<void(uint64_t, uint64_t)>& onBytes, std::string* err);
 
 } // namespace bs::builder::plat

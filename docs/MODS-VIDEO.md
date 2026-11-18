@@ -90,3 +90,19 @@ arquivo = "opening_fanmade.mp4"
 - O pulo com START continua valendo só nos filmes em que o jogo original o permite.
 - O áudio do filme sai pelo dispositivo padrão do Windows. Se ele for perdido no meio (fone
   desligado), o filme continua sem som.
+
+## Filmes widescreen baixados pelo instalador (v0.9.7-2)
+
+Na Remastered, o instalador oferece o mod **Filmes widescreen** (marcado por padrão; `--filmes-widescreen` no
+`bs-builder` e no `BlueStinger-Recompiler --auto`). Ele baixa do Internet Archive
+(`https://archive.org/download/bluestinger-recompiled-widescreen-movies/`) a lista `SHA256SUMS.txt` e cada `<NOME>.mp4`
+listado, para `mods\video\` (a regra 2 acima).
+
+- Só HTTPS; cada arquivo é baixado como `.part` e só entra no lugar se o SHA-256 bater com a lista.
+- `mods\video\.filmes-widescreen` registra o que o instalador pôs. Um filme do jogador com o mesmo nome (outro mod) nunca
+  é trocado; uma versão antiga instalada por nós é atualizada. Reinstalar não baixa de novo o que já confere.
+- Sem rede, cancelado ou com o hash errado: a instalação continua valendo, com um aviso, e os filmes que faltarem tocam
+  o original 4:3 do disco.
+- Os arquivos baixados são do jogador (preservados ao reinstalar). Para tirar o mod, apague os `.mp4` de `mods\video`.
+- Os filmes que ainda não passaram na validação do projeto não estão na lista; eles entram no item quando forem aprovados,
+  sem um instalador novo.

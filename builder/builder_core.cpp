@@ -5,6 +5,7 @@
 #include "boot/native_boot.h"
 #include "builder_platform.h"
 #include "child_process.h"
+#include "filmes_widescreen.h"
 #include "project_export.h"
 #include "disc/cdi_image.h"
 #include "runtime_data.h"
@@ -995,6 +996,20 @@ Result build(const Request& req, const Callbacks& cb) {
             throw StepError(se ? kindOf(se->code, ErrorKind::Install) : ErrorKind::Install, e.what());
         }
         guard.p.clear();
+        // 11. v0.9.7-2: o mod "filmes widescreen" (so a Remastered; a instalacao ja esta pronta: falha ou cancelamento aqui
+        // viram aviso e os filmes que faltarem tocam no original 4:3)
+        if (req.widescreenMovies) {
+            const auto ic = native::install::read_config(res.installDir);
+            if (ic.edition == native::edition::Edition::Remastered) {
+                const widescreen::Report wr = widescreen::install(
+                    res.installDir / L"mods" / L"video", plat::http_download, cb.cancel, log,
+                    [&](double f) { progress(0.5 + 0.5 * f, "filmes widescreen"); });
+                res.widescreenDownloaded = wr.baixados, res.widescreenPresent = wr.presentes;
+                if (!wr.aviso.empty()) res.warning += (res.warning.empty() ? "" : "\n") + wr.aviso;
+            } else {
+                log("filmes widescreen: so na Remastered; ignorado na Original");
+            }
+        }
         step = Step::Done;
         log("OK: " + path_text(res.exe));
         log(verLine);

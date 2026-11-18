@@ -8,6 +8,7 @@
 #define NOMINMAX
 #include <windows.h>
 #include <shellapi.h>
+#include <winhttp.h>
 
 #include <cstdio>
 #include <cwchar>
@@ -243,5 +244,88 @@ bool        cli_toolchain_options() { return false; }
 const char* cli_usage_extra() { return ""; }
 
 bool env_present(const wchar_t* name) { return GetEnvironmentVariableW(name, nullptr, 0) > 0; }
+
+// v0.9.7-2: download HTTPS pelo WinHTTP (filmes widescreen)
+bool http_download(const std::string& url, const fs::path& dst, const std::atomic<bool>* cancel,
+                   const std::function<void(uint64_t, uint64_t)>& onBytes, std::string* err) {
+    auto fail = [&](const std::string& m) {
+        if (err) *err = m + (GetLastError() ? " (erro " + std::to_string(GetLastError()) + ")" : "");
+        return false;
+    };
+    const std::wstring wurl(url.begin(), url.end());  // so ASCII
+    wchar_t            host[256] = {}, path[2048] = {};
+    URL_COMPONENTS     uc{};
+    uc.dwStructSize     = sizeof uc;
+    uc.lpszHostName     = host;
+    uc.dwHostNameLength = DWORD(std::size(host));
+    uc.lpszUrlPath      = path;
+    uc.dwUrlPathLength  = DWORD(std::size(path));
+    SetLastError(0);
+    if (!WinHttpCrackUrl(wurl.c_str(), 0, 0, &uc)) return fail("endereco invalido");
+    if (uc.nScheme != INTERNET_SCHEME_HTTPS) return fail("so HTTPS");
+    struct H {
+        HINTERNET h = nullptr;
+        ~H() {
+            if (h) WinHttpCloseHandle(h);
+        }
+    } s, c, r;
+    s.h = WinHttpOpen(L"BlueStingerRecompiled-Installer/1", WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY, WINHTTP_NO_PROXY_NAME,
+                      WINHTTP_NO_PROXY_BYPASS, 0);
+    if (!s.h)  // Windows antes do 8.1: o proxy padrao
+        s.h = WinHttpOpen(L"BlueStingerRecompiled-Installer/1", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME,
+                          WINHTTP_NO_PROXY_BYPASS, 0);
+    if (!s.h) return fail("WinHttpOpen");
+    WinHttpSetTimeouts(s.h, 30000, 30000, 30000, 60000);
+    DWORD politica = WINHTTP_OPTION_REDIRECT_POLICY_DISALLOW_HTTPS_TO_HTTP;
+    WinHttpSetOption(s.h, WINHTTP_OPTION_REDIRECT_POLICY, &politica, sizeof politica);
+    c.h = WinHttpConnect(s.h, host, uc.nPort, 0);
+    if (!c.h) return fail("conexao");
+    r.h = WinHttpOpenRequest(c.h, L"GET", path, nullptr, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, WINHTTP_FLAG_SECURE);
+    if (!r.h) return fail("pedido");
+    if (!WinHttpSendRequest(r.h, WINHTTP_NO_ADDITIONAL_HEADERS, 0, WINHTTP_NO_REQUEST_DATA, 0, 0, 0) ||
+        !WinHttpReceiveResponse(r.h, nullptr))
+        return fail("sem resposta do servidor");
+    DWORD status = 0, tam = sizeof status;
+    WinHttpQueryHeaders(r.h, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER, WINHTTP_HEADER_NAME_BY_INDEX, &status, &tam,
+                        WINHTTP_NO_HEADER_INDEX);
+    if (status != 200) {
+        SetLastError(0);
+        return fail("HTTP " + std::to_string(status));
+    }
+    wchar_t clen[32] = {};
+    DWORD   clTam    = sizeof clen;
+    uint64_t total   = 0;
+    if (WinHttpQueryHeaders(r.h, WINHTTP_QUERY_CONTENT_LENGTH, WINHTTP_HEADER_NAME_BY_INDEX, clen, &clTam, WINHTTP_NO_HEADER_INDEX))
+        total = std::wcstoull(clen, nullptr, 10);
+    std::ofstream o(dst, std::ios::binary | std::ios::trunc);
+    if (!o) {
+        SetLastError(0);
+        return fail("nao foi possivel gravar o arquivo");
+    }
+    std::vector<char> buf(1 << 16);
+    uint64_t          got = 0;
+    for (;;) {
+        if (cancel && cancel->load()) {
+            SetLastError(0);
+            return fail("cancelado");
+        }
+        DWORD n = 0;
+        if (!WinHttpReadData(r.h, buf.data(), DWORD(buf.size()), &n)) return fail("leitura interrompida");
+        if (n == 0) break;
+        o.write(buf.data(), n);
+        if (!o) {
+            SetLastError(0);
+            return fail("disco cheio ou sem permissao");
+        }
+        got += n;
+        if (onBytes) onBytes(got, total);
+    }
+    o.close();
+    if (total && got != total) {
+        SetLastError(0);
+        return fail("download incompleto");
+    }
+    return true;
+}
 
 } // namespace bs::builder::plat

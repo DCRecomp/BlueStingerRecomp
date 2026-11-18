@@ -68,6 +68,9 @@ struct Request {
     // N9.1: arquivos a mais no pacote (origem, nome relativo no pacote), como o BlueStinger-Desinstalar do instalador. Entram
     // na lista e nos hashes do pacote; a falta de um deles e erro de instalacao.
     std::vector<std::pair<std::filesystem::path, std::wstring>> extraPackageFiles;
+    // v0.9.7-2: depois de instalar a Remastered, baixa o mod "filmes widescreen" para <instalacao>\mods\video
+    // (filmes_widescreen.h). Falso por padrao (o CLI e os testes nao usam a rede); o instalador marca por padrao.
+    bool                  widescreenMovies = false;
 };
 
 struct Callbacks {
@@ -96,6 +99,8 @@ struct Result {
     std::filesystem::path exe;         // <out>\BlueStinger\BlueStinger.exe
     std::filesystem::path logFile;     // <out>\.bs-build\builder.log
     std::filesystem::path projectDir;  // projeto exportado (vazio se nao exportou)
+    // v0.9.7-2: filmes widescreen (-1 = nao pedido ou nao se aplica): baixados agora e ja presentes
+    int                   widescreenDownloaded = -1, widescreenPresent = -1;
 };
 
 Result build(const Request& req, const Callbacks& cb);

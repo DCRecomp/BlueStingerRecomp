@@ -117,6 +117,7 @@ struct Instalador::Impl {
     bool                      edicaoEscolhida = false;
     std::wstring              cdi, pasta;
     bool                      filmes = true, portatil = false, aceitaAlheia = false, logTecnico = false;
+    bool                      filmesWidescreen = true;  // v0.9.7-2: o mod baixado na instalacao (so a Remastered), marcado por padrao
     std::string               legendas = "auto";
     Atalhos                   atalhos;
     std::optional<Instalacao> atualizando;
@@ -319,10 +320,12 @@ void Instalador::instalar() {
         // as escolhas da linha de comando; sem elas a instalacao anterior fica (contrato do N9.0)
         if (c_.portatil) req.portableSaves = *c_.portatil;
         req.edition = c_.edicao;
+        req.widescreenMovies = c_.filmesWidescreen;
     } else {
         req.portableSaves = s.portatil;
         req.edition       = s.edicao;
         req.subtitles     = s.legendas;
+        req.widescreenMovies = s.filmesWidescreen && s.edicao == Edition::Remastered;  // v0.9.7-2
     }
     std::error_code ec;
     if (!c_.desinstalador.empty() && fs::is_regular_file(c_.desinstalador, ec))
@@ -802,6 +805,12 @@ void Instalador::componentes(const Ret& r) {
         ui_.caixa(id("comp.movies"), t, d, {x2, y2, col, h}, s.filmes);
         y2 += h + 6;
     }
+    if (s.edicao == Edition::Remastered) {  // v0.9.7-2: o mod dos filmes widescreen (baixado do Internet Archive)
+        const std::wstring t = tr("comp.widescreen"), d = tr("comp.widescreen.hint");
+        const float        h = hcaixa(t, d);
+        ui_.caixa(id("comp.widescreen"), t, d, {x2, y2, col, h}, s.filmesWidescreen);
+        y2 += h + 6;
+    }
     {
         const std::wstring t = tr("portable.check"), d = tr(s.portatil ? "portable.on" : "portable.off");
         const float        h = std::max(hcaixa(t, tr("portable.on")), hcaixa(t, tr("portable.off")));
@@ -997,6 +1006,8 @@ void Instalador::conclusao(const Ret& r) {
             par(tr("fim.shortcuts", {std::to_wstring(s.atalhosFeitos.size())}), tema::kTextoSuave);
         }
         if (s.steamFeitos > 0) par(tr("fim.steam", {std::to_wstring(s.steamFeitos)}), tema::kTextoSuave);  // v0.9.7-1
+        if (res.widescreenDownloaded >= 0)  // v0.9.7-2
+            par(tr("fim.widescreen", {std::to_wstring(res.widescreenDownloaded + res.widescreenPresent)}), tema::kTextoSuave);
         if (s.pacotesCopiados) par(tr("fim.packs", {std::to_wstring(s.pacotesCopiados)}), tema::kTextoSuave);
         if (!res.warning.empty()) par(tr("fim.warn", {widen(res.warning)}), tema::kAmbar, tema::kPequeno);
         if (!s.avisoIntegracao.empty()) par(tr("fim.warn", {widen(s.avisoIntegracao)}), tema::kAmbar, tema::kPequeno);

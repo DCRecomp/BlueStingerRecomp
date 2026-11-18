@@ -25,6 +25,18 @@ repository. It grants no rights to Blue Stinger or to any data, code or assets d
   (pt-BR) vão no ZIP do Builder publicado nas releases. Eles têm só o texto das legendas, sem áudio, vídeo nem dados do
   disco; o jogo continua vindo do CDI de cada usuário. O texto continua fora do git.
 
+## Mod opcional: filmes widescreen (v0.9.7-2)
+
+**Decisão do mantenedor (2026-11-17/18):** os filmes widescreen feitos por fãs (o centro 4:3 ampliado com Real-ESRGAN e as
+laterais 16:9 geradas com Wan2.1-VACE) são um **mod**, publicado à parte no Internet Archive
+(`bluestinger-recompiled-widescreen-movies`), nunca neste repositório nem no ZIP do Builder.
+
+- O instalador da Remastered oferece baixá-los (opção marcada por padrão, que o jogador pode desmarcar; `--filmes-widescreen`
+  no `bs-builder`). Cada arquivo é conferido pelo SHA-256 da lista do item e vai para `mods\video`.
+- Sem o mod, ou se o download falhar, o jogo toca os filmes convertidos do disco do próprio jogador.
+- O jogo, o áudio e todo o resto continuam vindo da cópia de cada usuário.
+- Pedidos de remoção seguem o processo do Internet Archive; o projeto não hospeda os filmes.
+
 O `.gitignore` bloqueia esses caminhos e extensões. `config/*.toml` contém só
 metadados (ID de produto, hashes, tamanhos e endereços) e nenhum byte do jogo.
 

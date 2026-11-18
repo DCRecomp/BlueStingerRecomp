@@ -23,9 +23,12 @@ if(WIN32)
 endif()
 
 add_library(bs_builder_core STATIC builder_core.cpp builder_platform_${BS_PLAT}.cpp toolchain_${BS_PLAT}.cpp
-            child_process_${BS_PLAT}.cpp project_export.cpp resource_inspect.cpp)
+            child_process_${BS_PLAT}.cpp project_export.cpp resource_inspect.cpp filmes_widescreen.cpp)
 target_include_directories(bs_builder_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(bs_builder_core PUBLIC bs_recomp_lib bs_runtime bs_runtime_cdi bs_native PRIVATE bs_video_convert bs_native_video tomlplusplus::tomlplusplus)
+if(WIN32)
+  target_link_libraries(bs_builder_core PRIVATE winhttp)  # v0.9.7-2: download dos filmes widescreen (do sistema)
+endif()
 
 if(WIN32)
   add_executable(bs-builder main_cli.cpp builder.manifest)

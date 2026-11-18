@@ -1509,7 +1509,11 @@ int runWindow(bs::GameHost& host, ni::InputSystem& input, const Args& a, SDL_Win
         const bool winShot = winDir && *winDir && frame.vblank && frame.vblank / winEvery != lastWinShot &&
                              frame.vblank >= winRange.first && frame.vblank <= winRange.second;
         std::vector<uint32_t> image;
-        const bool presented = pres.p->present(frame, seq, wideImage ? wideArea : area, area, layers, shot || winShot ? &image : nullptr);
+        // v0.9.7-2: uma imagem da CPU mais larga que 4:3 so vem de um filme de mod (os filmes widescreen: o jogo e os filmes do
+        // disco sao 4:3) e ocupa a propria proporcao na janela, em vez de ser espremida na area 4:3
+        const bool      wideCpu = !frame.hiresSeq && bs::native::render::is_wide_slot(frame.width, frame.height);
+        const SDL_FRect cpuArea = wideCpu ? bs::frame_area(ow, oh, frame.width, frame.height) : area;
+        const bool presented = pres.p->present(frame, seq, wideImage ? wideArea : area, cpuArea, layers, shot || winShot ? &image : nullptr);
         ok &= presented;
         // N9.5 fase 5C (BS_TELEMETRIA; desligada, so a leitura de um bool): o quadro apresentado (so os que deram certo, com a
         // janela visivel: minimizada, a apresentacao nao mostra nada; revisao Codex 20261110-014042), a CPU desta thread, a linha.
