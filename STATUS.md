@@ -4357,6 +4357,12 @@ sobre a v0.9.7-1 publicada (`fbc6761`); o N9.8 (branch `n9-8`, sem a bateria 8.5
   compilou e verificou, e os 12 filmes vieram do archive.org com o SHA-256 conferido (0 falhas).
 - **Não verificado:** o filme widescreen visto dentro do jogo (a janela foi bloqueada pelo controle de permissões desta
   sessão); `test_builder` e a revisão Codex não rodaram.
+- **Correção antes da publicação (`799b753`):** a apresentação larga só para imagens acima de 640 de largura (o
+  `is_wide_slot` também aceita 640×476 e 640×240). Reinstalação com o CDI: compilou e verificou; "0 baixados, 12 já
+  presentes".
+- **Publicação (pedido do mantenedor):** `make_builder.ps1 -Versao v0.9.7-2 -LegendasLocais` em `799b753`;
+  `BlueStinger-Builder-v0.9.7-2-win-x64.zip`, 14 793 202 B, `fd912294…dc557cea`; extraído, os 2 927 arquivos são iguais
+  aos do pacote. Pre-release só Windows; a tag aponta para o commit deste registro.
 
 ### v0.9.7-1: legendas no pacote, a Remastered no máximo e "Adicionar à Steam" (2026-11-12, pedido do mantenedor)
 
