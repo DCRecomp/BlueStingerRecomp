@@ -1,6 +1,6 @@
 #include "gdrom/image_source.h"
 
-#include "disc/cdi_image.h"
+#include "disc/disc_open.h"
 
 namespace bs {
 namespace {
@@ -9,7 +9,7 @@ constexpr uint32_t kFadOffset = 150;  // FAD = LBA + 150 (2 s de pregap do lead-
 
 class ImageSource final : public DiscSource {
 public:
-    explicit ImageSource(const std::filesystem::path& path) : img_(path) {
+    explicit ImageSource(const std::filesystem::path& path) : imgp_(disc::disc_open(path)), img_(*imgp_) {
         for (const auto& t : img_.tracks()) {
             DiscTrack d;
             d.number    = uint32_t(t.number);
@@ -33,7 +33,8 @@ public:
     }
 
 private:
-    disc::CdiImage         img_;
+    std::unique_ptr<disc::DiscImage> imgp_;
+    const disc::DiscImage&           img_;
     std::vector<DiscTrack> tracks_;
 };
 

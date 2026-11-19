@@ -1,7 +1,7 @@
 Blue Stinger Recompiled: avisos de licenca, creditos e procedencia (Builder para Windows e Linux)
 
 Este pacote e o Blue Stinger Builder. Ele NAO contem o jogo: nenhum codigo, dado, filme, musica, texto ou arte do Blue
-Stinger. O jogo e gerado e compilado na maquina do usuario a partir do disco original dele (CDI NTSC-U T13001N V1.000).
+Stinger. O jogo e gerado e compilado na maquina do usuario a partir do disco original dele (NTSC-U T13001N V1.000: GDI, CUE/BIN, CHD ou CDI).
 O projeto e MIT (BlueStingerRecompiled-MIT.txt). Inventario completo: docs/N9-L-LICENCAS.md no repositorio
 https://github.com/DCRecomp/BlueStingerRecomp. Este texto descreve as obrigacoes; nao e parecer juridico.
 
@@ -13,6 +13,10 @@ https://github.com/DCRecomp/BlueStingerRecomp. Este texto descreve as obrigacoes
   Red Hat, X.Org e outros (MIT, BSD, zlib, Apache-2.0).
 - toml++ 3.4.0 (MIT), pl_mpeg (MIT), dr_flac (MIT-0), libogg 1.3.6 e libvorbis 1.3.7 (BSD-3-Clause), Vulkan-Headers
   1.3.282 (Apache-2.0).
+- Leitura das imagens CHD e dos pacotes .zip/.7z (so no Builder; o jogo gerado nao contem): libchdr (BSD-3-Clause:
+  libchdr-BSD-3.txt), com miniz 3.1.2 (MIT: miniz-MIT.txt), Zstandard 1.5.7 so decodificacao (BSD-3-Clause, escolhida da
+  licenca dupla BSD/GPL-2.0: zstd-BSD-3.txt) e o decodificador LZMA; LZMA SDK 26.02 do 7-Zip para o .7z (so os arquivos
+  em dominio publico; nenhum arquivo LGPL do 7-Zip entra).
 - Linux: FreeType 2.13.3, pela FreeType License (FTL). Credito exigido pela FTL:
   "Portions of this software are copyright (C) 2024 The FreeType Project (www.freetype.org). All rights reserved."
 - Linux: Noto Sans 2.015 (SIL Open Font License 1.1, sem nome reservado): NotoSans-OFL-1.1.txt.

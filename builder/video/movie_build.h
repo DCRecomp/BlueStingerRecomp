@@ -18,7 +18,7 @@ namespace bs::builder::video {
 extern const char* const kMovieNames[17];
 
 // Muda quando a conversao muda (forca reconverter os filmes ja preparados).
-inline constexpr const char* kConverterTag = "n5-1 h264-q100 aac-192 bt601-tv";
+inline constexpr const char* kConverterTag = "n5-1 h264-q100 aac-192 bt601-tv sem-preenchimento-2";
 
 struct MovieBuildOptions {
     ConvertOptions                                    conv;
@@ -45,7 +45,7 @@ bool clear_movies(const std::filesystem::path& outDir, std::string* err = nullpt
 // convertido nem copiado: para cada SFD, os mesmos campos que o conversor do Windows grava sobre a fonte (quadros, fps,
 // tamanho, amostras e os fins arredondados de sfd_source.h) e o SHA-256 da fonte, sem `arquivo` (o catalogo usa o SFD
 // pelo nome original). Reaproveita a entrada anterior com a mesma fonte e a mesma marca.
-inline constexpr const char* kDiscManifestTag = "n9l-sfd-direto-1";
+inline constexpr const char* kDiscManifestTag = "n9l-sfd-direto-3";  // 2: sem o preenchimento de audio do disco original (I5)
 bool build_disc_manifest(const std::filesystem::path& bsdata, const std::filesystem::path& outDir, const MovieBuildOptions& o,
                          MovieBuildResult& r, std::string* err = nullptr);
 

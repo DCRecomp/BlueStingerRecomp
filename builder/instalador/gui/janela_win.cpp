@@ -154,7 +154,7 @@ private:
         d->SetTitle(titulo.c_str());
         const std::wstring cdi = ui::tr("dlg.cdi_filter"), todos = ui::tr("dlg.all_files");
         if (!pasta) {
-            const COMDLG_FILTERSPEC spec[] = {{cdi.c_str(), L"*.cdi"}, {todos.c_str(), L"*.*"}};
+            const COMDLG_FILTERSPEC spec[] = {{cdi.c_str(), L"*.gdi;*.cue;*.chd;*.cdi;*.zip;*.7z"}, {todos.c_str(), L"*.*"}};
             d->SetFileTypes(2, spec);
         }
         std::error_code ec;

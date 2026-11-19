@@ -23,7 +23,7 @@ public:
     static constexpr uint32_t kV35 = 0x80000006;
 
 protected:
-    void readRaw(uint64_t offset, void* dst, size_t n) const override { file_->read(offset, dst, n); }
+    void readRaw(const Track&, uint64_t offset, void* dst, size_t n) const override { file_->read(offset, dst, n); }
 
 private:
     std::unique_ptr<InputFile> file_;

@@ -7,7 +7,7 @@
 
 #include "boot/disc_boot.h"
 #include "boot/native_boot.h"
-#include "disc/cdi_image.h"
+#include "disc/disc_open.h"
 #include "gdrom/data_source.h"
 #include "gdrom/image_source.h"
 #include "runtime_data.h"
@@ -28,11 +28,17 @@ static int run() {
     }
     const fs::path dir = fs::temp_directory_path() / "bs runtime data teste ç";
     std::error_code ec;
+    bool            gd      = false;
+    uint32_t        bootLba = 0;
     fs::remove_all(dir, ec);
     {
-        disc::CdiImage img(path);
-        const auto     r = disc::prepare_runtime_data(img, dir);
-        BS_CHECK(r.versionId == "bluestinger_us_v1000" && r.files == 2092);
+        const auto imgp = disc::disc_open(path);
+        const auto& img = *imgp;
+        gd              = img.bootTrack().start_lba == 45000;
+        bootLba         = img.bootTrack().start_lba;
+        const auto r    = disc::prepare_runtime_data(img, dir);
+        // CDI do projeto: 2092 arquivos; disco original (GDI/CUE): 2095 (+ ABSTRACT, BIBLIOGR e COPYRIGH.TXT)
+        BS_CHECK(r.versionId == (gd ? "bluestinger_us_v1000_gd" : "bluestinger_us_v1000") && r.files == (gd ? 2095u : 2092u));
         BS_CHECK(disc::verify_runtime_data(img, dir).empty());  // todos os setores de dados
         BS_CHECK(disc::check_runtime_files(dir).empty());
     }
@@ -48,7 +54,7 @@ static int run() {
             BS_CHECK(cdi->tracks()[i].start_fad == dat->tracks()[i].start_fad &&
                      cdi->tracks()[i].length == dat->tracks()[i].length && cdi->tracks()[i].ctrl == dat->tracks()[i].ctrl);
         uint8_t x[2048], y[2048];
-        for (uint32_t fad : {150u + 0u, 150u + 25u, 150u + 239355u, 150u + 239371u, 150u + 300000u, 150u + 358702u}) {
+        for (uint32_t fad : {150u + 0u, 150u + 25u, 150u + bootLba, 150u + bootLba + 16u, 150u + 300000u, 150u + 358702u, 150u + 548035u}) {
             const bool okx = cdi->read(fad, x), oky = dat->read(fad, y);
             BS_CHECK(okx == oky && (!okx || std::memcmp(x, y, 2048) == 0));
         }

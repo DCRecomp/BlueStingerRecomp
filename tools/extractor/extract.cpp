@@ -1,10 +1,9 @@
 #include "extract.h"
 
-#include "disc/cdi_image.h"
+#include "boot_identity.h"
+#include "disc/disc_open.h"
 #include "disc/ip_bin.h"
 #include "disc/iso9660.h"
-#include "disc/scramble.h"
-#include "known_versions.h"
 #include "util/hash.h"
 
 #include <algorithm>
@@ -22,12 +21,7 @@ namespace {
 
 constexpr const char* kToolVersion = "bs-extract 0.1";
 
-std::unique_ptr<disc::DiscImage> openImage(const fs::path& p) {
-    std::string ext = p.extension().string();
-    std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return char(std::tolower(c)); });
-    if (ext == ".cdi") return std::make_unique<disc::CdiImage>(p);
-    throw DiscError("formato '" + ext + "' ainda nao suportado (so .cdi; ver ARCHITECTURE.md D3)");
-}
+std::unique_ptr<disc::DiscImage> openImage(const fs::path& p, const fs::path& confine) { return disc::disc_open(p, confine); }
 
 std::string json(const std::string& s) {
     std::string o = "\"";
@@ -47,25 +41,6 @@ const char* modeName(disc::TrackMode m) {
     }
 }
 
-struct BootCheck {
-    std::vector<uint8_t> data;           // conteudo final (desembaralhado se necessario)
-    std::string          sha256;
-    const KnownVersion*  version   = nullptr;
-    bool                 scrambled = false;
-};
-
-BootCheck checkBoot(std::vector<uint8_t> raw) {
-    BootCheck r;
-    r.sha256 = util::sha256Hex(raw.data(), raw.size());
-    for (const auto& v : kKnownVersions)
-        if (r.sha256 == v.boot_sha256) { r.version = &v; r.data = std::move(raw); return r; }
-    auto        plain = disc::descramble(raw);
-    std::string ph    = util::sha256Hex(plain.data(), plain.size());
-    for (const auto& v : kKnownVersions)
-        if (ph == v.boot_sha256) { r.version = &v; r.scrambled = true; r.sha256 = ph; r.data = std::move(plain); return r; }
-    r.data = std::move(raw);  // desconhecido: mantem como esta
-    return r;
-}
 
 void writeFile(const fs::path& p, const uint8_t* d, size_t n) {
     fs::create_directories(p.parent_path());
@@ -77,7 +52,7 @@ void writeFile(const fs::path& p, const uint8_t* d, size_t n) {
 } // namespace
 
 int runExtract(const ExtractOptions& opt, std::ostream& log) {
-    auto        img  = openImage(opt.image);
+    auto        img  = openImage(opt.image, opt.confine);
     const auto& boot = img->bootTrack();
 
     log << "Imagem: " << opt.image.string() << " (" << img->formatName() << ")\n";
@@ -98,15 +73,19 @@ int runExtract(const ExtractOptions& opt, std::ostream& log) {
     const auto*   bootEntry = iso.find(ip.boot_file);
     if (!bootEntry || bootEntry->is_dir) throw DiscError("executavel de boot " + ip.boot_file + " nao encontrado no ISO9660");
 
-    BootCheck bc = checkBoot(iso.readAll(*bootEntry));
+    BootIdentity bc = identify_boot(iso.readAll(*bootEntry), boot.start_lba);
     log << ip.boot_file << ": " << bc.data.size() << " bytes, SHA-256 " << bc.sha256
         << (bc.scrambled ? " (desembaralhado)" : "") << "\n";
-    if (bc.version) log << "Versao reconhecida: " << bc.version->id << "\n";
-    else log << "AVISO: hash do executavel nao corresponde a nenhuma versao suportada.\n";
+    if (bc.version)
+        log << "Versao reconhecida: " << bc.version->id
+            << (bc.variant ? " (FAD " + std::to_string(bc.fad.lowerBound) + "/" + std::to_string(bc.fad.pvdFad) + ")" : "")
+            << "\n";
+    else log << "AVISO: " << boot_rejection_text(ip.product, ip.version, bc) << "\n";
 
     if (opt.info_only) return 0;
     if (!bc.version && !opt.force)
-        throw DiscError("versao nao suportada (use --force para extrair mesmo assim; o resultado nao sera validado)");
+        throw DiscError(boot_rejection_text(ip.product, ip.version, bc) +
+                        " (use --force para extrair mesmo assim; o resultado nao sera validado)");
 
     fs::create_directories(opt.out);
     writeFile(opt.out / "IP.BIN", ipbin.data(), ipbin.size());

@@ -4337,6 +4337,96 @@ não por uma única bateria contínua** (decisão do mantenedor, 2026-11-02).
 - **Pendências:** H9; D-N8-4 no gate pós-N9; ressalva do 7.1 e D-K1(a); limite de 3 h de `n6_h` no executor, defeito a
   corrigir antes de uma futura integral, sem enfraquecer os testes. N9 e N10 não iniciados.
 
+### v0.9.7-3: imagens GDI, CUE/BIN, CHD, .zip e .7z (2026-11-19, pedido do mantenedor)
+
+**Origem:** as issues #1 a #3 e duas avaliações na loja: "nenhum CDI funciona". Plano e achados em
+`docs/IMAGENS-DISCO-PLANO.md`. Worktree `tmp/wt-img`, branch `imagens-disco`, sobre a `3977be3` (v0.9.7-2).
+
+**Regra do mantenedor:** a publicação só sai com tudo corrigido. O PAL fica para depois (D4).
+
+- **Causa (medida nas imagens do mantenedor):** o CDI do projeto é uma conversão modificada:
+  - **executável:** 3 literais de FAD reescritos, 7 bytes;
+  - **IP.BIN:** trocado por outro;
+  - **filmes:** o áudio foi cortado no fim do vídeo;
+  - **identidade:** como a versão era o hash exato do executável, nenhuma outra imagem passava.
+- **O mesmo código:** o C++ gerado a partir do executável do GD original é idêntico byte a byte ao do CDI. São 14 arquivos e
+  a análise, por `bs-recomp --game-data`.
+- **Mudanças:**
+  - **leitores** GDI e CUE (`disc/track_files_image`) e CHD (`disc/chd_image`, libchdr BSD-3);
+  - **pacotes** `.zip` e `.7z` (`disc/archive`, miniz MIT e LZMA SDK em domínio público). Ficam só nas ferramentas
+    (`BS_BUILD_TOOLS`), e o mapa do jogo não tem nenhum deles;
+  - **identificação** num lugar só (`boot_identity`): o hash exato e a variante com os 3 literais mascarados e coerentes
+    com a faixa de boot (D2). A recusa mostra o tamanho e o SHA-256;
+  - **boot nativo:** zera a pilha do IP.BIN, `0x8C00F3B0`–`0x8C00FFFF`;
+  - **conversão dos filmes:** corta o preenchimento de áudio do disco original. São rótulos novos do conversor;
+  - **Builder:** extrai os pacotes para `.bs-build\imagem`, apagada no fim;
+  - **textos:** instalador e Developer (filtros, textos pt-BR/en-US e o "2,5 GB ou mais" dos filmes widescreen), LEIA-ME
+    e README;
+  - **licenças:** `N9-L-LICENCAS.md` e `AVISOS.txt`.
+- **Testes (2026-11-19):**
+  - **unitários:**
+    - `bs_unit_tests` 372/0, com `gdi_*`, `cue_*`, `chd_*`, `archive_*` e `boot_identity_*`;
+    - `bs_video_tests` 51/0 (`audio_sem_preenchimento_do_disco_original`), `bs_ui_tests` 25/0, `bs_instalador_tests` 14/0;
+  - **`real_disc`** (a variante sintética aceita e as incoerentes recusadas):
+    - aprovado com o CDI, o CUE do Redump e o CHD;
+    - a imagem PAL foi recusada com o hash;
+  - **`runtime_data`** (todos os setores conferidos): aprovado com o CUE, o CDI e o CHD;
+  - **`bs-extract`:**
+    - com o `.7z` (Redump): extraiu em 29 s, reconheceu o disco original e apagou a pasta;
+    - com o `.zip` (PAL): extraiu e recusou;
+  - **instalação completa pelo Builder com o CUE:** compilou e verificou. O `test_gameplay` passou: NEW GAME, o filme,
+    37 860 VBlanks, a área 1 com o HUD e o movimento;
+  - **`check_product_map`:** o produto não tem leitor de imagem.
+- **Revisão Codex (`reviews/codex-20261119-003733.md`):** 6 achados, todos aceitos e corrigidos depois de conferidos:
+  - **ALTA, CHD:** o `PAD` dos metadados de GD-ROM são quadros finais que não são dados. Agora sai do comprimento e conta
+    na posição, como no Flycast. As faixas 1 e 2 do CHD têm 8 683 e 1 051 setores, como no GDI e no CUE. Teste com os
+    metadados reais.
+  - **ALTA, cache do Builder:** as variantes de CDI dividem o id. A marca dos dados leva o SHA-256 do executável da
+    variante.
+  - **ALTA, folha de um pacote:** uma folha GDI/CUE dentro de um pacote poderia citar faixas fora da pasta extraída.
+    Agora fica confinada (`disc_open(..., confine)`). Teste com um CUE apontando para `../` e para um caminho absoluto.
+  - **MÉDIA, limites dos pacotes:** 256 entradas e 8 GB. O cancelamento do `.7z` vale entre um arquivo e outro, porque um
+    bloco sólido é decodificado inteiro; isso ficou documentado em `archive.h`.
+  - **MÉDIA, FADs dos hashes exatos:** os literais de FAD também são conferidos contra a faixa de boot. O executável do
+    GD num layout de CDI é recusado (`real_disc`).
+  - **MÉDIA, áudio além do corte:** o conversor intercalava o áudio em blocos arredondados para cima e podia passar do
+    corte. Agora intercala pelo tempo exato de cada quadro; para os filmes de 30 fps do disco, a divisão é a mesma de antes.
+  - **Depois das correções:** `bs_unit_tests` 372/0, `bs_video_tests` 51/0, `bs_ui_tests` 25/0, `bs_instalador_tests`
+    14/0. O `real_disc` passou com o CDI, o CUE e o CHD.
+- **Bateria final pelo Builder corrigido (2026-11-19):**
+  - **CHD:** instalou, e o `test_gameplay` passou 4/4;
+  - **`.7z`:** instalou, e a pasta extraída foi apagada;
+  - **CDI do projeto (regressão):** instalou, e o `test_gameplay` passou 4/4. Nos 17 filmes do CDI, os quadros, os fins e
+    as amostras são idênticos aos da conversão da v0.9.7-2: o corte do I5 não mexe neles;
+  - **o mesmo jogo pelos três caminhos:** o `disc.manifest` dos dados preparados é idêntico, byte a byte, no CUE, no CHD
+    e no `.7z`.
+- **Achado da bateria, corrigido:**
+  - o CHD reaproveitou os dados de uma tentativa interrompida, feita antes da correção do `PAD`. A marca do cache é só o
+    formato mais o id;
+  - agora, com a imagem em mãos, o Builder só reaproveita os dados se a tabela de faixas do manifesto for a da imagem;
+    senão, prepara de novo;
+  - reinstalado, o manifesto do CHD ficou idêntico ao do CUE.
+- **Ajuste final:** o conversor intercala o áudio pela mesma conta do corte (`samples_until_100ns`): no último quadro,
+  exatamente o fim do vídeo, igual ao manifesto do Linux (sem a sobra de 1 amostra que o arredondamento permitia).
+- **Testes do pacote** (`make_builder -NoBuild -LegendasLocais`, antes do ajuste final, que só mexe na conta das amostras):
+  - **`test_builder`** com o CDI: 24 casos, 0 falhas;
+  - **`test_instalador`:** 28 casos, 0 falhas;
+  - **`BlueStinger-Recompiler --auto`** do pacote com o `.7z`: instalou, e a pasta extraída foi apagada.
+- **Outros testes:**
+  - **`ctest`** completo com o CDI real: 20/20. Duas suítes pulam fora daqui: `movie_manifest` (pede `BS_DATA_DIR`) e
+    `n0_fechamento` (pede o jogo compilado);
+  - **`movie_manifest`** com `BS_DATA_DIR` nas instalações do CDI, do CUE e do CHD: os 16 filmes, nos três casos, batem
+    com o manifesto do Windows;
+  - **depois do ajuste final:** `bs_unit_tests` 372/0 e `bs_video_tests` 51/0.
+- **Não verificado:**
+  - **o oráculo do fim dos filmes no GD:**
+    - o `n5_oraculo` entra no jogo pelo salto do IP.BIN do CDI (`BOOT_JUMP`);
+    - o IP.BIN original da Sega se copia para a RAM alta e salta de lá. Duas tentativas pelo GDB do Flycast falharam:
+      parar em `8C010000` e seguir os `jmp` do IP.BIN. A ferramenta voltou ao estado original;
+    - o corte continua justificado sem o oráculo: o NEWGAME do original teria 7,5 min de lixo saturado depois do vídeo,
+      o CDI do projeto cortou o áudio exatamente no fim do vídeo, e os filmes do CDI não mudam;
+  - **o jogo visto na janela** a partir do GD: as provas são headless (`test_gameplay`).
+
 ### v0.9.7-2: o instalador baixa o mod "filmes widescreen" (2026-11-18, pedido do mantenedor)
 
 Pedido: "Publica no github uma nova versão que já faz o download dos vídeos". Worktree `tmp/wt-0972`, branch `v0.9.7-2`

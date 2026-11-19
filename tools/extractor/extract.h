@@ -9,6 +9,7 @@ struct ExtractOptions {
     std::filesystem::path out;
     bool                  force     = false;  // aceita 1ST_READ.BIN com hash desconhecido
     bool                  info_only = false;  // so mostra faixas, IP.BIN e hash; nao grava nada
+    std::filesystem::path confine;            // pacote extraido: as faixas de GDI/CUE nao saem desta pasta
 };
 
 // Retorna 0 em sucesso. Mensagens de progresso vao para `log`; erros lancam excecao.

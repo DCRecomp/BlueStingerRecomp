@@ -103,7 +103,7 @@ public:
     std::vector<uint8_t> data;
 
 protected:
-    void readRaw(uint64_t off, void* dst, size_t n) const override { std::memcpy(dst, &data[off], n); }
+    void readRaw(const disc::Track&, uint64_t off, void* dst, size_t n) const override { std::memcpy(dst, &data[off], n); }
 };
 
 void le32(uint8_t* p, uint32_t v) { for (int i = 0; i < 4; ++i) p[i] = uint8_t(v >> (8 * i)); }

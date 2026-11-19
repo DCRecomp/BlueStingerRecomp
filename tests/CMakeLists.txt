@@ -4,6 +4,8 @@ add_executable(bs_unit_tests
   unit/test_call_chain.cpp
   unit/test_hud_scope.cpp
   unit/test_disc.cpp
+  unit/test_disc_formats.cpp
+  unit/test_disc_chd.cpp
   unit/test_decoder.cpp
   unit/test_ops.cpp
   unit/test_analysis.cpp
@@ -45,7 +47,7 @@ add_executable(bs_unit_tests
   unit/test_text_geometry.cpp   # N9-L (L4): as mesmas regras de texto no Windows e no Linux
   unit/test_mods_case.cpp       # N9-L (L4, A11): mods com nomes em outra caixa
 )
-target_link_libraries(bs_unit_tests PRIVATE bs_translator bs_runtime bs_disc bs_app_core bs_hwscan bs_transitional)
+target_link_libraries(bs_unit_tests PRIVATE bs_translator bs_runtime bs_disc bs_app_core bs_hwscan bs_transitional miniz)
 target_compile_definitions(bs_unit_tests PRIVATE BS_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
 if(WIN32)
   enable_language(ASM_MASM)

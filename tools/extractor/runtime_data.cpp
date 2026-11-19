@@ -1,4 +1,5 @@
 #include "runtime_data.h"
+#include "boot_identity.h"
 
 #include "disc/disc_image.h"
 #include "disc/ip_bin.h"
@@ -324,18 +325,12 @@ PrepareResult prepare_runtime_data(const DiscImage& img, const fs::path& dir, co
     if (!bootEntry || bootEntry->is_dir) throw RuntimeDataError("executavel de boot " + ip.boot_file + " nao encontrado");
 
     // versao: hash do executavel (como no disco ou desembaralhado)
-    const std::vector<uint8_t> raw = iso.readAll(*bootEntry);
-    std::string                bootSha;
-    bool                       scrambled = false;
-    for (int pass = 0; pass < 2 && res.versionId.empty(); ++pass) {
-        const std::vector<uint8_t> d = pass ? descramble(raw) : raw;
-        const std::string          h = util::sha256Hex(d.data(), d.size());
-        for (const auto& v : kKnownVersions)
-            if (h == v.boot_sha256) res.versionId = v.id, bootSha = h, scrambled = pass == 1;
-    }
-    if (res.versionId.empty())
-        throw RuntimeDataError("versao nao suportada: " + ip.product + " " + ip.version +
-                               " (o executavel de boot nao tem o hash da versao recompilada)");
+    // (hash exato ou variante com os literais de FAD coerentes com esta faixa de boot: boot_identity.h)
+    const BootIdentity id = identify_boot(iso.readAll(*bootEntry), boot.start_lba);
+    if (!id.version) throw RuntimeDataError(boot_rejection_text(ip.product, ip.version, id));
+    res.versionId               = id.version->id;
+    const std::string bootSha   = id.sha256;
+    const bool        scrambled = id.scrambled;
 
     std::error_code ec;
     fs::create_directories(dir / "disc", ec);

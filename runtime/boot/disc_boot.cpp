@@ -1,11 +1,9 @@
 #include "boot/disc_boot.h"
 
-#include "disc/cdi_image.h"
+#include "boot_identity.h"
+#include "disc/disc_open.h"
 #include "disc/ip_bin.h"
 #include "disc/iso9660.h"
-#include "disc/scramble.h"
-#include "known_versions.h"
-#include "util/hash.h"
 
 #include <stdexcept>
 #include <string>
@@ -13,11 +11,12 @@
 
 namespace bs {
 
-BootFiles boot_read_disc(const std::filesystem::path& image) {
+BootFiles boot_read_disc(const std::filesystem::path& image, const std::filesystem::path& confine) {
     BootFiles f;
     try {
-        disc::CdiImage img(image);
-        const auto&    boot = img.bootTrack();
+        const auto  imgp = disc::disc_open(image, confine);
+        const auto& img  = *imgp;
+        const auto& boot = img.bootTrack();
         f.ipBin.resize(disc::kIpBinSize);
         for (uint32_t i = 0; i < disc::kIpBinSize / disc::kUserDataSize; ++i)
             img.readUserData(boot.start_lba + i, f.ipBin.data() + i * disc::kUserDataSize);
@@ -26,20 +25,10 @@ BootFiles boot_read_disc(const std::filesystem::path& image) {
         disc::Iso9660 iso(img, boot.start_lba + 16);
         const auto*   e = iso.find(ip.boot_file);
         if (!e || e->is_dir) throw std::runtime_error("executavel de boot " + ip.boot_file + " nao encontrado");
-        std::vector<uint8_t> raw = iso.readAll(*e);
-        // a versao suportada e identificada pelo hash do executavel desembaralhado
-        for (int pass = 0; pass < 2 && f.versionId.empty(); ++pass) {
-            std::vector<uint8_t> data = pass ? disc::descramble(raw) : raw;
-            const std::string    h    = util::sha256Hex(data.data(), data.size());
-            for (const auto& v : kKnownVersions)
-                if (h == v.boot_sha256) {
-                    f.versionId = v.id;
-                    f.firstRead = std::move(data);
-                }
-        }
-        if (f.versionId.empty())
-            throw std::runtime_error("versao nao suportada: " + ip.product + " " + ip.version +
-                                     " (o executavel de boot nao tem o hash da versao recompilada)");
+        BootIdentity id = identify_boot(iso.readAll(*e), boot.start_lba);
+        if (!id.version) throw std::runtime_error(boot_rejection_text(ip.product, ip.version, id));
+        f.versionId = id.version->id;
+        f.firstRead = std::move(id.data);
     } catch (const disc::DiscError& err) {
         throw std::runtime_error(std::string("imagem de disco: ") + err.what());
     }

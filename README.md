@@ -63,7 +63,7 @@ cmake --build --preset msvc-release               # compila o jogo
 
 ## Extrair o disco
 
-Só imagens **CDI** por enquanto.
+Imagens aceitas: o disco original em **GDI**, **CUE/BIN** (como o Redump) ou **CHD**, e **CDI**, também dentro de **.zip** ou **.7z**. A versão é identificada pelo executável de boot; um CDI que só mude as posições do disco gravadas nele também vale ([docs/IMAGENS-DISCO-PLANO.md](docs/IMAGENS-DISCO-PLANO.md)).
 
 ```
 bs-extract --info "ISO/Blue Stinger.cdi"            # mostra faixas, IP.BIN e hash sem gravar nada
@@ -92,7 +92,7 @@ bs-disasm game-data/1ST_READ.BIN 0x8C010000 0x8C010000 64   # base, início, qua
 bs-disasm --stats game-data/1ST_READ.BIN
 ```
 
-O teste `real_disc` usa a sua imagem se `BS_DISC_IMAGE` apontar para o `.cdi`.
+O teste `real_disc` usa a sua imagem se `BS_DISC_IMAGE` apontar para o `.cdi`, o `.gdi`, o `.cue` ou o `.chd`.
 Sem essa variável, ele é ignorado.
 
 ## Estrutura

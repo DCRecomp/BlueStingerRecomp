@@ -187,7 +187,7 @@ std::wstring browse(bool folder, const std::wstring& current, const char* titleK
     dlg->SetOptions(opts | FOS_FORCEFILESYSTEM | (folder ? FOS_PICKFOLDERS : FOS_FILEMUSTEXIST));
     const std::wstring cdi = tr("dlg.cdi_filter"), all = tr("dlg.all_files");
     if (!folder) {
-        const COMDLG_FILTERSPEC spec[] = {{cdi.c_str(), L"*.cdi"}, {all.c_str(), L"*.*"}};
+        const COMDLG_FILTERSPEC spec[] = {{cdi.c_str(), L"*.gdi;*.cue;*.chd;*.cdi;*.zip;*.7z"}, {all.c_str(), L"*.*"}};
         dlg->SetFileTypes(2, spec);
     }
     dlg->SetTitle(tr(titleKey).c_str());

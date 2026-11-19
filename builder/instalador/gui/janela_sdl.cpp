@@ -134,7 +134,7 @@ public:
         acordar();
     }
     void escolher_arquivo(const std::wstring& t, const fs::path& ini, std::function<void(fs::path)> cb) override {
-        static const SDL_DialogFileFilter filtros[] = {{"CDI", "cdi;CDI"}, {"*", "*"}};
+        static const SDL_DialogFileFilter filtros[] = {{"GDI, CUE, CHD, CDI, ZIP, 7Z", "gdi;GDI;cue;CUE;chd;CHD;cdi;CDI;zip;ZIP;7z;7Z"}, {"*", "*"}};
         auto* pedido = new Pedido{this, std::move(cb)};
         (void)t;
         const std::string inicial = ini.empty() ? std::string() : path_text(ini);

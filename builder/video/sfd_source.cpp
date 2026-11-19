@@ -34,9 +34,10 @@ bool analyze_sfd(const fs::path& sfd, SfdSource& r, std::string* err) {
     r.width = f->width, r.height = f->height, r.fps = plm_video_get_framerate(m.v);
     if (!(r.fps > 0)) return fail("MPEG-1 sem taxa de quadros");
     for (; f; f = m.next()) ++r.frames;
-    r.sampleRate = a.sampleRate, r.channels = a.channels, r.audioSamples = a.totalSamples;
-    r.videoEnd100ns = video_end_100ns(r.frames, r.fps);
-    r.audioEnd100ns = audio_end_100ns(a.totalSamples, a.sampleRate);
+    r.videoEnd100ns     = video_end_100ns(r.frames, r.fps);
+    const uint32_t keep = audio_samples_without_padding(pcm, a.channels, a.sampleRate, r.videoEnd100ns, a.totalSamples);
+    r.sampleRate = a.sampleRate, r.channels = a.channels, r.audioSamples = keep;  // I5: sem o preenchimento do disco original
+    r.audioEnd100ns = audio_end_100ns(keep, a.sampleRate);
     return true;
 }
 

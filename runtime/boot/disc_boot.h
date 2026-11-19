@@ -11,6 +11,7 @@ namespace bs {
 
 // Le o IP.BIN e o executavel de boot do CDI. Lanca std::runtime_error (imagem invalida,
 // executavel ausente ou de versao nao suportada).
-BootFiles boot_read_disc(const std::filesystem::path& image);
+// `confine`: a pasta de um pacote extraido (as faixas citadas por GDI/CUE nao saem dela).
+BootFiles boot_read_disc(const std::filesystem::path& image, const std::filesystem::path& confine = {});
 
 } // namespace bs

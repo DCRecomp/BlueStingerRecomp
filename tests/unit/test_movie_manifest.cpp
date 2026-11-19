@@ -204,3 +204,19 @@ BS_TEST(movie_catalog_reads_disc_manifest_only_with_disc_dir) {
     BS_CHECK(win.find(1u) == nullptr || win.find(1u)->absent);
     BS_CHECK(!win.problems().empty());
 }
+
+// I5 (docs/IMAGENS-DISCO-PLANO.md): o audio que passa do fim do video por 1 s ou mais (o preenchimento do disco
+// original: silencio ou lixo) sai; o arredondamento dos blocos (milissegundos) fica.
+BS_TEST(audio_sem_preenchimento_do_disco_original) {
+    const uint32_t       rate = 1000, ch = 2;
+    std::vector<int16_t> pcm;
+    for (uint32_t i = 0; i < 6000; ++i) pcm.push_back(int16_t(i % 7)), pcm.push_back(int16_t(-(int(i) % 5)));  // 6 s de "som"
+    const uint32_t n = 6000;
+    BS_CHECK(bv::audio_samples_without_padding(pcm, ch, rate, 30'000'000, n) == 3000);  // video de 3 s: 3 s a mais saem
+    BS_CHECK(bv::audio_samples_without_padding(pcm, ch, rate, 50'000'000, n) == 5000);  // exatamente 1 s a mais: sai
+    BS_CHECK(bv::audio_samples_without_padding(pcm, ch, rate, 50'010'000, n) == n);     // menos de 1 s a mais: fica
+    BS_CHECK(bv::audio_samples_without_padding(pcm, ch, rate, 59'990'000, n) == n);     // milissegundos (como no CDI): fica
+    BS_CHECK(bv::audio_samples_without_padding(pcm, ch, rate, 70'000'000, n) == n);     // audio mais curto que o video: fica
+    BS_CHECK(bv::audio_samples_without_padding(pcm, ch, rate, 0, n) == n);              // fim do video desconhecido: fica
+    BS_CHECK(bv::audio_samples_without_padding({}, ch, rate, 30'000'000, 0) == 0);
+}

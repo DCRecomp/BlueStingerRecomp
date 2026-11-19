@@ -12,7 +12,7 @@ os         = "katana"          # bit 0 dos perifericos = 0 (nao e Windows CE)
 
 [input]
 # Hash SHA-256 do 1ST_READ.BIN suportado (o mesmo de tools/extractor/known_versions.h).
-first_read_sha256 = "013301f3bd5e8305058f661ec3a0cddcb8468b524a2c5f4d8f88e4d523d21a50"   # rip CDI; o hash do GD original pode diferir
+first_read_sha256 = "013301f3bd5e8305058f661ec3a0cddcb8468b524a2c5f4d8f88e4d523d21a50"   # CDI do projeto; o GD original (491fd69c...) difere so em 3 literais de FAD e gera o mesmo C++ (tools/extractor/boot_identity.h)
 first_read_size   = 1975556
 
 [load]

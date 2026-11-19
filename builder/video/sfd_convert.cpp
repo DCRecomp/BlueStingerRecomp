@@ -108,23 +108,29 @@ bool convert_sfd(const fs::path& sfd, const fs::path& mp4, const ConvertOptions&
     nv::MfMovieWriter w;
     if (!w.open(mp4, wo, err)) return false;
     std::vector<uint8_t> nv12;
-    // audio intercalado com o video (blocos de ~1 quadro), como o multiplexador espera
-    const size_t perFrame = size_t(std::ceil(a.sampleRate / r.fps)) * a.channels;
-    size_t       ap       = 0;
+    // audio intercalado com o video (blocos de ~1 quadro), como o multiplexador espera: ate o tempo exato do fim de cada
+    // quadro, nunca adiantado (revisao Codex 2026-11-19: blocos arredondados para cima passavam do corte do I5)
+    const size_t ch = std::max<uint32_t>(1, a.channels);
+    size_t       ap = 0;
     for (; f; f = m.next()) {
         toNv12(f, nv12);
         if (!w.write_frame_nv12(nv12, err)) return false;
         ++r.frames;
-        const size_t n = std::min(perFrame, pcm.size() - ap);
-        if (n && !w.write_audio(std::span<const int16_t>(pcm.data() + ap, n), err)) return false;
-        ap += n;
+        // a mesma conta do corte (sfd_source.h): no ultimo quadro, exatamente o fim do video
+        const size_t upTo = std::min(pcm.size(), size_t(samples_until_100ns(video_end_100ns(r.frames, r.fps), a.sampleRate)) * ch);
+        if (upTo > ap && !w.write_audio(std::span<const int16_t>(pcm.data() + ap, upTo - ap), err)) return false;
+        ap = std::max(ap, upTo);
     }
-    if (ap < pcm.size() && !w.write_audio(std::span<const int16_t>(pcm.data() + ap, pcm.size() - ap), err)) return false;
+    // I5: sem o preenchimento constante do disco original depois do video (audio_samples_without_padding)
+    r.videoEnd100ns     = video_end_100ns(r.frames, r.fps);
+    const uint32_t keep = audio_samples_without_padding(pcm, a.channels, a.sampleRate, r.videoEnd100ns, a.totalSamples);
+    // o fim registrado e o que foi gravado: o corte, ou o fim do ultimo quadro se o arredondamento passou dele (1 amostra)
+    const size_t   end  = std::max(ap, std::min(pcm.size(), size_t(keep) * ch));
+    if (ap < end && !w.write_audio(std::span<const int16_t>(pcm.data() + ap, end - ap), err)) return false;
     r.encoderNotes = w.notes();
     if (!w.finish(err)) return false;
-    r.videoEnd100ns = video_end_100ns(r.frames, r.fps);
-    r.sampleRate = a.sampleRate, r.channels = a.channels, r.audioSamples = a.totalSamples;
-    r.audioEnd100ns = audio_end_100ns(a.totalSamples, a.sampleRate);
+    r.sampleRate = a.sampleRate, r.channels = a.channels, r.audioSamples = uint32_t(end / ch);
+    r.audioEnd100ns = audio_end_100ns(r.audioSamples, a.sampleRate);
     return true;
 }
 

@@ -7,7 +7,8 @@
 #include "child_process.h"
 #include "filmes_widescreen.h"
 #include "project_export.h"
-#include "disc/cdi_image.h"
+#include "disc/archive.h"
+#include "disc/disc_open.h"
 #include "runtime_data.h"
 #include "toolchain.h"
 #include "util/hash.h"
@@ -586,12 +587,34 @@ Result build(const Request& req, const Callbacks& cb) {
         enter(Step::Extract);
         BootFiles      boot;
         const fs::path gameData = work / L"game-data";
+        // I8 (docs/IMAGENS-DISCO-PLANO.md): .zip/.7z sao extraidos para .bs-build\imagem, apagada no fim (tambem em erro)
+        fs::path discPath = req.disc;
+        struct RemoveDir {
+            fs::path p;
+            ~RemoveDir() {
+                std::error_code e;
+                if (!p.empty()) fs::remove_all(p, e);
+            }
+        } extracted;
+        if (!req.disc.empty() && disc::archive_supported(req.disc)) {
+            extracted.p = work / L"imagem";
+            fs::remove_all(extracted.p, ec);
+            try {
+                log("pacote: extraindo a imagem para " + path_text(extracted.p));
+                discPath = disc::archive_extract_image(req.disc, extracted.p, [&](double f) { progress(f, "extraindo o pacote"); },
+                                                       cb.cancel);
+                log("imagem no pacote: " + path_text(discPath.lexically_relative(extracted.p)));
+            } catch (const disc::DiscError& e) {
+                if (cb.cancel && cb.cancel->load()) throw Cancelled{};
+                throw StepError(ErrorKind::InvalidDisc, std::string("o pacote nao pode ser usado: ") + e.what());
+            }
+        }
         if (!req.disc.empty()) {
             try {
-                boot = boot_read_disc(req.disc);
+                boot = boot_read_disc(discPath, extracted.p);
             } catch (const std::exception& e) {
                 throw StepError(ErrorKind::InvalidDisc, std::string("esta imagem nao pode ser usada: ") + e.what() +
-                                "\nE preciso a imagem CDI do Blue Stinger NTSC-U (T13001N V1.000).");
+                                "\nE preciso uma imagem do Blue Stinger NTSC-U (T13001N V1.000): o disco original em GDI, CUE/BIN ou CHD (tambem dentro de .zip ou .7z), ou um CDI.");
             }
             log("disco: " + boot.product + " " + boot.version + " (" + boot.versionId + ")");
             fs::create_directories(gameData);
@@ -607,6 +630,10 @@ Result build(const Request& req, const Callbacks& cb) {
         const fs::path dataStamp = work / L"data.ok";
         const std::string fmtPrefix = std::to_string(disc::kRuntimeDataFormat) + " ";
         std::string       stampText = fmtPrefix + boot.versionId;
+        // as variantes de CDI (boot_identity.h) dividem o id, mas cada uma tem o seu layout (os literais de FAD no
+        // executavel): a marca leva o hash do executavel, para nunca reaproveitar os dados de outra (revisao Codex 2026-11-19)
+        if (!req.disc.empty() && boot.versionId.find("_variante") != std::string::npos)
+            stampText += " " + util::sha256Hex(boot.firstRead.data(), boot.firstRead.size());
         if (req.disc.empty()) {
             const std::string s = readText(dataStamp);
             if (s.rfind(fmtPrefix, 0) != 0)
@@ -625,21 +652,39 @@ Result build(const Request& req, const Callbacks& cb) {
                     log("dados preparados alterados (" + bad + "): preparando de novo");
                     reuse = false;
                 }
+                // com a imagem em maos, so reaproveita se as faixas forem as dela: outra imagem com o mesmo executavel, ou
+                // dados de uma versao anterior do leitor (ex.: o comprimento das faixas do CHD), preparam de novo
+                if (reuse && !req.disc.empty()) {
+                    const auto img = disc::disc_open(discPath, extracted.p);
+                    const auto man = disc::load_runtime_manifest(dataDir);
+                    bool       same = img->tracks().size() == man.tracks.size();
+                    for (size_t i = 0; same && i < man.tracks.size(); ++i) {
+                        const auto& a = img->tracks()[i];
+                        const auto& b = man.tracks[i];
+                        same = a.start_lba == b.start_lba && a.length == b.length && a.isData() == b.data &&
+                               uint32_t(a.session) == b.session;
+                    }
+                    if (!same) {
+                        log("dados preparados de outra imagem ou de uma versao anterior: preparando de novo");
+                        reuse = false;
+                    }
+                }
             } catch (const std::exception& e) {
                 log(std::string("dados preparados invalidos (") + e.what() + "): preparando de novo");
                 reuse = false;
             }
         }
         if (!reuse && req.disc.empty())
-            throw StepError(ErrorKind::Data, "os dados preparados nesta saida estao alterados ou incompletos: informe o CDI para "
+            throw StepError(ErrorKind::Data, "os dados preparados nesta saida estao alterados ou incompletos: informe a imagem do disco para "
                             "prepara-los de novo");
         if (!reuse) {
             fs::remove(dataStamp, ec);
             fs::remove_all(dataDir, ec);  // pasta do proprio Builder (.bs-build\data)
             if (ec) throw StepError("nao foi possivel limpar " + path_text(dataDir) + " (" + error_text(ec) + ")");
             try {
-                disc::CdiImage img(req.disc);
-                const auto     r = disc::prepare_runtime_data(img, dataDir, [&](double f, const std::string& w) {
+                const auto     imgp = disc::disc_open(discPath, extracted.p);
+                const auto&    img  = *imgp;
+                const auto     r =disc::prepare_runtime_data(img, dataDir, [&](double f, const std::string& w) {
                     progress(0.6 * f, "preparando os dados: " + w);
                 }, cb.cancel);
                 log("dados: " + std::to_string(r.files) + " arquivos, " + std::to_string(r.bytes >> 20) + " MB, " +

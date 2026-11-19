@@ -2,6 +2,7 @@
 // N9-L (L5): o que o Builder sabe de um filme do disco (SFD) sem converter nada. Usado pelo conversor do Windows (que
 // grava esses valores no manifesto ao lado do MP4) e pelo manifesto do Linux (que toca o SFD direto do disco): os dois
 // leem a fonte do mesmo jeito (demux, ADX e pl_mpeg com os ultimos quadros) e arredondam os fins pelas mesmas funcoes.
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <filesystem>
@@ -19,6 +20,25 @@ namespace bs::builder::video {
 // original). Video: quadros / fps, arredondado ao mais proximo. Audio: amostras / taxa, truncado.
 inline int64_t video_end_100ns(uint32_t frames, double fps) { return int64_t(std::llround(frames * 1e7 / fps)); }
 inline int64_t audio_end_100ns(uint64_t samples, uint32_t rate) { return int64_t(samples) * 10'000'000 / rate; }
+// Amostras (por canal) ate o instante t, arredondado para cima: a conta do corte do I5 e da intercalacao do conversor
+inline uint64_t samples_until_100ns(int64_t t100ns, uint32_t rate) {
+    return t100ns <= 0 ? 0 : (uint64_t(t100ns) * rate + 9'999'999) / 10'000'000;
+}
+
+// I5 (docs/IMAGENS-DISCO-PLANO.md): no disco original, o ADX de cada SFD declara bem mais amostras que o filme (em 15 dos
+// 16, o dobro): depois do som do filme vem um preenchimento (silencio com nivel DC na maioria; no NEWGAME, 7,5 min de
+// lixo saturado sem relacao com o filme). A conversao do CDI do projeto cortou tudo no fim do video. Pela regra de fim
+// (o que acabar por ultimo) o filme ficaria esse tempo parado no ultimo quadro, o que o console nao faz. Devolve o
+// numero de amostras por canal a manter: se o audio passa do fim do video por 1 s ou mais, o fim do video; senao, tudo
+// (o arredondamento dos blocos do ADX, milissegundos, fica como esta: os filmes do CDI nao mudam). So para os SFD do
+// disco (Builder); mods nao passam por aqui.
+inline uint32_t audio_samples_without_padding(const std::vector<int16_t>& pcm, uint32_t channels, uint32_t rate,
+                                              int64_t videoEnd100ns, uint32_t samples) {
+    if (!channels || !rate || !samples || pcm.size() < size_t(samples) * channels || videoEnd100ns <= 0) return samples;
+    const uint64_t videoSamples = samples_until_100ns(videoEnd100ns, rate);
+    if (videoSamples >= samples || samples - videoSamples < rate) return samples;
+    return uint32_t(videoSamples);
+}
 
 // Decodificador MPEG-1 (pl_mpeg) sobre o elementary stream ja separado pelo demux.
 struct Mpeg1 {

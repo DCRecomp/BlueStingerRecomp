@@ -69,8 +69,10 @@ um `.exe` pré-gerado é a decisão D7.
 
 ## 3. Ingestão (M1)
 
-- **Formatos**: só **CDI** (D3). GDI/CHD entram depois como novas
-  implementações de `DiscImage`.
+- **Formatos** (D3, revisto em 2026-11-19, `docs/IMAGENS-DISCO-PLANO.md`): CDI, GDI e CUE/BIN (`TrackFilesImage`), CHD
+  (`ChdImage`, libchdr, só nas ferramentas) e pacotes `.zip`/`.7z` extraídos antes (`disc/archive`). A versão é o
+  executável de boot (`boot_identity`): hash exato ou a variante com os 3 literais de FAD mascarados e coerentes com a
+  faixa de boot.
 - **CDI** (DiscJuggler v2/v3/v3.5): o trailer tem os últimos 8 bytes = versão +
   offset do cabeçalho (na v3.5 o offset é contado a partir do fim do arquivo).
   O cabeçalho lista as sessões e faixas (modo, pregap, comprimento, LBA inicial,
@@ -853,7 +855,7 @@ Registradas em 2026-10-13.
 |---|---|---|
 | D1 | Licença do projeto | **MIT** (arquivo `LICENSE`). Implementação do zero, sem código GPL. |
 | D2 | Versão-alvo | **NTSC-U V1.000 (T13001N)**, só essa por enquanto. |
-| D3 | Formatos de entrada | **Só CDI por enquanto.** A abstração `DiscImage` deixa GDI/CHD para depois sem retrabalho. |
+| D3 | Formatos de entrada | Até a v0.9.7-2, só CDI. **Desde 2026-11-19:** GDI, CUE/BIN, CHD, CDI e `.zip`/`.7z` sobre a mesma `DiscImage` (`docs/IMAGENS-DISCO-PLANO.md`; decisões D1 e D2 do mantenedor). |
 | D4 | ARM7 do AICA | ~~Interpretador ARM7 no M6~~ **Substituída por D10** (2026-10-15): o produto não executa nem interpreta o ARM7. |
 | D5 | Linguagem | **C++20 para tudo** (extrator, tradutor, runtime). Sem Python para o usuário final. |
 | D6 | Compilador | Clang-cl como alvo principal e MSVC sempre compilando. Enquanto o clang-cl não estiver instalado, o MSVC é usado. |
@@ -876,7 +878,7 @@ Registradas em 2026-10-13.
 | R4 | Modos de FPU ambíguos (PR/SZ/FR) | Resultados float errados em silêncio | Propagação de modo + variantes com teste em runtime + asserts em debug. |
 | R5 | Aproximações de FSCA/FSRRA/FIPR | Divergência sutil de física ou IA | Testes diferenciais. Tabela de FSCA idêntica à do hardware se necessário. |
 | R6 | Store queues + DMA para o TA | Geometria faltando | Implementar SQ → TA cedo (M4). É o caminho principal do Kamui. |
-| R7 | Rip CDI ≠ GD original (FMV possivelmente recodificado, layout diferente) | Hash não bate com o Redump | Identificar a versão pelo `1ST_READ.BIN`. Suportar GDI/CHD também. |
+| R7 | Rip CDI ≠ GD original (FMV possivelmente recodificado, layout diferente) | Hash não bate com o Redump | **Confirmado e resolvido (2026-11-19):** o CDI do projeto reescreve 3 literais de FAD, troca o IP.BIN e corta o áudio dos SFD; o C++ gerado é o mesmo. `boot_identity`, a pilha do IP.BIN zerada no boot e o corte do preenchimento de áudio (`docs/IMAGENS-DISCO-PLANO.md`). |
 | R8 | Tamanho do código gerado (~1 MB de código SH-4 → centenas de milhares de linhas de C++) | Build lento | Dividir a saída em N arquivos, Clang, build com unity/PCH. Só regerar o que mudou. |
 | R9 | Licenças de referências sem licença declarada (ID AS3, gditools3) | Contaminação legal | Ler só a documentação. Não copiar código. Registrar em LEGAL.md. |
 | R10 | Escrita em VRAM / framebuffer direto pela CPU (telas de loading, FMV) | Imagem ausente | Caminho de framebuffer direto no renderer (FB_R_SOF1 → textura) desde o M4. FMV Sofdec depende disso. |

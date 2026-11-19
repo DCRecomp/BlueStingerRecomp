@@ -3,11 +3,11 @@ Blue Stinger Builder
 
 O que e
 -------
-O Builder transforma a SUA imagem CDI do Blue Stinger (Dreamcast, NTSC-U T13001N V1.000)
+O Builder transforma a SUA imagem do Blue Stinger (Dreamcast, NTSC-U T13001N V1.000)
 num jogo nativo para Windows x64: recompila o codigo SH-4 do jogo para C++, compila esse
 C++ junto com o runtime aqui, no seu computador, e prepara os dados do disco num formato
-proprio. Depois da conversao, o jogo NAO precisa mais do CDI (nem de emulador): a pasta
-gerada pode ser movida e o CDI guardado.
+proprio. Depois da conversao, o jogo NAO precisa mais da imagem (nem de emulador): a pasta
+gerada pode ser movida e a imagem guardada.
 
 Esta pasta NAO contem dados nem codigo do jogo: so o Builder e o codigo-fonte do runtime
 (licenca MIT) e do SDL3 (licenca zlib). O jogo gerado (executavel e pasta data\) e derivado
@@ -22,13 +22,17 @@ Requisitos
   as ferramentas CMake do C++). Download: https://visualstudio.microsoft.com/downloads/
   (secao "Ferramentas para Visual Studio"). Um Visual Studio 2022 ou mais novo com essa
   carga de trabalho tambem serve.
-- A imagem CDI do Blue Stinger NTSC-U (V1.000). Outras versoes sao recusadas.
-- Cerca de 1,2 GB livres (dados do jogo, jogo compilado e cache de compilacao).
+- Uma imagem do Blue Stinger NTSC-U (T13001N V1.000): o disco original em GDI, CUE/BIN (como o
+  Redump) ou CHD, ou um CDI; tambem dentro de .zip ou .7z. Outras versoes (PAL, japonesa) sao recusadas, e a mensagem mostra o tamanho e o
+  SHA-256 do executavel encontrado: informe essa linha ao relatar (nunca a imagem).
+- Cerca de 1,2 GB livres (dados do jogo, jogo compilado e cache de compilacao); mais 1,3 GB durante a
+  instalacao se a imagem estiver num .zip ou .7z (extraida e apagada no fim), e 2,5 GB ou mais com os
+  filmes widescreen (Remastered).
 
 Como usar
 ---------
 1. Abra BlueStinger-Recompiler.exe (portugues ou ingles, na lista "Idioma").
-2. Escolha a imagem .cdi e a pasta de instalacao. "Modo portatil" (desmarcado por padrao) guarda
+2. Escolha a imagem (.gdi, .cue, .chd, .cdi, .zip ou .7z) e a pasta de instalacao. "Modo portatil" (desmarcado por padrao) guarda
    as partidas na pasta saves da instalacao em vez de Documentos\DC-Recomp\Blue Stinger\saves;
    trocar o modo nao move as partidas existentes.
 3. Clique em "Recompilar". A primeira conversao leva alguns minutos; as
@@ -38,7 +42,7 @@ Como usar
 O que o Builder faz: confere a imagem (hash do executavel do jogo), prepara os dados do
 disco em BlueStinger\data (conferidos setor a setor com a imagem), analisa e gera o C++,
 compila com o seu Visual Studio, monta o pacote numa pasta temporaria, testa o executavel
-SEM o CDI (dados e boot curto) e so entao troca a versao instalada. Se qualquer etapa falhar
+SEM a imagem (dados e boot curto) e so entao troca a versao instalada. Se qualquer etapa falhar
 ou for cancelada, a versao anterior continua intacta. A versao anterior fica guardada em
 BlueStinger.anterior (para voltar, renomeie as pastas).
 
@@ -56,7 +60,7 @@ Projeto C++ editavel e mods (BlueStinger-Developer.exe)
   runtime, o mapa de funcoes (endereco SH-4 -> funcao C++), a pasta mods\ e a documentacao
   (LEIA-ME-PROJETO.md). E privado: nao publique.
 - "Compilar a partir do projeto editavel": compila o projeto (com os seus mods em C++ e os
-  arquivos de mods\assets) pelo mesmo fluxo verificado. Nao precisa do CDI se os dados ja
+  arquivos de mods\assets) pelo mesmo fluxo verificado. Nao precisa da imagem se os dados ja
   foram preparados naquela pasta de saida.
 
 Pastas
@@ -71,7 +75,7 @@ recompilado.
 
 Linha de comando
 ----------------
-  bs-builder.exe --disc "D:\Jogos\Blue Stinger.cdi" --out "D:\Jogos\BS" [--projeto "D:\Jogos\BS\projeto"]
+  bs-builder.exe --disc "D:\Jogos\Blue Stinger (USA).cue" --out "D:\Jogos\BS" [--projeto "D:\Jogos\BS\projeto"]
   bs-builder.exe --de-projeto "D:\Jogos\BS\projeto" --out "D:\Jogos\BS"
 Codigo de saida: 0 = sucesso; 1 = falha; 3 = cancelado. BS_BUILDER_VERBOSE=1 mostra tudo.
 

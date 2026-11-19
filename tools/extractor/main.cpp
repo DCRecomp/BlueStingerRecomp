@@ -2,40 +2,58 @@
 // e os arquivos de dados para game-data/, com manifest.json de hashes.
 //   --runtime: prepara os dados de execucao do jogo nativo (runtime_data.h) e confere
 //              todos os setores contra a imagem.
-#include "disc/cdi_image.h"
+#include "disc/archive.h"
+#include "disc/disc_open.h"
 #include "extract.h"
 #include "runtime_data.h"
 
 #include <chrono>
 #include <cstdio>
 #include <exception>
+#include <filesystem>
 #include <iostream>
 #include <string>
 
 static void usage() {
     std::fprintf(stderr,
-                 "uso: bs-extract [--info] [--force] <imagem.cdi> [saida]\n"
-                 "     bs-extract --runtime <imagem.cdi> <pasta de dados>\n"
+                 "uso: bs-extract [--info] [--force] <imagem .gdi|.cue|.chd|.cdi|.zip|.7z> [saida]\n"
+                 "     bs-extract --runtime <imagem .gdi|.cue|.chd|.cdi|.zip|.7z> <pasta de dados>\n"
                  "  saida      pasta de destino (padrao: game-data)\n"
                  "  --info     so mostra faixas, IP.BIN e hash do executavel\n"
                  "  --force    extrai mesmo com hash de executavel desconhecido\n"
-                 "  --runtime  dados de execucao do jogo nativo (o jogo nao le o CDI)\n");
+                 "  --runtime  dados de execucao do jogo nativo (o jogo nao le a imagem)\n");
 }
 
-static int runRuntime(const std::string& image, const std::string& out) {
+static int runRuntime(const std::string& image, const std::string& out, const std::filesystem::path& confine) {
     using clock = std::chrono::steady_clock;
     const auto           t0 = clock::now();
-    bs::disc::CdiImage   img(image);
-    const auto           r  = bs::disc::prepare_runtime_data(img, out);
+    const auto           img = bs::disc::disc_open(image, confine);
+    const auto           r  = bs::disc::prepare_runtime_data(*img, out);
     const auto           t1 = clock::now();
     std::cout << "dados de execucao: " << r.files << " arquivos, " << r.bytes / (1024 * 1024) << " MB, "
               << r.metaSectors << " setores de sistema (" << r.versionId << ") em "
               << std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count() << " ms\n";
-    const std::string diff = bs::disc::verify_runtime_data(img, out);
+    const std::string diff = bs::disc::verify_runtime_data(*img, out);
     const auto        t2   = clock::now();
     std::cout << "conferencia setor a setor: " << (diff.empty() ? "identico a imagem" : diff) << " ("
               << std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count() << " ms)\n";
     return diff.empty() ? 0 : 1;
+}
+
+// .zip/.7z (I8): a imagem e extraida para <saida>.imagem, apagada no fim
+struct Unpacked {
+    std::filesystem::path dir;
+    ~Unpacked() {
+        std::error_code ec;
+        if (!dir.empty()) std::filesystem::remove_all(dir, ec);
+    }
+};
+static std::string unpack(const std::string& image, const std::string& out, Unpacked& u) {
+    if (!bs::disc::archive_supported(image)) return image;
+    u.dir = std::filesystem::path(out).concat(".imagem");
+    std::filesystem::remove_all(u.dir);
+    std::cout << "extraindo o pacote para " << u.dir.string() << "\n";
+    return bs::disc::archive_extract_image(image, u.dir).string();
 }
 
 int main(int argc, char** argv) {
@@ -44,7 +62,9 @@ int main(int argc, char** argv) {
     int positional = 0;
     if (argc == 4 && std::string(argv[1]) == "--runtime") {
         try {
-            return runRuntime(argv[2], argv[3]);
+            Unpacked u;
+            const std::string img = unpack(argv[2], argv[3], u);
+            return runRuntime(img, argv[3], u.dir);
         } catch (const std::exception& e) {
             std::cerr << "erro: " << e.what() << "\n";
             return 1;
@@ -62,6 +82,9 @@ int main(int argc, char** argv) {
     }
     if (positional == 0) { usage(); return 2; }
     try {
+        Unpacked u;
+        opt.image   = unpack(opt.image.string(), opt.out.string(), u);
+        opt.confine = u.dir;
         return bs::runExtract(opt, std::cout);
     } catch (const std::exception& e) {
         std::cerr << "erro: " << e.what() << "\n";

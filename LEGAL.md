@@ -23,7 +23,7 @@ repository. It grants no rights to Blue Stinger or to any data, code or assets d
   repositório. As ferramentas que as geram são do projeto (`mods-padrao/README.md`, `docs/LEGENDAS-PENDENCIAS.md`).
   **Decisão do mantenedor (2026-11-12):** a partir da v0.9.7-1, os pacotes `legendas-en` (en-US) e `legendas-pt-br`
   (pt-BR) vão no ZIP do Builder publicado nas releases. Eles têm só o texto das legendas, sem áudio, vídeo nem dados do
-  disco; o jogo continua vindo do CDI de cada usuário. O texto continua fora do git.
+  disco; o jogo continua vindo da imagem do disco de cada usuário. O texto continua fora do git.
 
 ## Mod opcional: filmes widescreen (v0.9.7-2)
 

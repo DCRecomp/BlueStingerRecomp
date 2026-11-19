@@ -36,6 +36,8 @@ struct Track {
     uint32_t  pregap      = 0;
     uint32_t  sector_size = 0;   // 2048, 2336 ou 2352
     uint64_t  file_offset = 0;   // offset no arquivo do setor start_lba
+    int       file_index  = 0;   // arquivo da faixa (GDI/CUE: um por faixa; CDI: sempre 0)
+    int32_t   user_offset = -1;  // >= 0: posicao dos 2048 bytes no quadro (CHD: quadros de 2448 com o setor dentro)
 
     bool     isData() const { return mode != TrackMode::Audio; }
     bool     contains(uint32_t lba) const { return lba >= start_lba && lba - start_lba < length; }
@@ -57,7 +59,8 @@ public:
     virtual std::string formatName() const = 0;
 
 protected:
-    virtual void readRaw(uint64_t offset, void* dst, size_t n) const = 0;
+    // `offset` e relativo ao arquivo da faixa `t` (o CDI tem um arquivo so; GDI e CUE, um por faixa).
+    virtual void readRaw(const Track& t, uint64_t offset, void* dst, size_t n) const = 0;
     std::vector<Track> tracks_;
 };
 

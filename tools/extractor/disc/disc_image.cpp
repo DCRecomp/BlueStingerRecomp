@@ -3,6 +3,7 @@
 namespace bs::disc {
 
 uint32_t Track::userDataOffset() const {
+    if (user_offset >= 0) return uint32_t(user_offset);
     switch (sector_size) {
     case 2048: return 0;
     case 2336: return 8;                                   // subheader Mode 2
@@ -30,7 +31,7 @@ void DiscImage::readUserData(uint32_t lba, uint8_t* out) const {
     if (!t) throw DiscError("LBA " + std::to_string(lba) + " fora de todas as faixas");
     if (!t->isData()) throw DiscError("LBA " + std::to_string(lba) + " pertence a uma faixa de audio");
     uint64_t off = t->file_offset + uint64_t(lba - t->start_lba) * t->sector_size + t->userDataOffset();
-    readRaw(off, out, kUserDataSize);
+    readRaw(*t, off, out, kUserDataSize);
 }
 
 InputFile::InputFile(const std::filesystem::path& path) {

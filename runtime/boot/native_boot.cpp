@@ -19,7 +19,7 @@
 #include "disc/iso9660.h"
 #include "disc/scramble.h"
 #include "system/syscall_service.h"
-#include "known_versions.h"
+#include "boot_identity.h"
 #include "memory/sh4_ccn.h"
 #include "memory/sh4_dmac.h"
 #include "memory/sh4_port.h"
@@ -55,15 +55,11 @@ BootFiles boot_read_data(const std::filesystem::path& dir) {
         f.ipBin              = data.ipBin();
         const disc::IpBin ip = disc::parseIpBin(f.ipBin.data(), f.ipBin.size());
         f.product = ip.product, f.version = ip.version, f.title = ip.title;
-        const std::vector<uint8_t> raw = data.readFile(ip.boot_file);
-        for (int pass = 0; pass < 2 && f.versionId.empty(); ++pass) {
-            std::vector<uint8_t> bytes = pass ? disc::descramble(raw) : raw;
-            const std::string    h     = util::sha256Hex(bytes.data(), bytes.size());
-            for (const auto& v : kKnownVersions)
-                if (h == v.boot_sha256) {
-                    f.versionId = v.id;
-                    f.firstRead = std::move(bytes);
-                }
+        // a mesma identificacao da preparacao (boot_identity.h), com a faixa de boot registrada nos dados
+        BootIdentity id = identify_boot(data.readFile(ip.boot_file), data.manifest().bootTrackLba);
+        if (id.version) {
+            f.versionId = id.version->id;
+            f.firstRead = std::move(id.data);
         }
     } catch (const disc::DiscError& err) {
         throw disc::RuntimeDataError(std::string("dados do jogo: ") + err.what());
@@ -99,6 +95,12 @@ void boot_prepare(Sh4Context& c, const BootFiles& files, uint32_t rtcSeconds) {
     std::memset(ram, 0xFF, 0x8000);  // area do sistema
     for (const auto& w : kBiosSysWords) std::memcpy(ram + (w[0] & 0xFFFFFF), &w[1], 4);
     std::memcpy(ram + 0x8000, files.ipBin.data(), files.ipBin.size());
+    // A pilha do IP.BIN (0x8C00F3B0-0x8C00FFFF) e usada e limpa pela rotina de boot dele antes do jogo; o jogo le ali
+    // a informacao de boot do sistema (0x8C00FFF0/FFF4, f_8C159E8E: zero = primeira entrada). O IP.BIN do CDI do
+    // projeto tem zeros nessa area; o do disco original (GDI/CUE) tem o fim do codigo de boot e o titulo, e o jogo
+    // seguia um ponteiro feito de espacos (0x20202020) e pedia o menu do sistema. Zerar reproduz o estado da entrada
+    // medido no oraculo (para o CDI, nada muda). docs/IMAGENS-DISCO-PLANO.md, I4.
+    std::memset(ram + 0xF3B0, 0, 0x10000 - 0xF3B0);
     std::memcpy(ram + 0x10000, files.firstRead.data(), files.firstRead.size());
     std::memcpy(ram + 0x78, &rtcSeconds, 4);  // hora do sistema, como o BIOS a deixa
 

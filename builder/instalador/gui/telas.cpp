@@ -2,6 +2,7 @@
 
 #include "boot/disc_boot.h"
 #include "builder_platform.h"
+#include "disc/archive.h"
 #include "child_process.h"
 #include "instalador/gui/arte.h"
 #include "instalador/gui/tema.h"
@@ -176,11 +177,11 @@ Instalador::Instalador(Hospedeiro& h, Config c) : h_(h), c_(std::move(c)), s_(st
     ui::set_language(ui::initial_language(c_.idioma.empty() ? s.idiomaPrefs : c_.idioma, c_.idiomasSistema));
     std::error_code ec;
     s.cdi = c_.disc ? c_.disc->wstring() : cdiPref;
-    if (!c_.disc && (s.cdi.empty() || !fs::is_regular_file(s.cdi, ec)))  // um .cdi ao lado do instalador
+    if (!c_.disc && (s.cdi.empty() || !fs::is_regular_file(s.cdi, ec)))  // uma imagem (.gdi, .cue, .cdi) ao lado do instalador
         for (const auto& e : fs::directory_iterator(c_.exeDir, ec)) {
             std::wstring ext = e.path().extension().wstring();
             for (auto& ch : ext) ch = wchar_t(std::towlower(ch));
-            if (e.is_regular_file(ec) && ext == L".cdi") {
+            if (e.is_regular_file(ec) && (ext == L".cdi" || ext == L".gdi" || ext == L".cue" || ext == L".chd")) {
                 s.cdi = e.path().wstring();
                 break;
             }
@@ -280,9 +281,16 @@ void Instalador::conferir_cdi() {
         std::wstring info;
         bool         ok = false;
         try {
-            const auto b = boot_read_disc(arq);
-            info = widen(b.product + " " + b.version + " (" + b.versionId + ")");
-            ok   = true;
+            if (disc::archive_supported(arq)) {
+                // .zip/.7z (I8): so a lista aqui (extrair ~1 GB so para conferir seria lento); a instalacao extrai e
+                // confere o executavel como em qualquer imagem
+                const std::string n = disc::archive_image_name(disc::archive_list(arq));
+                info = widen("pacote com " + n + " (conferido na instalacao)");
+            } else {
+                const auto b = boot_read_disc(arq);
+                info = widen(b.product + " " + b.version + " (" + b.versionId + ")");
+            }
+            ok = true;
         } catch (const std::exception& e) {
             info = widen(e.what());
         }
@@ -745,7 +753,10 @@ void Instalador::cdi(const Ret& r) {
     case Impl::Cdi::Erro:
         arte::simbolo_erro(p, st.x, st.y, 20, tema::kCoral);
         ui_.rotulo(tr("cdi.invalid"), est(tema::kCorpo), {r.x + 30, y, r.w - 30, 44}, tema::kTexto);
-        ui_.rotulo(s.cdiInfo, est(tema::kPequeno), {r.x + 30, y + 46, r.w - 30, 36}, tema::kTextoSuave);
+    {   // o motivo pode ter varias linhas (o tamanho e o SHA-256 do executavel, para o jogador relatar: issue #1)
+        const float dh = ui_.altura_texto(s.cdiInfo, est(tema::kPequeno), r.w - 30);
+        ui_.rotulo(s.cdiInfo, est(tema::kPequeno), {r.x + 30, y + 46, r.w - 30, std::max(36.0f, dh)}, tema::kTextoSuave);
+    }
         break;
     }
     const float nh = ui_.altura_texto(tr("cdi.privacy"), est(tema::kPequeno), r.w);
