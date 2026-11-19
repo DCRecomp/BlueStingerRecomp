@@ -4418,6 +4418,13 @@ não por uma única bateria contínua** (decisão do mantenedor, 2026-11-02).
   - **`movie_manifest`** com `BS_DATA_DIR` nas instalações do CDI, do CUE e do CHD: os 16 filmes, nos três casos, batem
     com o manifesto do Windows;
   - **depois do ajuste final:** `bs_unit_tests` 372/0 e `bs_video_tests` 51/0.
+- **Pacote final (`make_builder -Versao v0.9.7-3 -LegendasLocais` em `783f0b3`):**
+  - **testes:** `test_builder` 24/0 e `test_instalador` 28/0;
+  - **ZIP:** `BlueStinger-Builder-v0.9.7-3-win-x64.zip`, 15 381 389 B, `cd55a752…a83830`, com 2 937 arquivos e nada do jogo;
+  - **detalhe:** uma rodada com o `-Work` longo falhou no script, porque o cache de compilação recusou o caminho e usou o
+    `%LOCALAPPDATA%`. Repetida com um caminho curto, passou.
+- **Publicação (pedido do mantenedor, "faz todos os testes que precisa para publicar"):** pre-release só para Windows. A
+  tag aponta para o commit deste registro.
 - **Não verificado:**
   - **o oráculo do fim dos filmes no GD:**
     - o `n5_oraculo` entra no jogo pelo salto do IP.BIN do CDI (`BOOT_JUMP`);
