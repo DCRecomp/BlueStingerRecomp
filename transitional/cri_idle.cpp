@@ -1,4 +1,5 @@
 #include "cri_idle.h"
+#include "versao/enderecos.h"
 
 #include "cpu/sh4_intc.h"
 #include "cpu/sh4_mem.h"
@@ -20,8 +21,8 @@ namespace {
 // Exclusoes do criterio validado (runtime/debug/cri_diag.cpp, modo efeito): medidores do TMU do
 // CRI (B11) e o indice do rodizio do gerenciador de streams (+36 de 0x8C2DA958), que anda em toda
 // chamada e so decide com empate.
-constexpr uint32_t kMeterLo = 0x8C1DD1C8 & kRamMask, kMeterHi = 0x8C1DD23C & kRamMask;
-constexpr uint32_t kRotor   = (0x8C2DA958 + 36) & kRamMask;
+constexpr uint32_t kMeterLo = bs::jogo(0x8C1DD1C8) & kRamMask, kMeterHi = bs::jogo(0x8C1DD23C) & kRamMask;
+constexpr uint32_t kRotor   = (bs::jogo(0x8C2DA958) + 36) & kRamMask;
 constexpr uint32_t kDeadStack = 0x4000;  // pilha morta da thread 3: [r15 - 16 KB, r15)
 
 uint64_t epoch() {

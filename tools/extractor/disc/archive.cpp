@@ -179,6 +179,17 @@ std::vector<ArchiveEntry> archive_list(const fs::path& archive) {
 constexpr size_t   kMaxEntries = 256;
 constexpr uint64_t kMaxBytes   = 8ull << 30;  // 8 GB extraidos no total (o 7z decodifica um bloco solido inteiro na memoria)
 
+// nomes seguros e limites de quantidade e tamanho (todo pacote extraido)
+static void check_entries(const std::vector<ArchiveEntry>& entries) {
+    if (entries.size() > kMaxEntries) throw DiscError("pacote com arquivos demais (" + std::to_string(entries.size()) + ")");
+    uint64_t total = 0;
+    for (const auto& en : entries) {
+        if (!safeName(en.name)) throw DiscError("pacote com nome de arquivo inseguro: " + en.name);
+        if (en.size > kMaxBytes || total + en.size > kMaxBytes) throw DiscError("pacote grande demais (mais de 8 GB extraidos)");
+        total += en.size;
+    }
+}
+
 std::string archive_image_name(const std::vector<ArchiveEntry>& entries) {
     if (entries.size() > kMaxEntries) throw DiscError("pacote com arquivos demais para uma imagem de disco (" + std::to_string(entries.size()) + ")");
     uint64_t total = 0;
@@ -194,8 +205,24 @@ std::string archive_image_name(const std::vector<ArchiveEntry>& entries) {
     throw DiscError("o pacote nao tem imagem de disco (.gdi, .cue, .chd ou .cdi)");
 }
 
+namespace {
+fs::path extract_impl(const fs::path& archive, const fs::path& dir, const std::function<void(double)>& progress,
+                      const std::atomic<bool>* cancel, bool needImage);
+}
+
 fs::path archive_extract_image(const fs::path& archive, const fs::path& dir, const std::function<void(double)>& progress,
                                const std::atomic<bool>* cancel) {
+    return extract_impl(archive, dir, progress, cancel, true);
+}
+
+void archive_extract_all(const fs::path& archive, const fs::path& dir, const std::function<void(double)>& progress,
+                         const std::atomic<bool>* cancel) {
+    extract_impl(archive, dir, progress, cancel, false);
+}
+
+namespace {
+fs::path extract_impl(const fs::path& archive, const fs::path& dir, const std::function<void(double)>& progress,
+                      const std::atomic<bool>* cancel, bool needImage) {
     const auto  u = archive.extension().u8string();
     std::string e(u.begin(), u.end());
     std::transform(e.begin(), e.end(), e.begin(), [](unsigned char c) { return char(std::tolower(c)); });
@@ -209,7 +236,8 @@ fs::path archive_extract_image(const fs::path& archive, const fs::path& dir, con
     if (e == ".zip") {
         Zip                       z(archive);
         const auto                entries = z.list();
-        const std::string         image   = archive_image_name(entries);
+        check_entries(entries);
+        const std::string         image   = needImage ? archive_image_name(entries) : std::string();
         uint64_t                  total = 0, done = 0;
         for (const auto& en : entries) total += en.dir ? 0 : en.size;
         struct Out {
@@ -252,7 +280,8 @@ fs::path archive_extract_image(const fs::path& archive, const fs::path& dir, con
     if (e == ".7z") {
         SevenZip          z(archive);
         const auto        entries = z.list();
-        const std::string image   = archive_image_name(entries);
+        check_entries(entries);
+        const std::string image   = needImage ? archive_image_name(entries) : std::string();
         uint64_t          total = 0, done = 0;
         for (const auto& en : entries) total += en.dir ? 0 : en.size;
         UInt32 blockIndex = 0xFFFFFFFF;
@@ -281,5 +310,6 @@ fs::path archive_extract_image(const fs::path& archive, const fs::path& dir, con
     }
     throw DiscError("pacote nao suportado: " + pathText(archive.filename()) + " (use .zip ou .7z)");
 }
+} // namespace
 
 } // namespace bs::disc

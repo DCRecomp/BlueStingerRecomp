@@ -84,6 +84,25 @@ BS_TEST(loc_mod_packages_priority_and_safety) {
     BS_CHECK(nl::ModPackages::discover(d.p / "nao-existe").packages().empty());  // sem mods: nada muda
 }
 
+// PAL P6: `jogo` como lista das versoes conferidas (as legendas americanas tambem nos PAL); um texto so continua
+// valendo; lista vazia ou com outro tipo e recusada com motivo
+BS_TEST(loc_mod_packages_lista_de_versoes) {
+    Dir d;
+    put(d.p / "lista" / "mod.toml", "formato = 1\nid = \"lista\"\njogo = [\"T13001N V1.000\", \"T13001D V1.000\"]\n");
+    put(d.p / "so-us" / "mod.toml", "formato = 1\nid = \"so-us\"\njogo = \"T13001N V1.000\"\n");
+    put(d.p / "vazia" / "mod.toml", "formato = 1\nid = \"vazia\"\njogo = []\n");
+    put(d.p / "numero" / "mod.toml", "formato = 1\nid = \"numero\"\njogo = [\"T13001N V1.000\", 3]\n");
+    const auto us = nl::ModPackages::discover(d.p, "T13001N V1.000");
+    BS_CHECK(us.packages().size() == 2 && us.problems().size() == 2);  // lista e so-us; vazia e numero recusados
+    const auto pal = nl::ModPackages::discover(d.p, "T13001D V1.000");
+    BS_CHECK(pal.packages().size() == 1 && pal.packages()[0].id == "lista");
+    bool motivo = false;
+    for (const auto& pr : pal.problems()) motivo |= pr.message.find("feito para T13001N V1.000, nao para T13001D V1.000") != std::string::npos;
+    BS_CHECK(motivo);
+    const auto en = nl::ModPackages::discover(d.p, "T13001D-05 V1.000");
+    BS_CHECK(en.packages().empty());
+}
+
 // textos: exato vence recuo, prioridade no mesmo idioma, IDs/UTF-8 invalidos recusados, codigos especiais
 // preservados (traducao que muda os codigos e recusada e o original fica)
 BS_TEST(loc_text_localization) {

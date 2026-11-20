@@ -1,4 +1,5 @@
 #include "time_adapter.h"
+#include "versao/enderecos.h"
 
 #include "cri_idle.h"
 
@@ -40,8 +41,8 @@ constexpr uint64_t kMutationDrift = 1000;  // "deriva": ticks somados a cada VBl
 constexpr uint64_t kMutationStep  = kCompatTicksPerField / 8;  // "relogio_degraus"
 constexpr uint64_t kMutationEvery = 97;    // mutacoes de VBlank: uma vez a cada 97 VBlank-In
 constexpr uint64_t kMutationRender = 500;  // "render_perdido": o 500o fim de render
-constexpr uint32_t kVblankWaitPc  = 0x8C064A2C;  // "sem_espera": espera do VBlank do jogo
-constexpr uint32_t kRenderWaitPc  = 0x8C173086;  // espera do fim do render anterior (timeout 166 ms)
+constexpr uint32_t kVblankWaitPc  = bs::jogo(0x8C064A2C);  // "sem_espera": espera do VBlank do jogo
+constexpr uint32_t kRenderWaitPc  = bs::jogo(0x8C173086);  // espera do fim do render anterior (timeout 166 ms)
 constexpr uint64_t kWindowReport  = 100000;      // BS_PROGRESS_TRACE: janelas a partir daqui (calibracao D8)
 // Observador de passos de jogo (diagnostico do host: estado logico por passo, BS_STATE_PASSO)
 void (*g_stepObserver)(uint64_t step, void* ctx) = nullptr;
@@ -66,21 +67,21 @@ struct WaitDecl {
     const char* what;
 };
 constexpr WaitDecl kWaitDecls[] = {
-    {0x8C064A2C, WaitKind::Event, false, "VBlank do jogo (bandeira 0x8C24F88A)"},
-    {0x8C173086, WaitKind::Event, false, "fim do render anterior, timeout de 166 ms pelo TMU"},
-    {0x8C0978F6, WaitKind::Event, false, "bit com timeout pelo TMU (8C0978BE)"},
-    {0x8C172628, WaitKind::SpgLine, true, "boot: vsync do SPG acender (f_8C172620)"},
-    {0x8C17262E, WaitKind::SpgLine, true, "boot: vsync do SPG apagar (f_8C172620)"},
-    {0x8C172808, WaitKind::Event, true, "boot: VBlank-In em ISTNRM (f_8C172642)"},
-    {0x8C172EF8, WaitKind::Event, true, "boot: contador do callback de VBlank 8C172602 (f_8C172D22)"},
-    {0x8C1C6D06, WaitKind::SpgLine, true, "boot: linha do SPG sair de 0 (f_8C1C6B3C)"},
-    {0x8C1C6D0E, WaitKind::SpgLine, true, "boot: linha do SPG voltar a 0 (f_8C1C6B3C)"},
-    {0x8C1C1DC6, WaitKind::Sync, true, "DMA ch2: C2DST = 0 (conclui na escrita)"},
-    {0x8C096EE8, WaitKind::Sync, true, "FIFO do G2 vazia: SB_FFST bit 0 (conclui na escrita)"},
-    {0x8C096EF8, WaitKind::Sync, true, "FIFO do G2 vazia: SB_FFST bit 0 (conclui na escrita)"},
-    {0x8C097254, WaitKind::Sync, true, "FIFO do G2 vazia: SB_FFST bit 5 (conclui na escrita)"},
-    {0x8C097264, WaitKind::Sync, true, "FIFO do G2 vazia: SB_FFST bit 5 (conclui na escrita)"},
-    {0x8C158860, WaitKind::CriIdle, true, "thread 3: passada do servidor do CRI sem efeito"},
+    {bs::jogo(0x8C064A2C), WaitKind::Event, false, "VBlank do jogo (bandeira 0x8C24F88A)"},
+    {bs::jogo(0x8C173086), WaitKind::Event, false, "fim do render anterior, timeout de 166 ms pelo TMU"},
+    {bs::jogo(0x8C0978F6), WaitKind::Event, false, "bit com timeout pelo TMU (8C0978BE)"},
+    {bs::jogo(0x8C172628), WaitKind::SpgLine, true, "boot: vsync do SPG acender (f_8C172620)"},
+    {bs::jogo(0x8C17262E), WaitKind::SpgLine, true, "boot: vsync do SPG apagar (f_8C172620)"},
+    {bs::jogo(0x8C172808), WaitKind::Event, true, "boot: VBlank-In em ISTNRM (f_8C172642)"},
+    {bs::jogo(0x8C172EF8), WaitKind::Event, true, "boot: contador do callback de VBlank 8C172602 (f_8C172D22)"},
+    {bs::jogo(0x8C1C6D06), WaitKind::SpgLine, true, "boot: linha do SPG sair de 0 (f_8C1C6B3C)"},
+    {bs::jogo(0x8C1C6D0E), WaitKind::SpgLine, true, "boot: linha do SPG voltar a 0 (f_8C1C6B3C)"},
+    {bs::jogo(0x8C1C1DC6), WaitKind::Sync, true, "DMA ch2: C2DST = 0 (conclui na escrita)"},
+    {bs::jogo(0x8C096EE8), WaitKind::Sync, true, "FIFO do G2 vazia: SB_FFST bit 0 (conclui na escrita)"},
+    {bs::jogo(0x8C096EF8), WaitKind::Sync, true, "FIFO do G2 vazia: SB_FFST bit 0 (conclui na escrita)"},
+    {bs::jogo(0x8C097254), WaitKind::Sync, true, "FIFO do G2 vazia: SB_FFST bit 5 (conclui na escrita)"},
+    {bs::jogo(0x8C097264), WaitKind::Sync, true, "FIFO do G2 vazia: SB_FFST bit 5 (conclui na escrita)"},
+    {bs::jogo(0x8C158860), WaitKind::CriIdle, true, "thread 3: passada do servidor do CRI sem efeito"},
 };
 const WaitDecl* findWait(uint32_t pc) {
     for (const WaitDecl& w : kWaitDecls)

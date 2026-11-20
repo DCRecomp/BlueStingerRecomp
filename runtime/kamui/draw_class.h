@@ -12,6 +12,7 @@
 //     3A). Sem o escritor conhecido (a primeira copia do bloco, ou sem a variavel), vale a regra da fase 2: a cadeia e a de
 //     quem disparou a copia (8C173044); 1/w variavel no desenho = cena, constante = ambiguo.
 #if BS_VALIDACAO
+#include "versao/enderecos.h"
 #include "kamui/hud_table.h"
 #include "kamui/list_sink.h"
 
@@ -21,7 +22,7 @@ namespace bs::kamui {
 
 // o fim do codigo do jogo e o comeco das bibliotecas do SDK (Ninja, Kamui, Shinobi) no 1ST_READ.BIN: so serve para
 // achar a entrada na biblioteca; as cadeias medidas chegam ao jogo bem abaixo dele
-constexpr uint32_t kGameCodeEnd = 0x8C158000;
+constexpr uint32_t kGameCodeEnd = bs::jogo(0x8C158000);
 
 // a ultima entrada da biblioteca antes da primeira rotina do jogo (0 se a cadeia nao chega ao jogo)
 uint32_t library_entry(const ParamOrigin& o);

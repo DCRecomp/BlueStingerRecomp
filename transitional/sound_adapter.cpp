@@ -1,4 +1,6 @@
 #include "sound_adapter.h"
+#include "versao/enderecos.h"
+#include "cpu/time_hooks.h"  // kFieldRateNum/Den
 
 #include "audio/audio.h"
 #include "audio/aica_dsp.h"
@@ -34,12 +36,12 @@ namespace na = bs::native::audio;
 
 namespace {
 
-constexpr uint32_t kStop = 0x8C15E208, kPlay = 0x8C15E088, kVolume = 0x8C15E19C, kPan = 0x8C15E11C, kStatus = 0x8C15DF44;
-constexpr uint32_t kInitFlag = 0x8C1DDB90;  // o flag que as entradas originais conferem (0 = nao inicializado)
+constexpr uint32_t kStop = bs::jogo(0x8C15E208), kPlay = bs::jogo(0x8C15E088), kVolume = bs::jogo(0x8C15E19C), kPan = bs::jogo(0x8C15E11C), kStatus = bs::jogo(0x8C15DF44);
+constexpr uint32_t kInitFlag = bs::jogo(0x8C1DDB90);  // o flag que as entradas originais conferem (0 = nao inicializado)
 // Musica (fase F): download por tipo, tocar, parar, volume, pan (o pacote: [2] porta, [3] slot/valor + 0x80, ...) e os
 // globais 0x35/0x36 (sem chamada nas rotas medidas: seguem para o original, contados)
-constexpr uint32_t kMusDown = 0x8C15D534, kMusPlay = 0x8C15DBAC, kMusStop = 0x8C15DD40, kMusVol = 0x8C15DCC0,
-                   kMusPan = 0x8C15DC40, kMus35 = 0x8C15D768, kMus36 = 0x8C15D6A0;
+constexpr uint32_t kMusDown = bs::jogo(0x8C15D534), kMusPlay = bs::jogo(0x8C15DBAC), kMusStop = bs::jogo(0x8C15DD40), kMusVol = bs::jogo(0x8C15DCC0),
+                   kMusPan = bs::jogo(0x8C15DC40), kMus35 = bs::jogo(0x8C15D768), kMus36 = bs::jogo(0x8C15D6A0);
 constexpr uint32_t kMusDownErr = 0x7FFFFFFF;  // 8C15D564: bloco sem dados ou de tamanho <= 0
 
 struct State {
@@ -559,8 +561,8 @@ void scene_changed() {
 void vblank(uint64_t n) {
     if (!g_installed) return;
     g->vb = n;
-    // tempo logico: n VBlanks de 1/59,94 s (NTSC 60000/1001)
-    const uint64_t upTo = n * uint64_t(g->rate) * 1001 / 60000;
+    // tempo logico: n VBlanks de um campo (NTSC 1001/60000 s; PAL 1/50 s: cpu/time_hooks.h)
+    const uint64_t upTo = n * uint64_t(g->rate) * kFieldRateDen / kFieldRateNum;
     // A musica: o tick de 250 Hz do driver no relogio de amostras (o k-esimo em k * 176,4 quadros, sem acumular erro), e
     // a mistura renderizada em trechos que param em cada tick: o que um tick muda vale a partir do quadro dele.
     auto renderTo = [](uint64_t ate) {

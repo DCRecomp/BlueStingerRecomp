@@ -156,6 +156,15 @@ BS_TEST(video_adx_roundtrip_and_errors) {
     BS_CHECK(!bv::adx_decode(bad, back, nullptr, &err));
     bad.assign(adx.begin(), adx.begin() + ptrdiff_t(adx.size() / 2));  // truncado
     BS_CHECK(!bv::adx_decode(bad, back, nullptr, &err) && err.find("truncado") != std::string::npos);
+    // SFD do disco (Director's Cut: o OPENING encurtado mantem o total declarado): aceito ate o ultimo quadro completo,
+    // com as mesmas amostras do inicio do original
+    bv::AdxInfo t;
+    BS_CHECK(bv::adx_decode(bad, back, &t, &err, true) && t.truncated && t.declaredSamples == h.totalSamples);
+    BS_CHECK(t.totalSamples > 0 && t.totalSamples < h.totalSamples && t.totalSamples % 32 == 0 && back.size() == size_t(t.totalSamples) * 2);
+    std::vector<int16_t> full;
+    bv::adx_decode(adx, full);
+    BS_CHECK(std::equal(back.begin(), back.end(), full.begin()));
+    BS_CHECK(bv::adx_decode(adx, full, &t, nullptr, true) && !t.truncated);  // inteiro: nada muda
 }
 
 BS_TEST(video_catalog_builder_and_mods) {

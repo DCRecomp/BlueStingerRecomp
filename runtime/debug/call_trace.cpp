@@ -109,7 +109,7 @@ void call_trace_install() {
     std::stringstream     ss(v.substr(semi + 1));
     std::string           tok;
     while (std::getline(ss, tok, ','))
-        if (!tok.empty()) addrs.push_back(uint32_t(std::stoul(tok, nullptr, 16)));
+        if (!tok.empty()) addrs.push_back(mods::endereco_da_versao(uint32_t(std::stoul(tok, nullptr, 16))));  // texto: americano
     call_trace_install(v.substr(0, semi), addrs);
 }
 

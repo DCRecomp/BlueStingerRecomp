@@ -111,9 +111,10 @@ com cuidado.
    (veja `mapa_funcoes.tsv` e os exemplos em `mods/exemplos/`):
 
        #include "mods/mod_api.h"
-       BS_MOD(meu_mod) { bs::mods::replace(0x8C08B544, minha_funcao); }
+       BS_MOD(meu_mod) { bs::mods::replace(bs::jogo(0x8C08B544), minha_funcao); }
 
-   `bs::mods::call_original(endereco, c)` chama a função original de dentro do mod.
+   `bs::mods::call_original(endereco, c)` chama a função original de dentro do mod. Escreva o endereço da versão
+   americana dentro de `bs::jogo(...)`: ele vira o endereço da versão do seu disco.
 2. **Recursos:** um arquivo em `mods/assets/<caminho do disco>` substitui o do disco (por exemplo
    `mods/assets/BSDATA/CDG000.NJ`); filmes em `mods/video/` (por ID ou nome; veja o `manifest.toml` em
    `data\video` da instalação).
@@ -161,11 +162,11 @@ unsigned g_chamadas = 0;
 
 void contar(bs::Sh4Context* c) {
     if (++g_chamadas == 1) std::fprintf(stderr, "[mod exemplo] primeira chamada de 8C08B544\n");
-    bs::mods::call_original(0x8C08B544, c);
+    bs::mods::call_original(bs::jogo(0x8C08B544), c);
 }
 } // namespace
 
-BS_MOD(exemplo_contador) { bs::mods::replace(0x8C08B544, contar); }
+BS_MOD(exemplo_contador) { bs::mods::replace(bs::jogo(0x8C08B544), contar); }
 )";
 
 const char* const kBuildCmd = R"CMD(@echo off
@@ -336,6 +337,10 @@ void export_project(const ExportInputs& in, const fs::path& dest, const std::fun
         writeText(dest / L"bs-projeto.toml", meta);
     }
     if (!in.versionLabel.empty()) writeText(dest / L"VERSION", in.versionLabel + "\n");
+    // PAL P8: a versao do jogo do C++ gerado (o CMakeLists do projeto a usa como padrao de BS_VERSAO_JOGO, e o Builder
+    // confere com a dos dados ao compilar o projeto). O americano nao grava nada: o padrao ja e 0.
+    if (in.gameVersion != 0) writeText(dest / L"config" / L"versao_jogo.txt", std::to_string(in.gameVersion) + "\n");
+    else fs::remove(dest / L"config" / L"versao_jogo.txt", ec);
     log("projeto C++ exportado em " + path_text(dest) + " (" + std::to_string(n) + " funcoes no mapa)");
 }
 

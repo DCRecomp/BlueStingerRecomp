@@ -1,4 +1,5 @@
 #pragma once
+#include "versao/enderecos.h"  // BS_VERSAO_PAL (fase do relogio do filme)
 // N5 (docs/N5-PLANO.md, secao 3.1): nucleo do provedor nativo das entradas MW (Sofdec) que a funcao de
 // video do jogo (8C08B544) chama. A funcao do jogo continua a original; aqui so o que o player MW
 // fazia: abrir o filme (pelo catalogo, com mods), avancar pelo relogio LOGICO, informar o estado,
@@ -35,6 +36,12 @@ enum MwStat : int32_t { kMwStop = 0, kMwPrep = 1, kMwPlaying = 2, kMwPlayEnd = 3
 struct MwCoreOptions {
     native::video::CatalogOptions catalog;
     int                           prepPolls = 1;  // PENDENTE (O1b)
+    // Fase do relogio do filme (100 ns), somada a posicao. PAL P5: a 50 Hz o jogo consulta a cada 2 campos (40 ms), o
+    // periodo exato de um quadro a 25 fps; partindo de uma consulta, as seguintes caem em cima das fronteiras e a variacao
+    // de poucos ticks do instante alternava quadro repetido e pulado (201 de 954 no NEWGAME). Meio campo (10 ms) poe as
+    // consultas no meio do quadro: cada quadro fica 2 campos, como no console. NTSC: 0 (o americano nao muda; la 2 campos
+    // duram 33,37 ms e o quadro 33,33 ms, e as consultas so se afastam devagar da fronteira).
+    int64_t                       phase100ns = BS_VERSAO_PAL ? 100'000 : 0;
     native::video::EndRule        endRule = native::video::EndRule::LaterOfBoth;  // PENDENTE (O1b)
     int32_t                       missingStat = kMwError;  // PENDENTE (O1b): hipotese
     std::string                   subtitleLang;  // "" = sem legendas; senao o idioma (pt, en...)

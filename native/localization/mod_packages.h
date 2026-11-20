@@ -11,7 +11,8 @@
 //   versao     = "1.2.0"              # do pacote (livre)
 //   prioridade = 100                  # maior vence; empate: ordem do id (determinístico)
 //   idiomas    = ["pt-BR"]            # BCP-47 que o pacote fornece (locale.h: valid_language)
-//   jogo       = "T13001N V1.000"     # opcional: so carrega para esta versao do jogo
+//   jogo       = "T13001N V1.000"     # opcional: so carrega para esta versao do jogo (ou uma lista:
+//                                     # ["T13001N V1.000", "T13001D V1.000"]; bs::kJogoIdentidade)
 #include <cstdint>
 #include <filesystem>
 #include <optional>

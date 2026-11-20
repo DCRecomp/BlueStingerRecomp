@@ -35,6 +35,15 @@ BootIdentity identify_boot(const std::vector<uint8_t>& raw, uint32_t bootTrackLb
 // Mensagem de recusa com o tamanho e o SHA-256 encontrados (issue #1: o jogador pode informar a linha)
 std::string boot_rejection_text(const std::string& product, const std::string& version, const BootIdentity& id);
 
+// Versao do jogo de um id reconhecido, na numeracao de BS_VERSAO_JOGO (runtime/versao/include/versao/enderecos.h):
+// 0 = americano (CDI, GD, variantes), 1 = PAL alemao, 2 = PAL ingles, 3 = japones v1.006, 4 e 5 = Director's Cut EN
+// e FR, -1 = outro. O executavel so roda os dados da sua versao.
+int game_version_of(const std::string& versionId);
+
+// Configuracao do bs-recomp (config/<nome>) de uma versao que o Builder ja instala; nullptr = versao ainda sem suporte na
+// instalacao (reconhecida, mas recusada com motivo). PAL P8: o americano e o PAL alemao.
+const char* game_version_config(int gameVersion);
+
 // Versoes extras (hash exato), alem das de known_versions.h
 extern const KnownVersion kExtraVersions[];
 extern const size_t       kExtraVersionCount;

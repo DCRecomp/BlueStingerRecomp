@@ -30,6 +30,7 @@ struct ExportInputs {
     std::filesystem::path functionsTsv; // analysis/functions.tsv (origem e tamanho)
     std::string           versionLabel; // identificacao da versao do Builder/kit
     std::filesystem::path resources;    // pasta de saida com os dados conferidos (vai para bs-projeto.toml)
+    int                   gameVersion = 0;  // BS_VERSAO_JOGO do C++ gerado (config/versao_jogo.txt; PAL P8)
 };
 
 // Lanca std::runtime_error com mensagem para o usuario; ExportCancelled se `cancel` virar true entre as copias

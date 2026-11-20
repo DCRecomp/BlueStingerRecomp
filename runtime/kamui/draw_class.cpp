@@ -1,5 +1,6 @@
 // N9.5 fases 2 e 3A (so validacao): a marca cena 3D x HUD 2D (draw_class.h), pela tabela de hud_table.h.
 #include "kamui/draw_class.h"
+#include "versao/enderecos.h"
 
 namespace bs::kamui {
 
@@ -34,7 +35,7 @@ DrawClass classify(const DrawOrigin& o, const Draw& d, const CommandList& cl) {
     // N9.5 fase 3A: a copia do canal 2 sem o escritor do buffer conhecido (a primeira copia de um bloco, ou sem
     // BS_PROVENIENCIA_DMA): a cadeia e a de quem disparou a copia (8C173044); como na fase 2, 1/w variavel = cena
     if (o.vertex.dma && !o.vertex.dma_writer) {
-        if (library_entry(o.vertex) != 0x8C173044) return DrawClass::Unknown;
+        if (library_entry(o.vertex) != bs::jogo(0x8C173044)) return DrawClass::Unknown;
         if (d.vertex_count == 0 || d.first_vertex + d.vertex_count > cl.vertices.size()) return DrawClass::Unknown;
         const float w0 = cl.vertices[d.first_vertex].inv_w;
         for (uint32_t k = 1; k < d.vertex_count; ++k)

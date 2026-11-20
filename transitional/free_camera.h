@@ -20,6 +20,7 @@
 #include "boundary_registry.h"
 #include "platform/camera_settings.h"
 #include "platform/input.h"
+#include "versao/enderecos.h"  // BS_VERSAO_JOGO
 
 #include <cstdint>
 #include <functional>
@@ -37,7 +38,7 @@ struct RigInput {
 
 class CameraRig {
 public:
-    static constexpr float kStep = 1.0f / 59.94f;  // um VBlank
+    static constexpr float kStep = BS_VERSAO_PAL ? 1.0f / 50.0f : 1.0f / 59.94f;  // um VBlank (NTSC; PAL 50 Hz)
     void  configure(const st::CameraSettings& s) { cfg_ = st::clamp_camera(s); }
     void  step(const RigInput& in, bool suspended);
     void  reset();  // corte de camera, troca de modo: volta ao centro na hora

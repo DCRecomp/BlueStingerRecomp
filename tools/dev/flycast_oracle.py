@@ -321,6 +321,166 @@ def cmd_snap(a):
     finish(a, g)
 
 
+def parar(g: Gdb):
+    """^C com prazo: o stub as vezes descarta a resposta de parada (ver Gdb.cont); repete ate ela chegar."""
+    for _ in range(20):
+        g.s.sendall(b"\x03")
+        g.s.settimeout(1.0)
+        try:
+            g.recv()
+            break
+        except socket.timeout:
+            continue
+        finally:
+            g.s.settimeout(None)
+    else:
+        raise SystemExit("o Flycast nao respondeu ao ^C")
+    g.s.settimeout(0.2)
+    try:
+        while True:
+            g.recv()
+    except socket.timeout:
+        pass
+    finally:
+        g.s.settimeout(None)
+
+
+def continuar(g: Gdb, t0: float, limite: float):
+    """'c' com prazo no ACK (revisao Codex 20261120-081201): o stub ja ficou conectado sem responder; o socket.timeout
+    sobe para o laco de tentativas do quadro, que recomeca o Flycast."""
+    g.s.settimeout(max(1.0, min(10.0, limite - (time.time() - t0))))
+    try:
+        g.send("c")
+    finally:
+        g.s.settimeout(None)
+
+
+def entrar_bios(g: Gdb, a):
+    """A entrada do jogo com o BIOS real (ver cmd_entrada_bios): devolve com o PC na primeira instrucao do jogo.
+    Os breakpoints postos aqui saem tambem num erro (revisao Codex 20261120-081201: com --attach o Flycast continua vivo)."""
+    antes = set(g.bps)
+    try:
+        _entrar_bios(g, a)
+    finally:
+        sobra = [v for k, v in g.bps.items() if k not in antes]  # no caminho normal, vazia
+        if sobra:
+            g.s.settimeout(5.0)  # com prazo: depois de um erro, o estado do stub e incerto
+            try:
+                parar(g)
+                for v in sobra:
+                    g.bp(v, False)
+            except (Exception, SystemExit):  # sem resposta: o Flycast e encerrado pelo chamador (nao --attach)
+                print(f"AVISO: breakpoints nao removidos: {' '.join('%08X' % v for v in sobra)}", flush=True)
+            finally:
+                g.s.settimeout(None)
+
+
+def _entrar_bios(g: Gdb, a):
+    ip = open(a.ip, "rb").read()
+    # o IP.BIN carregado: 32 bytes da area de boot 2 (0x8C00E000), iguais aos do disco
+    o = 0x8C00E000 - 0x8C008000
+    want = ip[o:o + 32]
+    # o salto para o jogo: no CDI do projeto, o carregador do autoboot (8C00E202); nos discos originais, outro jmp da
+    # mesma area. O Flycast so tem breakpoint de software (trapa na RAM): um em cada "jmp @rN" (0x4n2B) de 0x8C00E000 em
+    # diante; no que parar, o passo do salto diz se foi para a entrada do jogo
+    jmps = [0x8C008000 + k for k in range(0x6000, len(ip) - 1, 2) if (struct.unpack_from("<H", ip, k)[0] & 0xF0FF) == 0x402B]
+    t0, fatias = time.time(), 0
+    while True:
+        if time.time() - t0 > a.limite:
+            raise SystemExit(f"o BIOS nao carregou o IP.BIN em {a.limite:.0f}s")
+        continuar(g, t0, a.limite)
+        time.sleep(a.fatia)
+        parar(g)
+        fatias += 1
+        if g.read(0x8C00E000, 32) == want:
+            break
+        if fatias % 50 == 0:
+            print(f"  {fatias} fatias, {time.time() - t0:.0f}s, PC={g.regs()[R_PC]:08X}", flush=True)
+    pc = g.regs()[R_PC]
+    if (pc & 0x1FFFFFFF) >= (ENTRY & 0x1FFFFFFF) and (pc & 0x1FFFFFFF) < 0x0C200000:
+        raise SystemExit(f"o jogo ja tinha comecado (PC={pc:08X}): use uma --fatia menor")
+    print(f"IP.BIN carregado pelo BIOS depois de {fatias} fatias ({time.time() - t0:.1f}s); PC={pc:08X}; "
+          f"{len(jmps)} jmp candidatos: {' '.join('%08X' % x for x in jmps)}", flush=True)
+    if a.exe:
+        # discos originais: o BIOS carrega o 1ST_READ.BIN e salta para ele (nao ha jmp no IP.BIN). O breakpoint vai na
+        # entrada quando o comeco do executavel ja esta na RAM e o fim ainda nao (a leitura de ~2 MB do GD leva tempo):
+        # o trapa nao e mais sobrescrito, e o salto acontece so depois da carga inteira
+        # o primeiro setor inteiro (2 KB): o codigo do proprio BIOS na RAM pode ter os mesmos primeiros bytes (09000900,
+        # dois nop; sonda de 2026-11-20). O fim conferido e o do arquivo: se ja chegou, a carga terminou e o trapa
+        # pode ter sido posto tarde demais
+        exe = open(a.exe, "rb").read()
+        fim = len(exe) & ~31
+        while True:
+            if time.time() - t0 > a.limite:
+                raise SystemExit(f"o BIOS nao carregou o 1ST_READ.BIN em {a.limite:.0f}s")
+            continuar(g, t0, a.limite)
+            time.sleep(a.fatia_exe)
+            parar(g)
+            if g.read(ENTRY, 0x800) == exe[:0x800]:
+                if g.read(ENTRY + fim - 32, 32) == exe[fim - 32:fim]:
+                    raise SystemExit("o 1ST_READ.BIN ja estava inteiro na RAM ao ser visto: use uma --fatia-exe menor")
+                break
+        print(f"1ST_READ.BIN chegando a RAM ({time.time() - t0:.1f}s): breakpoint na entrada", flush=True)
+        g.bp(ENTRY)
+        # em fatias, como a sonda de 2026-11-20 (um "c" longo com o Gdb.cont nao via a parada no trapa da entrada)
+        while True:
+            if time.time() - t0 > a.limite:
+                raise SystemExit(f"o jogo nao chegou a entrada em {a.limite:.0f}s")
+            continuar(g, t0, a.limite)
+            time.sleep(a.fatia_exe)
+            parar(g)
+            pc = g.regs()[R_PC]
+            if pc & 0x1FFFFFFF == ENTRY & 0x1FFFFFFF:
+                break
+            if 0x0C010000 < (pc & 0x1FFFFFFF) < 0x0C200000 and g.read(ENTRY, 2) != bytes([0x08, 0xC3]):
+                raise SystemExit(f"o jogo comecou sem parar na entrada (PC={pc:08X}): o trapa foi sobrescrito")
+        g.bp(ENTRY, False)
+        if pc & 0x1FFFFFFF != ENTRY & 0x1FFFFFFF:
+            raise SystemExit(f"parada fora da entrada do jogo: PC={pc:08X}")
+        jmps = []
+    for x in jmps:
+        g.bp(x)
+    chegou = not jmps
+    for _ in range(64 if jmps else 0):  # com --exe ja parou na entrada
+        g.cont(limit=a.limite)
+        at = g.regs()[R_PC]
+        hit = next((x for x in jmps if (x & 0x1FFFFFFF) == (at & 0x1FFFFFFF)), None)
+        if hit is None:
+            raise SystemExit(f"parada fora dos jmp candidatos: PC={at:08X}")
+        g.bp(hit, False)
+        g.step()  # o step do Flycast executa jmp + slot de atraso juntos
+        pc = g.regs()[R_PC]
+        if pc & 0x1FFFFFFF != ENTRY & 0x1FFFFFFF:
+            g.step()
+            pc = g.regs()[R_PC]
+        if pc & 0x1FFFFFFF == ENTRY & 0x1FFFFFFF:
+            print(f"salto para o jogo em {hit:08X}", flush=True)
+            chegou = True
+            break
+        g.bp(hit)
+    for x in jmps:
+        g.bp(x, False)
+    if not chegou:
+        raise SystemExit("nenhum dos jmp candidatos levou a entrada do jogo")
+
+
+def cmd_entrada_bios(a):
+    """P7 (docs/PAL-PLANO.md): o estado na entrada do jogo com o BIOS REAL (UseReios = no; dc_boot.bin e a flash da regiao
+    na pasta data do Flycast usado). Com o BIOS real, o IP.BIN so chega a RAM quando o BIOS o carrega, e o breakpoint do
+    Flycast e um trapa gravado na RAM: posto antes, seria sobrescrito. Entao roda em fatias curtas, para (^C) e confere se
+    os bytes do salto do IP.BIN (BOOT_JUMP) ja sao os do IP.BIN do disco (--ip); ai poe o breakpoint, segue ate a entrada
+    do jogo e grava o mesmo formato do snap (registradores + RAM) e os registradores do PVR (<saida>.pvr)."""
+    g = connect(a)
+    try:
+        entrar_bios(g, a)
+        r = snapshot(g, a.saida)
+        with open(os.path.splitext(a.saida)[0] + ".pvr", "wb") as f:
+            f.write(g.read(PVR_BASE, PVR_SIZE))
+        print(f"entrada do jogo com o BIOS real: PC={r[R_PC]:08X} SR={r[R_SR]:08X} R15={r[15]:08X} -> {a.saida} (+ .pvr)")
+    finally:
+        finish(a, g)
+
+
 def interrupt(g: Gdb):
     """^C e descarta pacotes que sobrarem (parada real chegando junto)."""
     g.s.sendall(b"\x03")
@@ -533,6 +693,10 @@ BU_OPS_DE_CARTAO = (1, 2, 0x12)   # ops do callback que nao sao fim de LOAD/SAVE
 SAVE_POINT_RET = 0x8C0408EA     # volta de 8C04FB80(jogador, sp, 0) em 8C0407C0 (A no gameplay): r0 = tipo
 PD_RETORNO = 0x8C1730BE           # volta do servidor pd 8C15C4E6 (uma passada por passo de jogo)
 PDS_PORTA_A = 0x8C2D8970          # PDS_PERIPHERAL da porta A, unidade 0 (transitional/pad_contract.h)
+# P7: os mesmos dois enderecos nas outras versoes (PD_RETORNO pelo mapa de funcoes, tmp/discos/mapa-*/funcoes.tsv;
+# PDS_PORTA_A pela tabela runtime/versao/include/versao/enderecos_*.inc). O Director's Cut usa os do japones.
+VERSOES = {"us": (0x8C1730BE, 0x8C2D8970), "pal_de": (0x8C17405E, 0x8C2D9910), "pal_en": (0x8C17309E, 0x8C2D8950),
+           "pal_fr": (0x8C173F9E, 0x8C2D9850), "jp": (0x8C17022A, 0x8C2D5A50)}
 # bits de `on` (ordem de tools/dev/pad_roteiros.py); LT/RT como o decodificador do SDK (>= 128)
 PD_BITS = {"C": 0, "B": 1, "A": 2, "START": 3, "UP": 4, "DOWN": 5, "LEFT": 6, "RIGHT": 7,
            "Z": 8, "Y": 9, "X": 10, "D": 11, "RT": 16, "LT": 17,
@@ -940,18 +1104,22 @@ def cmd_quadro(a):
     g = None
     # --vmu: a VMU desta sessao no slot A1 (como o bu-trace); a do Flycast e o emu.cfg voltam no fim
     base = os.path.dirname(a.flycast or FLYCAST)
-    vmu, cfg = os.path.join(base, "data", FLYCAST_VMU), os.path.join(base, "emu.cfg")
+    # o Flycast guarda a VMU por jogo (<produto>_vmu_save_A1.bin); fora do americano, --vmu-nome da o(s) nome(s)
+    vmus = [os.path.join(base, "data", n) for n in (a.vmu_nome or [FLYCAST_VMU])]
+    cfg = os.path.join(base, "emu.cfg")
     trocas = []
+    antes = set(os.listdir(os.path.join(base, "data"))) if a.vmu else set()
     if a.vmu:
-        for f in (vmu, cfg):
+        for f in vmus + [cfg]:
             if os.path.exists(f + ".bs-original"):
                 raise SystemExit(f"{f}.bs-original existe (sessao anterior interrompida?): restaure-o antes")
     try:
         if a.vmu:
-            trocas.append((vmu, vmu + ".bs-original"))
-            if os.path.exists(vmu):
-                shutil.copyfile(vmu, vmu + ".bs-original")
-            shutil.copyfile(a.vmu, vmu)
+            for vmu in vmus:
+                trocas.append((vmu, vmu + ".bs-original"))
+                if os.path.exists(vmu):
+                    shutil.copyfile(vmu, vmu + ".bs-original")
+                shutil.copyfile(a.vmu, vmu)
             trocas.append((cfg, cfg + ".bs-original"))
             shutil.copyfile(cfg, cfg + ".bs-original")
             txt = open(cfg, encoding="utf-8").read()
@@ -964,7 +1132,11 @@ def cmd_quadro(a):
             g = connect(a)
             try:
                 g.s.settimeout(120.0)
-                enter_game(g)
+                if a.ip:  # P7: BIOS real (o oraculo PAL/JP de tmp/oraculo-bios)
+                    g.s.settimeout(None)
+                    entrar_bios(g, a)
+                else:
+                    enter_game(g)
                 g.s.settimeout(None)
                 break
             except (socket.timeout, ConnectionResetError) as e:
@@ -1000,6 +1172,11 @@ def cmd_quadro(a):
                 g.cont(limit=max(1.0, a.limite - (time.time() - t0)))
     finally:
         fecha_flycast(a, g)
+        if a.vmu:  # um nome de VMU que nao era o do jogo: o Flycast cria outra (formatada e vazia); avisa
+            novos = sorted(set(os.listdir(os.path.join(base, "data"))) - antes - {os.path.basename(v) for v in vmus}
+                           - {os.path.basename(v) + ".bs-original" for v in vmus})
+            if novos:
+                print(f"AVISO: o Flycast criou {novos} em data/ (a VMU de --vmu nao foi a usada; ver --vmu-nome)")
         for f, guarda in trocas:
             if os.path.exists(guarda):
                 os.replace(guarda, f)
@@ -1044,6 +1221,13 @@ def main():
     sf.add_argument("--seconds", type=float, default=180.0, help="tempo do host rodando livre antes da parada")
     sf.add_argument("--entry", help="grava antes o estado na entrada do jogo (mesma sessao)")
     sp.add_parser("regs")
+    eb = sp.add_parser("entrada-bios", help="P7: estado na entrada do jogo com o BIOS real (UseReios = no)")
+    eb.add_argument("ip", help="IP.BIN do disco (os bytes do salto para a entrada)")
+    eb.add_argument("saida", help="snapshot (registradores + RAM); os registradores do PVR vao para <saida>.pvr")
+    eb.add_argument("--fatia", type=float, default=0.05, help="segundos de execucao entre as conferencias")
+    eb.add_argument("--fatia-exe", type=float, default=0.02, help="fatia enquanto o 1ST_READ.BIN chega (a carga leva ~2 s)")
+    eb.add_argument("--exe", help="1ST_READ.BIN do disco: disco original (o BIOS salta para o jogo, sem jmp no IP.BIN)")
+    eb.add_argument("--limite", type=float, default=180.0)
     m = sp.add_parser("mem", help="memoria na N-esima execucao de um endereco")
     m.add_argument("func", type=lambda s: int(s, 0))
     m.add_argument("addr", type=lambda s: int(s, 0))
@@ -1075,10 +1259,22 @@ def main():
     q.add_argument("--passos", required=True, type=lambda s: [int(x) for x in s.split(",")], help="passos de jogo (virgula)")
     q.add_argument("--limite", type=float, default=7200.0, help="tempo maximo do host (s)")
     q.add_argument("--vmu", help="imagem de VMU (128 KB) no slot A1 nesta sessao (a do Flycast volta no fim)")
+    q.add_argument("--vmu-nome", type=lambda s: s.split(","),
+                   help="nome(s) do arquivo da VMU em data/ (virgula; padrao " + FLYCAST_VMU + ")")
+    q.add_argument("--ip", help="P7: entrada com o BIOS real (IP.BIN do disco; ver entrada-bios)")
+    q.add_argument("--exe", help="P7: 1ST_READ.BIN do disco original (ver entrada-bios)")
+    q.add_argument("--fatia", type=float, default=0.05)
+    q.add_argument("--fatia-exe", type=float, default=0.02)
+    q.add_argument("--versao", choices=sorted(VERSOES), default="us",
+                   help="P7: enderecos do jogo desta versao (passo de jogo e porta A do controle)")
     a = p.parse_args()
+    if getattr(a, "versao", "us") != "us":  # P7: os enderecos do passo e do controle desta versao
+        global PD_RETORNO, PDS_PORTA_A
+        PD_RETORNO, PDS_PORTA_A = VERSOES[a.versao]
     try:
         return {"call": cmd_call, "snap": cmd_snap, "trace": cmd_trace, "first-diff": cmd_first_diff, "regs": cmd_regs,
-                "snap-free": cmd_snap_free, "mem": cmd_mem, "bu-trace": cmd_bu_trace, "quadro": cmd_quadro}[a.cmd](a) or 0
+                "snap-free": cmd_snap_free, "mem": cmd_mem, "bu-trace": cmd_bu_trace, "quadro": cmd_quadro,
+                "entrada-bios": cmd_entrada_bios}[a.cmd](a) or 0
     finally:
         finish(a, None)  # erro no meio do comando: nao deixar Flycast orfao
 

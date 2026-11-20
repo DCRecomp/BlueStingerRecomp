@@ -1,4 +1,5 @@
 #include "pad_probe.h"
+#include "versao/enderecos.h"
 
 #include "pad_contract.h"
 
@@ -19,7 +20,7 @@
 namespace bs::transitional::pad {
 namespace {
 
-constexpr uint32_t kServer = 0x8C15C4E6, kPerRaw = 0x8C08F4B6;
+constexpr uint32_t kServer = bs::jogo(0x8C15C4E6), kPerRaw = bs::jogo(0x8C08F4B6);
 
 struct State {
     bool                            on = false, inServer = false, done = false;

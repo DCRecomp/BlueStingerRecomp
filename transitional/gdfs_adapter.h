@@ -10,6 +10,7 @@
 // Um GDFS legado (ponteiro na RAM) que chegue a uma funcao migrada vai para a funcao original.
 // Um handle nativo que chegue a uma funcao sem equivalente nativo (FAD, PIO, espera interna) e
 // erro fatal com mensagem: nunca leitura silenciosa de memoria.
+#include "versao/enderecos.h"
 #include "boundary_registry.h"
 #include "platform/data_files.h"
 #include "platform/files.h"
@@ -28,10 +29,10 @@ struct Addresses {
 
 // Blue Stinger NTSC-U V1.000.
 constexpr Addresses kBlueStingerUS = {
-    0x8C15BF60, 0x8C15B626, 0x8C15B644, 0x8C15B680, 0x8C15B69A, 0x8C15B6B4, 0x8C15B6CE,
-    0x8C15B71C, 0x8C15B732, 0x8C15B75A, 0x8C15B774, 0x8C15B7FA, 0x8C15B8D4, 0x8C15B548,
-    0x8C15BBF8, 0x8C15BC10, 0x8C15BC26, 0x8C15BD40, 0x8C15BD58, 0x8C15BDA4, 0x8C15BDDE,
-    0x8C15AE28,
+    bs::jogo(0x8C15BF60), bs::jogo(0x8C15B626), bs::jogo(0x8C15B644), bs::jogo(0x8C15B680), bs::jogo(0x8C15B69A), bs::jogo(0x8C15B6B4), bs::jogo(0x8C15B6CE),
+    bs::jogo(0x8C15B71C), bs::jogo(0x8C15B732), bs::jogo(0x8C15B75A), bs::jogo(0x8C15B774), bs::jogo(0x8C15B7FA), bs::jogo(0x8C15B8D4), bs::jogo(0x8C15B548),
+    bs::jogo(0x8C15BBF8), bs::jogo(0x8C15BC10), bs::jogo(0x8C15BC26), bs::jogo(0x8C15BD40), bs::jogo(0x8C15BD58), bs::jogo(0x8C15BDA4), bs::jogo(0x8C15BDDE),
+    bs::jogo(0x8C15AE28),
 };
 
 constexpr uint32_t kTokenTag = 0x7E000000;

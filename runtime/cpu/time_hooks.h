@@ -12,15 +12,22 @@
 // Durante o N2a a base de progresso continua sendo o contador de ciclos (BS_CYCLES/BS_POLL):
 // time_now() e o unico ponto em que um modulo le c->cycles para medir tempo.
 #include "cpu/sh4_context.h"
+#include "versao/enderecos.h"  // BS_VERSAO_JOGO
 
 #include <cstdint>
 
 namespace bs {
 
+// Taxa de campos de video (campos por segundo = kFieldRateNum / kFieldRateDen): NTSC 60000/1001 (59,94 Hz) no
+// americano; PAL 50 Hz no PAL alemao (docs/PAL-PLANO.md P4: o jogo programa o SPG em PAL, 625 linhas, e o proprio codigo
+// dele compensa o tempo para 50 campos por segundo; a cadencia nativa precisa ser a do console PAL).
+constexpr uint64_t kFieldRateNum = BS_VERSAO_PAL ? 50 : 60000;
+constexpr uint64_t kFieldRateDen = BS_VERSAO_PAL ? 1 : 1001;
+
 // Base de tempo de compatibilidade: um tick por ciclo estimado do SH-4 a 200 MHz; um campo
-// NTSC = 200 MHz * 1001/60000 ciclos (truncado, como sempre foi).
+// = 200 MHz * kFieldRateDen/kFieldRateNum ciclos (NTSC: 1001/60000, truncado, como sempre foi).
 constexpr uint64_t kCompatTicksPerSecond = 200000000;
-constexpr uint64_t kCompatTicksPerField  = kCompatTicksPerSecond * 1001 / 60000;
+constexpr uint64_t kCompatTicksPerField  = kCompatTicksPerSecond * kFieldRateDen / kFieldRateNum;
 
 // Eventos do Holly vencidos (resultado de holly_due).
 constexpr uint32_t kDueVblankIn  = 1u << 0;

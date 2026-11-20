@@ -20,6 +20,7 @@
 #include "disc/scramble.h"
 #include "system/syscall_service.h"
 #include "boot_identity.h"
+#include "versao/enderecos.h"  // BS_VERSAO_JOGO
 #include "memory/sh4_ccn.h"
 #include "memory/sh4_dmac.h"
 #include "memory/sh4_port.h"
@@ -37,6 +38,8 @@
 
 #include <cstring>
 #include <ctime>
+#include <array>
+#include <initializer_list>
 #include <stdexcept>
 
 namespace bs {
@@ -67,6 +70,12 @@ BootFiles boot_read_data(const std::filesystem::path& dir) {
     if (f.versionId.empty())
         throw disc::RuntimeDataError("os dados do jogo nao sao da versao recompilada (hash do executavel de boot "
                                      "diferente). Gere a instalacao de novo com o Builder.");
+    // PAL P4: o executavel so roda os dados da versao para a qual foi compilado (o C++ gerado e os enderecos do codigo
+    // nativo, bs::jogo, sao de uma versao so)
+    if (const int v = game_version_of(f.versionId); v != BS_VERSAO_JOGO)
+        throw disc::RuntimeDataError(std::string("os dados do jogo sao de outra versao (") + f.versionId +
+                                     ") que a deste executavel (" + bs::kVersaoNome +
+                                     "). Gere a instalacao de novo com o Builder.");
     return f;
 }
 
@@ -103,6 +112,18 @@ void boot_prepare(Sh4Context& c, const BootFiles& files, uint32_t rtcSeconds) {
     std::memset(ram + 0xF3B0, 0, 0x10000 - 0xF3B0);
     std::memcpy(ram + 0x10000, files.firstRead.data(), files.firstRead.size());
     std::memcpy(ram + 0x78, &rtcSeconds, 4);  // hora do sistema, como o BIOS a deixa
+    // Regiao na area do sistema (P7, 2026-11-20, BIOS real no oraculo): 8C000070/74 sao o codigo de regiao e transmissao
+    // (americano "0011"/'0', PAL "0021"/'1', japones "0001"/'0') e 8C000068/6C, valores da flash da regiao. O americano fica
+    // com os de kBiosSysWords: 70/74 iguais aos do BIOS real; 68/6C os do BIOS simulado (o real da outros, da flash).
+#if BS_VERSAO_PAL
+    for (const auto& w : std::initializer_list<std::array<uint32_t, 2>>{
+             {0x0068, 0x7D988778}, {0x006C, 0x175ABD44}, {0x0070, 0x31323030}, {0x0074, 0x00000031}})
+        std::memcpy(ram + w[0], &w[1], 4);
+#elif BS_VERSAO_JOGO >= 3
+    for (const auto& w : std::initializer_list<std::array<uint32_t, 2>>{
+             {0x0068, 0x6A3014EB}, {0x006C, 0x7FC35DDB}, {0x0070, 0x31303030}})
+        std::memcpy(ram + w[0], &w[1], 4);
+#endif
 
     sh4_reset(c, kEntry);
     // Registradores na entrada (medidos): pilha e VBR em 0x8C00F400, GBR na area do
@@ -126,6 +147,16 @@ void boot_prepare(Sh4Context& c, const BootFiles& files, uint32_t rtcSeconds) {
 
     std::vector<uint32_t> pvr(2048, 0);
     for (const auto& r : kBiosPvrState) pvr[r[0] / 4] = r[1];
+#if BS_VERSAO_PAL
+    // PAL (docs/PAL-PLANO.md P7, 2026-11-20): o que muda na entrada do jogo entre o BIOS real PAL e o NTSC, medido no oraculo
+    // com o dc_boot.bin real e a flash Eur-Pal (tools/dev/flycast_oracle.py entrada-bios; os tres PAL dao o mesmo; o
+    // americano, em CDI e GD, e o japones dao o NTSC). So o SPG e a posicao da imagem: o resto do estado acima (o do BIOS
+    // simulado, medido em 14/10) fica igual ao americano. SPG_VBLANK_INT fica o do NTSC (00150104), como no BIOS real.
+    for (const auto& r : std::initializer_list<std::array<uint32_t, 2>>{
+             {0x00C8, 0x034B0000}, {0x00D0, 0x00000190}, {0x00D4, 0x008D034B}, {0x00D8, 0x0270035F},
+             {0x00DC, 0x002C026C}, {0x00E0, 0x07D6A53F}, {0x00EC, 0x000000AE}, {0x00F0, 0x002E002D}})
+        pvr[r[0] / 4] = r[1];
+#endif
     pvr_regs_load(pvr.data());
     snd_bus_rtc_set(rtcSeconds, 0);
     syscall_service_install(&c);  // N8.3: vetores das syscalls -> servico nativo

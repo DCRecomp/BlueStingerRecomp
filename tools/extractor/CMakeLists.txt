@@ -19,6 +19,7 @@ add_library(bs_disc STATIC
   disc/cdi_image.cpp
   disc/track_files_image.cpp
   disc/disc_open.cpp
+  disc/gdi_export.cpp
   extract.cpp
 )
 target_link_libraries(bs_disc PUBLIC bs_disc_data)

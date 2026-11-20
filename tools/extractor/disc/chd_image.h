@@ -36,6 +36,7 @@ public:
 
 protected:
     void readRaw(const Track& t, uint64_t offset, void* dst, size_t n) const override;
+    bool audioBigEndian() const override { return true; }  // chdman guarda o audio de CD big-endian
 
 private:
     struct Impl;

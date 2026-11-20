@@ -1,4 +1,6 @@
 #include "game_host.h"
+#include "versao/enderecos.h"
+#include "cpu/time_hooks.h"  // kFieldRateNum/Den
 #include "platform/stall_trace.h"
 #include "platform/telemetry.h"  // N9.5 fase 5C
 
@@ -184,8 +186,8 @@ void padTraceWrite(uint64_t step) {
                  static_cast<unsigned long long>(step), static_cast<unsigned long long>(g_stepLog.host->vblanks()),
                  static_cast<unsigned long long>(controllerReads()), ptr, p.id, p.support, p.on, p.off, p.press, p.release,
                  p.r, p.l, p.x1, p.y1, p.x2, p.y2, p.old, infoOk ? u32(p.info) : 0u, name.empty() ? "-" : name.c_str(),
-                 u32(0x8C24C5D0), u32(0x8C24C5D4), u32(0x8C24C5D8), u32(0x8C24C5DC), u32(0x8C24C5E0),
-                 (u32(0x8C24F878) >> 2) & 1u);
+                 u32(bs::jogo(0x8C24C5D0)), u32(bs::jogo(0x8C24C5D4)), u32(bs::jogo(0x8C24C5D8)), u32(bs::jogo(0x8C24C5DC)), u32(bs::jogo(0x8C24C5E0)),
+                 (u32(bs::jogo(0x8C24F878)) >> 2) & 1u);
     if (step % 250 == 0) std::fflush(g_padTrace);
 }
 
@@ -194,16 +196,16 @@ void stepLogWrite(uint64_t step, void*) {
     if (!g_stepLog.f || step % g_stepLog.every) return;
     const uint8_t* ram = g_stepLog.ram;
     uint64_t       h   = 0xCBF29CE484222325ull;
-    for (uint32_t a = 0x240000; a < 0x260000; ++a) {
+    for (uint32_t a = bs::jogo_ram(0x8C240000); a < bs::jogo_ram(0x8C260000); ++a) {
         // N7c: o objeto camera do SDK (0x8C24CC38, 0x78 bytes: matriz, posicao, vetor de visao) e o que a camera livre
         // muda; so o SDK o le (docs/N7-PLANO.md secao 23.1). Sem ele, Original e camera livre devem dar o mesmo estado.
-        if (g_stepLog.noCamera && a >= 0x24CC38 && a < 0x24CCB0) continue;
+        if (g_stepLog.noCamera && a >= bs::jogo_ram(0x8C24CC38) && a < bs::jogo_ram(0x8C24CCB0)) continue;
         h = (h ^ ram[a]) * 0x100000001B3ull;
     }
     int16_t life;
     float   p[3];
-    std::memcpy(&life, ram + 0x24FBCC, 2);
-    std::memcpy(p, ram + 0x24D668, 12);
+    std::memcpy(&life, ram + bs::jogo_ram(0x8C24FBCC), 2);
+    std::memcpy(p, ram + bs::jogo_ram(0x8C24D668), 12);
     std::fprintf(g_stepLog.f, "%llu\t%llu\t%016llX\t%d\t%.3f\t%.3f\t%.3f\n", static_cast<unsigned long long>(step),
                  static_cast<unsigned long long>(g_stepLog.host->vblanks()), static_cast<unsigned long long>(h), life, p[0],
                  p[1], p[2]);
@@ -211,8 +213,9 @@ void stepLogWrite(uint64_t step, void*) {
     if (step % 64 == 0) std::fflush(g_stepLog.f);
 }
 
-// Periodo de um campo NTSC: 1001 / 60000 s (59,94 Hz).
-constexpr auto kField = std::chrono::nanoseconds(16683333);
+// Periodo de um campo: NTSC 1001 / 60000 s (59,94 Hz); PAL 1/50 s (cpu/time_hooks.h, kFieldRateNum/Den)
+constexpr auto   kField     = std::chrono::nanoseconds(1000000000ull * kFieldRateDen / kFieldRateNum);
+constexpr double kFieldMs   = BS_VERSAO_PAL ? 20.0 : 16.683;  // orcamento por campo nas estatisticas
 
 #if BS_VALIDACAO
 // N9.5 fase 0 (so investigacao, BS_TELA_LOGICA43): roda a rotina do jogo com a projecao do 4:3 (o cx da copia do desenho
@@ -223,17 +226,17 @@ void     tela43(uint32_t addr, Sh4Context* cc) {
     struct Restaura {
         uint8_t salvo[12];
         Restaura() {
-            std::memcpy(salvo, g_ramTela + 0x2D9C7C, 4), std::memcpy(salvo + 4, g_ramTela + 0x24CCB8, 4);
-            std::memcpy(salvo + 8, g_ramTela + 0x24CCC0, 4);
+            std::memcpy(salvo, g_ramTela + bs::jogo_ram(0x8C2D9C7C), 4), std::memcpy(salvo + 4, g_ramTela + bs::jogo_ram(0x8C24CCB8), 4);
+            std::memcpy(salvo + 8, g_ramTela + bs::jogo_ram(0x8C24CCC0), 4);
         }
         ~Restaura() {
-            std::memcpy(g_ramTela + 0x2D9C7C, salvo, 4), std::memcpy(g_ramTela + 0x24CCB8, salvo + 4, 4);
-            std::memcpy(g_ramTela + 0x24CCC0, salvo + 8, 4);
+            std::memcpy(g_ramTela + bs::jogo_ram(0x8C2D9C7C), salvo, 4), std::memcpy(g_ramTela + bs::jogo_ram(0x8C24CCB8), salvo + 4, 4);
+            std::memcpy(g_ramTela + bs::jogo_ram(0x8C24CCC0), salvo + 8, 4);
         }
     } restaura;
     const float w = 640.f, cx = 320.f;
-    std::memcpy(g_ramTela + 0x2D9C7C, &cx, 4), std::memcpy(g_ramTela + 0x24CCB8, &w, 4);
-    std::memcpy(g_ramTela + 0x24CCC0, &cx, 4);
+    std::memcpy(g_ramTela + bs::jogo_ram(0x8C2D9C7C), &cx, 4), std::memcpy(g_ramTela + bs::jogo_ram(0x8C24CCB8), &w, 4);
+    std::memcpy(g_ramTela + bs::jogo_ram(0x8C24CCC0), &cx, 4);
     bs::mods::call_original(addr, cc);
 }
 template <uint32_t A> void tela43(Sh4Context* cc) { tela43(A, cc); }
@@ -292,7 +295,7 @@ void GameHost::dialogueEvent(const native::audio::DialogueEvent& e, bool replay)
 
 void GameHost::dialogueVblank(uint64_t n) {
     Dialogue&      d      = *dialogue_;
-    const uint64_t mixed  = n * 44100ull * 1001 / 60000;  // o mesmo relogio do mixer (sound_adapter.cpp)
+    const uint64_t mixed  = n * 44100ull * kFieldRateDen / kFieldRateNum;  // o mesmo relogio do mixer (sound_adapter.cpp)
     // a legenda segue o que se OUVE: o quadro do mixer que esta saindo do dispositivo agora (sem deslocamento fixo; headless:
     // o proprio tempo misturado)
     const uint64_t audible = transitional::sound::audible_frame(mixed), queued = mixed > audible ? mixed - audible : 0;
@@ -484,7 +487,7 @@ void GameHost::applyRequests() {
             const uint64_t inst = prev ? prev->subs.instances() : 0;
             const uint64_t occ = prev ? prev->occurrences : 0, sim = prev ? prev->simultaneous : 0, lf = prev ? prev->latencyFrames : 0,
                            lm = prev ? prev->latencyMax : 0, ls = prev ? prev->latencySamples : 0;
-            dialogue_.reset(new Dialogue(native::localization::ModPackages::discover(opt_.modAudio.parent_path(), "T13001N V1.000"),
+            dialogue_.reset(new Dialogue(native::localization::ModPackages::discover(opt_.modAudio.parent_path(), bs::kJogoIdentidade),
                                          language));
             dialogue_->occurrences = occ, dialogue_->simultaneous = sim, dialogue_->latencyFrames = lf, dialogue_->latencyMax = lm;
             dialogue_->latencySamples = ls;  // os contadores do diagnostico continuam
@@ -623,12 +626,12 @@ void GameHost::vblank() {
     }();
     if (kHudMarca && !g_hud_marks) hud_marks_enable(true);
     if (kTela.largura > 0 && ram_) {
-        std::memcpy(ram_ + 0x24CCB8, &kTela.largura, 4);
-        std::memcpy(ram_ + 0x24CCC0, &kTela.cx, 4);
-        if (kTela.copia) std::memcpy(ram_ + 0x2D9C7C, &kTela.cxCopia, 4);
+        std::memcpy(ram_ + bs::jogo_ram(0x8C24CCB8), &kTela.largura, 4);
+        std::memcpy(ram_ + bs::jogo_ram(0x8C24CCC0), &kTela.cx, 4);
+        if (kTela.copia) std::memcpy(ram_ + bs::jogo_ram(0x8C2D9C7C), &kTela.cxCopia, 4);
         if (kTela.larguraCopia > 0) {
             const uint32_t li = uint32_t(kTela.larguraCopia);
-            std::memcpy(ram_ + 0x2D9C74, &kTela.larguraCopia, 4), std::memcpy(ram_ + 0x2D9CBC, &li, 4);
+            std::memcpy(ram_ + bs::jogo_ram(0x8C2D9C74), &kTela.larguraCopia, 4), std::memcpy(ram_ + bs::jogo_ram(0x8C2D9CBC), &li, 4);
         }
     }
 #endif
@@ -676,7 +679,7 @@ void GameHost::vblank() {
     if (kRamMut.first && n == kRamMut.first && ram_) ram_[kRamMut.second & 0xFFFFFF] ^= 0x01;
     if (stateLog && ram_ && n % 250 == 0) {
         uint64_t h = 0xCBF29CE484222325ull;
-        for (uint32_t a = 0x240000; a < 0x260000; ++a) h = (h ^ ram_[a]) * 0x100000001B3ull;
+        for (uint32_t a = bs::jogo_ram(0x8C240000); a < bs::jogo_ram(0x8C260000); ++a) h = (h ^ ram_[a]) * 0x100000001B3ull;
         std::fprintf(stateLog, "%llu\t%016llX\n", static_cast<unsigned long long>(n), static_cast<unsigned long long>(h));
         std::fflush(stateLog);
     }
@@ -694,10 +697,10 @@ void GameHost::vblank() {
         stats_.vblanks   = n;
         stats_.workAvgMs = workSumMs_ / double(n);
         stats_.workMaxMs = std::max(stats_.workMaxMs, work);
-        if (work > 16.683) ++stats_.overBudget;
+        if (work > kFieldMs) ++stats_.overBudget;
         // Diagnostico: BS_FIELD_LOG=1 lista os campos acima do orcamento
         static const bool fieldLog = std::getenv("BS_FIELD_LOG") != nullptr;
-        if (fieldLog && work > 16.683) std::fprintf(stderr, "[campo] %llu: %.2f ms\n", (unsigned long long)n, work);
+        if (fieldLog && work > kFieldMs) std::fprintf(stderr, "[campo] %llu: %.2f ms\n", (unsigned long long)n, work);
         const double since = std::chrono::duration<double>(now - rateStart_).count();
         if (since >= 1.0) {
             stats_.fieldsPerSecond = double(n - rateVblank_) / since;
@@ -816,7 +819,7 @@ void GameHost::threadMain() {
             std::stringstream ss(v);
             for (std::string t; std::getline(ss, t, ',');)
                 if (!t.empty()) {
-                    const uint32_t a = uint32_t(std::stoul(t, nullptr, 16));
+                    const uint32_t a = bs::mods::endereco_da_versao(uint32_t(std::stoul(t, nullptr, 16)));  // americano
                     const bool     ok = bs::mods::replace(a, [](Sh4Context* cc) { cc->r[0] = 0; });
                     std::fprintf(stderr, "[desligar] %08X %s\n", a, ok ? "desligada" : "NAO ENCONTRADA");
                 }
@@ -828,24 +831,25 @@ void GameHost::threadMain() {
         // particulas nao (docs/N9-5-AUDITORIA.md, secao 11). Precisa das chamadas diretas por slot (build com mods:
         // msvc-release-mods).
         // BS_TELA_LOGICA43=<end>[,<end>] escolhe outras rotinas (so as da tabela abaixo: os chamadores do njProjectScreen
-        // 8C170A54 e ele mesmo), para achar por bissecao quem mais depende da projecao.
+        // 8C170A54 e ele mesmo), para achar por bissecao quem mais depende da projecao. Os enderecos (a tabela e o texto)
+        // no texto sao os americanos, traduzidos na leitura; a tabela e a API de mods usam os da versao (mods/mod_api.h).
         if (const char* v = std::getenv("BS_TELA_LOGICA43"); v && *v) {
             g_ramTela = c.ram;
             static const std::pair<uint32_t, Sh4Func> kTabela[] = {
-                {0x8C05D1C0, &tela43<0x8C05D1C0>}, {0x8C064560, &tela43<0x8C064560>},
-                {0x8C170A54, &tela43<0x8C170A54>}, {0x8C031B80, &tela43<0x8C031B80>},
-                {0x8C032708, &tela43<0x8C032708>}, {0x8C034FC0, &tela43<0x8C034FC0>},
-                {0x8C03BF78, &tela43<0x8C03BF78>}, {0x8C03D548, &tela43<0x8C03D548>},
-                {0x8C0584CC, &tela43<0x8C0584CC>},
+                {bs::jogo(0x8C05D1C0), &tela43<bs::jogo(0x8C05D1C0)>}, {bs::jogo(0x8C064560), &tela43<bs::jogo(0x8C064560)>},
+                {bs::jogo(0x8C170A54), &tela43<bs::jogo(0x8C170A54)>}, {bs::jogo(0x8C031B80), &tela43<bs::jogo(0x8C031B80)>},
+                {bs::jogo(0x8C032708), &tela43<bs::jogo(0x8C032708)>}, {bs::jogo(0x8C034FC0), &tela43<bs::jogo(0x8C034FC0)>},
+                {bs::jogo(0x8C03BF78), &tela43<bs::jogo(0x8C03BF78)>}, {bs::jogo(0x8C03D548), &tela43<bs::jogo(0x8C03D548)>},
+                {bs::jogo(0x8C0584CC), &tela43<bs::jogo(0x8C0584CC)>},
                 // as rotinas do jogo com as constantes 640,0 ou 320,0 no literal pool
-                {0x8C032838, &tela43<0x8C032838>}, {0x8C0151DC, &tela43<0x8C0151DC>},
-                {0x8C063F4C, &tela43<0x8C063F4C>}, {0x8C09BA04, &tela43<0x8C09BA04>},
-                {0x8C063CE0, &tela43<0x8C063CE0>}, {0x8C0351E0, &tela43<0x8C0351E0>},
-                {0x8C01F500, &tela43<0x8C01F500>}, {0x8C0221A0, &tela43<0x8C0221A0>}};
+                {bs::jogo(0x8C032838), &tela43<bs::jogo(0x8C032838)>}, {bs::jogo(0x8C0151DC), &tela43<bs::jogo(0x8C0151DC)>},
+                {bs::jogo(0x8C063F4C), &tela43<bs::jogo(0x8C063F4C)>}, {bs::jogo(0x8C09BA04), &tela43<bs::jogo(0x8C09BA04)>},
+                {bs::jogo(0x8C063CE0), &tela43<bs::jogo(0x8C063CE0)>}, {bs::jogo(0x8C0351E0), &tela43<bs::jogo(0x8C0351E0)>},
+                {bs::jogo(0x8C01F500), &tela43<bs::jogo(0x8C01F500)>}, {bs::jogo(0x8C0221A0), &tela43<bs::jogo(0x8C0221A0)>}};
             const std::string lista = std::strcmp(v, "1") == 0 ? std::string("8C05D1C0,8C064560") : std::string(v);
             std::stringstream ss(lista);
             for (std::string t; std::getline(ss, t, ',');) {
-                const uint32_t a  = uint32_t(std::stoul(t, nullptr, 16));
+                const uint32_t a  = bs::mods::endereco_da_versao(uint32_t(std::stoul(t, nullptr, 16)));  // americano
                 Sh4Func        fn = nullptr;
                 for (const auto& [ea, ef] : kTabela)
                     if (ea == a) fn = ef;
@@ -1000,7 +1004,7 @@ void GameHost::threadMain() {
             voicesNative_ = so.voices;
             if (so.voices) {  // legendas das falas (mods\<pacote>\legendas\falas.<idioma>.toml); "" = desligadas
                 // a versao do jogo que o Builder valida (o jogo = ... dos pacotes; revisao Codex 2026-10-21)
-                dialogue_.reset(new Dialogue(native::localization::ModPackages::discover(opt_.modAudio.parent_path(), "T13001N V1.000"),
+                dialogue_.reset(new Dialogue(native::localization::ModPackages::discover(opt_.modAudio.parent_path(), bs::kJogoIdentidade),
                                              opt_.subtitles));
                 for (const auto& p : dialogue_->mods.packages())
                     if (p.provisional)

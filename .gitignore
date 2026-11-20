@@ -17,6 +17,7 @@
 # BIOS / flash
 dc_boot*
 dc_flash*
+/BIOS/
 # build
 /build/
 /out/

@@ -4434,6 +4434,365 @@ não por uma única bateria contínua** (decisão do mantenedor, 2026-11-02).
       o CDI do projeto cortou o áudio exatamente no fim do vídeo, e os filmes do CDI não mudam;
   - **o jogo visto na janela** a partir do GD: as provas são headless (`test_gameplay`).
 
+
+### PAL P1: mapa de endereços US → PAL alemão (2026-11-19, pedido do mantenedor)
+
+Plano em `docs/PAL-PLANO.md`, seção 6. O mantenedor aprovou a arquitetura A no mesmo dia, depois do P1.
+
+- **Ferramentas, só leitura:**
+  - `tools/dev/versao_mapa.py`: funções pelo corpo normalizado, candidatos enumerados e desempate por alvos,
+    referências que chegam e posição;
+  - `tools/dev/versao_traduz.py`: os endereços fixos de `config/` e do código nativo, inclusive na forma de
+    deslocamento da RAM, com conferência de conteúdo e as exceções em `excecoes.tsv`.
+- **Imagens:** o `1ST_READ.BIN` americano (`game-data/`) e o PAL `T13001D 18` do mantenedor (GDI da TOSEC). Saída em
+  `tmp/discos/mapa-pal-de/`, fora do git.
+- **Funções e dados:**
+  - 4 035 de 4 080 funções casadas: 1 ambígua sem par, 44 em regiões alteradas, 14 faixas de deslocamento;
+  - verificação cruzada: literais de código 9 394 coerentes e 0 divergentes; bra/bsr 12 882 coerentes e 1
+    divergente, em região alterada;
+  - dados: 2 850 endereços citados, nenhum conflito, 51 faixas;
+  - a BSS e a RAM de `8C1DA220` a `8C32BBC0` estão todas a +4000.
+- **Endereços fixos:** 552 distintos, 0 pendentes, 0 com conteúdo diferente e 428 iguais por conteúdo. Há 10 exceções
+  com evidência e 1 não endereço.
+- **Diferenças reais:** 22 regiões vistas no diff do disassembly:
+  - a compensação de 50 Hz (×5/6 em 4 funções, ×1,2 em 1);
+  - a função nova `8C08AF3C` (casos 0–5);
+  - o layout do título e das opções;
+  - as FADs do GD.
+- **A região de dados do executável:** 92 % igual byte a byte. Os 3 KB diferentes são textos em alemão e a fonte.
+- **Revisão Codex:** `reviews/codex-20261119-132421.md`, 4 achados, todos aceitos e corrigidos: unicidade do
+  casamento, limite da interpolação, as exceções num arquivo lido pela ferramenta, cabeçalho. Durante a correção
+  apareceu uma lacuna, os deslocamentos de RAM, que também foi corrigida.
+- **Não verificado:**
+  - `8CDE0000`, os restos do boot do IP.BIN, fica para o P4;
+  - a semântica das 5 funções de 50 Hz, que a recompilação do PAL (P3) mantém como são.
+
+### PAL P2: tabela de endereços por versão (2026-11-19, arquitetura A aprovada pelo mantenedor)
+
+Plano em `docs/PAL-PLANO.md`, seção 7.
+
+- **A mudança:**
+  - o código nativo cita o endereço americano em `bs::jogo(...)` / `bs::jogo_ram(...)` (`consteval`,
+    `runtime/versao/include/versao/enderecos.h`): 278 literais em 23 arquivos e 22 deslocamentos de RAM;
+  - no americano, nada muda, e o CMake não define nada;
+  - no PAL (`-DBS_VERSAO_JOGO=1`), a tabela `enderecos_pal_de.inc` (551 pares) vem do `versao_traduz.py --inc`;
+  - a API de mods usa os endereços da versão compilada: o autor do mod escreve `bs::jogo(0x8C…)`. Só as entradas de
+    texto de diagnóstico traduzem o americano na leitura (`mods::endereco_da_versao`). O contrato foi revisto no P4.
+- **Prova de equivalência do americano:**
+  - o projeto foi exportado pelo Builder (CDI) e compilado antes e depois, no mesmo caminho;
+  - os dois `BlueStinger.exe` (20 902 912 B) são idênticos em `.text`, `.data`, `.pdata`, `.rsrc` e `.reloc`; na
+    `.rdata`, só os 2 bytes da hora de compilação diferem (`tmp/pal-p2/compara_pe.py`);
+  - o log confirma que os arquivos alterados foram recompilados;
+  - por ser o mesmo binário, C8, referências e traços não foram repetidos.
+- **PAL:** o build de validação com `BS_VERSAO_JOGO=1` compila tudo; um endereço sem par não compilaria. O executável
+  do PAL depende do P3.
+- **Testes:**
+  - `ctest` com o CDI: 21 aprovados, 1 pulado (`movie_manifest`);
+  - os novos `versao_us` e `versao_pal` aprovados.
+- **Revisão Codex:** `reviews/codex-20261119-174611.md`, 3 achados, todos corrigidos:
+  - o contrato de mods (revisto no P4: a tradução fica nas entradas de texto);
+  - `BS_TELA_LOGICA43=1`;
+  - os testes por versão.
+- **Achado pré-existente (v0.9.7-3):** o `bs-extract` não linka com `BS_BUILD_TOOLS=OFF`. O produto e o
+  `compilar.cmd` não são afetados.
+
+### PAL P3 e P4 (início): o executável alemão chega ao título (2026-11-19)
+
+Plano em `docs/PAL-PLANO.md`, seções 8 e 9.
+
+- **P3:**
+  - `config/bluestinger_pal_de.toml`, gerado por `tools/dev/versao_config.py`, com 105 endereços traduzidos e nenhum
+    faltando;
+  - `bs-recomp`: 4 084 funções, 0 órfãs, 0 avisos, 18 tabelas de salto;
+  - o C++ (981 352 linhas) compila com `-DBS_VERSAO_JOGO=1`.
+- **P4, reconhecimento:**
+  - `bluestinger_pal_de_v1000` em `kExtraVersions`;
+  - `game_version_of`: o boot recusa dados de outra versão, e o Builder recusa o PAL até o P8;
+  - `bs_unit_tests` 373/0.
+- **P4, dados:** `bs-extract --runtime` da GDI alemã, 2 095 arquivos, idênticos à imagem setor a setor.
+- **P4, boot sem janela** (1 500 VBlanks, software): logos, abertura e o título "DRÜCKEN SIE START", sem erro.
+- **Americano depois das mudanças:** 3 000 VBlanks sem janela antes e depois, com o relógio fixo. Os 30 quadros são
+  idênticos e o resumo final também.
+- **Primeiro boot do PAL:** revelou a tradução dupla na API de mods, e o contrato foi corrigido (seção 7).
+- **Não verificado:**
+  - o estado do BIOS da área `E`;
+  - o gameplay do PAL;
+  - a janela a 50 Hz.
+- **P4, cadência de 50 Hz:**
+  - O jogo alemão programa o SPG em PAL: `SPG_LOAD` com 625 linhas e `SPG_CONTROL = 0x190`. A compensação de tempo
+    dele é fixa (×5/6).
+  - `kFieldRateNum/Den` (`cpu/time_hooks.h`) dá 50 Hz no PAL e 60000/1001 no americano, com a conta de antes.
+  - **Prova:** 7 501 ticks de música em 1 500 campos, os 7 500 esperados; antes eram 6 257.
+- **P4, revisão Codex:** `reviews/codex-20261119-190013.md`, 4 achados, todos corrigidos:
+  - o SPG inicial PAL, provisório até o oráculo;
+  - `bs::kJogoIdentidade` nos pacotes de mods;
+  - o exemplo de `mods::wait`;
+  - o teste `versao_cadencia_de_campos`.
+- **Provas finais:**
+  - `ctest`: 21 aprovados, 1 pulado;
+  - o americano dá 30 quadros e o resumo idênticos à referência;
+  - as telas do PAL não mudaram com o SPG inicial.
+
+### PAL P5, P6 e as versões novas (2026-11-19)
+
+- **P5, filmes** (`docs/PAL-PLANO.md` seção 10):
+  - os SFD alemães têm 25 fps e um ADX com o dobro da duração; a segunda metade é o preenchimento do I5;
+  - o Builder converte sem mudança;
+  - `movie_manifest` com os dados PAL: 16 iguais, 0 falhas.
+  - **Medida corrigida:** o SNR de `verify_conversion` ia além do corte do I5. No E016 dava 24,1 dB; até o corte dá
+    45,4 dB.
+- **P6, idioma e saves:**
+  - as 233 vozes `.WAV` são idênticas nos dois PAL;
+  - os 6 filmes com SRT têm as falas nos mesmos tempos (correlação da forma de onda; o E193 com a mixagem de fundo
+    diferente);
+  - `jogo` do `mod.toml` aceita uma lista (`loc_mod_packages_lista_de_versoes`);
+  - os saves de outras versões ficam numa subpasta da pasta padrão (`bs::kVersaoPastaSaves`, `PAL-DE` etc.); o
+    americano continua na raiz.
+  - **Falta:** o `mod.toml` dos pacotes de legendas ainda não lista o PAL. Fica para o pacote do P8.
+- **Versões (pedido do mantenedor, `docs/DIRECTORS-CUT-ANALISE.md`):**
+  - `BS_VERSAO_JOGO` vai de 0 a 5 (US, PAL DE, PAL EN, JP v1.006, Director's Cut EN e FR) e `BS_VERSAO_PAL` vale nas
+    regras de 50 Hz;
+  - o CMake recusa uma versão sem tabela;
+  - `kExtraVersions` reconhece o PAL inglês e o japonês;
+  - **PAL inglês:** mapa 4 059/4 080, tabela `enderecos_pal_en.inc` (551 pares, 0 pendentes, 6 exceções), configuração
+    gerada; a análise dá 4 084 funções, 0 órfãs, 0 avisos.
+  - **Japonês:** 3 974/4 080 funções iguais com `BS_MAPA_JANELA` larga, 25 endereços nativos a resolver.
+- **P8 (início), o Builder:**
+  - a versão vem do disco ou da marca dos dados; a configuração sai de `game_version_config`, e `-DBS_VERSAO_JOGO` vai
+    para o CMake;
+  - o C++ gerado e o build ficam em pastas por versão;
+  - o projeto exportado grava `config/versao_jogo.txt`;
+  - fora do americano, a Remastered é recusada (D-P2) e os filmes widescreen são ignorados (D-P4).
+- **Revisão Codex:** `reviews/codex-20261119-215027.md`, 2 achados médios, corrigidos:
+  - versões 2–5 sem tabela agora falham no CMake, com o nome da tabela que falta;
+  - `config/versao_jogo.txt` vale sobre um `BS_VERSAO_JOGO` antigo no cache (FORCE).
+- **Provas:**
+  - `ctest` com o CDI: 21 aprovados, 1 pulado;
+  - o americano dá 30 quadros e o resumo idênticos à referência;
+  - o PAL dá 15 quadros idênticos aos de antes.
+
+### PAL P8: os dois PAL instalam pelo Builder; ritmo dos filmes a 50 Hz (2026-11-19)
+
+- **PAL alemão** (`bs-builder --disc "…(PAL)(DE)[!].zip"`, `tmp/pal-p8`):
+  - disco reconhecido como versão 1;
+  - 2 095 arquivos conferidos setor a setor;
+  - 16 filmes convertidos;
+  - 4 084 funções, 0 órfãs, 0 avisos;
+  - o executável instalado dá os mesmos 15 quadros do boot de referência.
+- **PAL inglês** (`--disc "Blue Stinger (Europe).chd"`, `tmp/pal-en`):
+  - disco reconhecido como versão 2;
+  - dados conferidos e 16 filmes;
+  - 4 084 funções, 0 órfãs, 0 avisos;
+  - no boot, 7 501 ticks de música em 1 500 campos (50 Hz) e "PRESS START BUTTON" no título.
+- **Ritmo dos filmes a 50 Hz** (`MwCoreOptions::phase100ns`, `transitional/video_mw_core.h`):
+  - **Defeito:** no NEW GAME do PAL, 954 consultas davam 753 quadros e 201 pulados. O jogo consulta a cada 2 campos (40
+    ms), o período exato de um quadro a 25 fps; partindo de uma consulta, as seguintes caíam nas fronteiras dos quadros.
+  - **Correção:** meio campo de fase no PAL (10 ms). O americano fica com 0.
+  - **Resultado:** 954 consultas, 954 quadros, 0 pulados, a mesma relação do americano (952/952/0).
+  - **Teste:** `video_mw_core_fase_pal`.
+- **Testes:** `ctest` com o CDI, 22 aprovados e 1 pulado, incluindo o novo `versao_pal_en`.
+
+### Japonês v1.006 instala pelo Builder (2026-11-19)
+
+- **Mapa** (`BS_MAPA_JANELA=262144,262144`): 3 974/4 080 funções; os 25 endereços nativos em funções sem par foram
+  resolvidos a mão (`tmp/discos/tolerante_geral.py` e `bs-disasm`; evidência em `tmp/discos/mapa-jp-larga/excecoes.tsv`):
+  - câmera Livre: um bloco de 1 946 B, único;
+  - HUD: os 5 pontos depois da mesma chamada nas duas versões;
+  - espera do VBlank: o mesmo laço `8C064A26..2C → 8C0639E6..EC`; o resto da função difere;
+  - vozes: `8C159394 → 8C156514`, idêntica, e `8C1593CA → 8C15654A`, a mesma entrada com outro corpo;
+  - RAM da câmera: `8C2D0CC0 → 8C2CDDA0`, pelo literal do pool;
+  - faixa de diagnóstico: −12 032 uniforme, porque a BSS do JP não tem deslocamento único.
+- **Conferência de conteúdo** (`versao_traduz.py`): uma exceção dentro do código agora compara a instrução, com `bra`/`bsr`
+  mascarados e o `mov.w`/`mov.l` relativo ao PC pelo valor carregado. O pool muda de lugar entre compilações. Os dois PAL
+  continuam com 428 iguais.
+- **Tabela e configuração:**
+  - `enderecos_jp.inc`: 551 pares, 428 iguais, 0 divergentes;
+  - `config/bluestinger_jp.toml`;
+  - análise: 4 080 funções, 0 órfãs, 0 avisos.
+- **Builder** (`--disc "Blue Stinger (Japan).chd"`, `tmp/jp`):
+  - versão 3;
+  - **17** filmes, com o `OPENING.SFD`, que só existe neste disco;
+  - no boot, 7 508 ticks de música em 1 800 campos (NTSC) e o título japonês.
+- **Testes:**
+  - `versao_jp`;
+  - o teste de cadência agora separa NTSC e PAL por `BS_VERSAO_PAL`;
+  - `ctest` com o CDI: 23 aprovados, 1 pulado.
+
+### Director's Cut: a opção do instalador (2026-11-19, pedido do mantenedor)
+
+- **Exportação para GDI** (`tools/extractor/disc/gdi_export.*`, `bs-extract --gdi`):
+  - o patcher só lê GDI;
+  - `readRawSector` lê o setor bruto de 2 352 bytes, inclusive do CHD (o áudio do CHD vem big-endian);
+  - **prova:** as `track03.bin` exportadas dos CHD japonês e americano têm exatamente o MD5 que o README do patcher
+    publica (`ca82462f…` e `dd75046c…`).
+- **O patch, local:**
+  - o executável DC-EN (3 286 252 B, SHA-256 `61ed239f…`) sai igual no Python 3.11 do sistema e no 3.14.10
+    "embeddable", com a `track03.bin` idêntica: é determinístico;
+  - o código é o do japonês, e só dados mudam (1 987 bytes dentro do tamanho original: a tabela da fonte e literais de
+    ponteiro);
+  - nenhum endereço do código nativo cai nas áreas que o patch altera;
+  - a tabela é a do japonês, com a configuração `bluestinger_dc_en.toml`;
+  - análise: 4 080 funções, 0 órfãs, 0 avisos.
+- **ADX truncado:**
+  - o patcher encurta o `OPENING.SFD` para 1 s e mantém o total de amostras declarado;
+  - `adx_decode(..., acceptTruncated)` toca até o último quadro completo, como o Sofdec;
+  - vale só para os SFD do disco: conversão, verificação, análise e reprodução direta;
+  - o padrão continua recusando, com o teste original intacto e um novo para o caso aceito.
+- **Builder** (`builder/directors_cut.*`; CLI `--directors-cut en|fr --disco-ocidental <img> --confirmar-download`):
+  - **Fluxo:**
+    - confere o japonês v1.006 e o americano Redump; o CDI é recusado, porque o patcher confere o executável do GD;
+    - exporta os dois discos;
+    - baixa os 5 `.py` do commit `747b4cc` por `raw.githubusercontent.com`, conferindo o SHA-256 do conteúdo do commit
+      (blob com LF);
+    - usa o Python do sistema, ou o "embeddable" 3.14.10 com o hash fixo;
+    - roda `python -I patch.py` e segue com o GDI patcheado;
+    - apaga os GDIs temporários, também em erro.
+  - **Proteções:**
+    - sem a confirmação, para com a lista do que seria baixado;
+    - um disco que já tem o Director's Cut (versão 4 ou 5) segue sem patch.
+  - **Prova:**
+    - o primeiro teste falhou como devia: os hashes de referência eram do clone com CRLF, e nada foi executado;
+    - depois de corrigidos, `bs-builder --disc "Blue Stinger (Japan).chd" --directors-cut en --disco-ocidental
+      "Blue Stinger (USA).chd" --confirmar-download` instalou a versão 4 com 17 filmes;
+    - o NEW GAME chega à área 1 com a câmera fixa japonesa, o HUD e as placas em inglês.
+- **Instalador:**
+  - na tela do disco, com o japonês: a caixa "Director's Cut", o idioma, o segundo disco, a lista do que será baixado e
+    "Confirmo o download"; o Avançar só libera com a confirmação e o segundo disco;
+  - com um disco que já tem o patch: um aviso;
+  - fora do americano com a Remastered escolhida: um aviso, e o Avançar fica bloqueado;
+  - `--captura`: 128 imagens, 0 textos cortados (a simulação nova `cdi-directors-cut`).
+- **Testes:** `dc_python_do_sistema`, `dc_o_que_sera_baixado`, `dc_recusa_antes_de_baixar`, `versao_dc`.
+- **Revisão Codex** (`reviews/codex-20261119-230635.md`, japonês e Director's Cut): 3 achados, todos aceitos e corrigidos.
+  - **[ALTA]** um `python.exe` já presente no cache rodava sem nova conferência. Agora o zip é conferido a cada uso, e a
+    pasta é extraída de novo (`prepare_python`). Teste `dc_python_do_cache_adulterado_nao_roda`: com o zip e o exe
+    adulterados, o download falso não confere e nada roda.
+  - **[MÉDIA]** o francês era oferecido, mas o resultado não seria reconhecido (sem o disco PAL francês não há hash para
+    fixar). `dc::language_supported` o deixa indisponível na interface ("ainda não disponível"), no Builder e no
+    `apply`.
+  - **[MÉDIA]** um japonês dentro de `.zip`/`.7z` não mostrava a opção. Agora a opção aparece para pacotes, e o Builder
+    recusa se não for o v1.006.
+  - **Teste novo, pela observação "não verificado":** `gdi_export_setor_bruto_e_folha` (imagem falsa no formato do CHD:
+    dados, áudio com os bytes trocados, a folha e a recusa da faixa cozida).
+  - **Provas depois das correções:** `ctest` com o CDI, 24 aprovados e 1 pulado; o americano dá 30 quadros e o resumo
+    idênticos; `--captura` com 128 imagens e 0 textos cortados.
+
+### PAL francês e Director's Cut FR (2026-11-20, "Faça do 1 ao 3")
+
+- **PAL francês** (`Blue Stinger (France).chd`, T13001D 09, versão 6):
+  - mapa 4 046/4 080, 0 literais divergentes, BSS +3 808 uniforme;
+  - 11 endereços resolvidos a mão, os mesmos casos do alemão (`tmp/discos/mapa-pal-fr/excecoes.tsv`). O `8C07A4C0` foi para
+    `8C07A540` por um bloco de 90 B único e o mesmo prólogo;
+  - tabela `enderecos_pal_fr.inc` (551 pares, 428 iguais), `config/bluestinger_pal_fr.toml`; análise 4 084 funções, 0
+    órfãs, 0 avisos;
+  - identidade `T13001D 09 V1.000`, separada da alemã (os pacotes de mods distinguem);
+  - **Builder:** versão 6, dados conferidos, 16 filmes. No NEW GAME, 20 001 ticks em 4 000 campos (50 Hz), o filme 954/954
+    com 0 pulados, e o título "APPUYER SUR START".
+- **Director's Cut FR** (versão 5):
+  - a `track03.bin` exportada do CHD francês tem exatamente o MD5 que o patcher publica (`eb09dfde…`);
+  - o patch FR sai idêntico no Python 3.11 e no 3.14.10;
+  - executável de 3 287 906 B, SHA-256 `c7129930…`; só dados mudam (1 809 bytes) e nenhum endereço nativo é afetado;
+  - `config/bluestinger_dc_fr.toml`; análise 4 080 funções, 0 órfãs;
+  - `dc::language_supported` libera o FR;
+  - o Builder confere que o segundo disco é o PAL francês (`bluestinger_pal_fr_v1000`).
+- **Testes:** `versao_pal_fr`, `versao_dc_fr`; `ctest` com o CDI, 26 aprovados e 1 pulado.
+- **Director's Cut FR de ponta a ponta:** `bs-builder --disc "Blue Stinger (Japan).chd" --directors-cut fr --disco-ocidental
+  "Blue Stinger (France).chd" --confirmar-download` instalou a versão 5 com 17 filmes; o NEW GAME chega à área 1 com a câmera
+  japonesa.
+- **Revisão Codex** (`reviews/codex-20261120-002808.md`): 1 achado médio, aceito e corrigido.
+  - **Problema:** um disco já patcheado ignorava o idioma pedido (um DC-EN com `--directors-cut fr` seguia como inglês).
+  - **Correção:** `dc::patched_version` e a recusa no Builder, com o teste `dc_disco_ja_patcheado_por_idioma`.
+  - **Prova:** o `out-en` com `--directors-cut fr` é recusado ("este disco ja tem o Director's Cut em ingles…").
+- **Provas finais:**
+  - `ctest` com o CDI: 26 aprovados, 1 pulado;
+  - o americano dá 30 quadros e o resumo idênticos;
+  - `--captura` com 128 imagens e 0 textos cortados.
+- **Ambiente de teste:** as execuções sem janela desta etapa definem `TEMP` e `TMP` separados em `tmp/`. Antes, `TMP`
+  ficava com o valor do Windows, e os saves temporários iam para `%TEMP%`; o jogo os apagava ao sair, e nenhum sobrou.
+
+### P7: BIOS real no oráculo, comparação com o Flycast, janelas e o Python baixado (2026-11-20, itens 1, 2, 4 e 5)
+
+- **Oráculo com o BIOS real** (`tmp/oraculo-bios`):
+  - cópias do Flycast do oráculo com um `emu.cfg` próprio (`UseReios = no`, `Broadcast`/`Region` da região) e uma pasta
+    `data` com o `dc_boot.bin` do mantenedor (`1_01d_01.bin` do `dc.zip`, MD5 `e10c53c2…`) e a flash da região. Nada fora
+    da pasta de trabalho;
+  - **comando novo** `flycast_oracle.py entrada-bios <IP.BIN> <saida> [--exe <1ST_READ.BIN>]`. O Flycast só tem breakpoint
+    de software, gravado na RAM, e o BIOS real carrega o IP.BIN e o executável por cima dele;
+  - **CDI:** breakpoints nos `jmp` da área de boot do IP.BIN;
+  - **discos originais:** o BIOS salta para o jogo. O breakpoint vai na entrada quando o primeiro setor do executável já
+    está na RAM e o fim ainda não. A sonda mostrou que comparar só 4 bytes enganava: o código do BIOS na RAM também começa
+    com `09000900`.
+- **Item 1, estado na entrada do jogo** (`compara_pvr.py`, 6 capturas):
+  - CDI americano, GD americano e japonês dão o NTSC; os três PAL dão o mesmo PAL;
+  - o SPG provisório do PAL acertava 8 de 9 registradores; o `SPG_VBLANK_INT` real é `00150104`, igual ao NTSC (não
+    `00150136`) e foi corrigido em `native_boot.cpp`;
+  - região na área do sistema: `8C000070/74` ("0011"/'0' americano, "0021"/'1' PAL, "0001"/'0' japonês) e `8C000068/6C`
+    (da flash) passam a ser os da região no PAL e no japonês/Director's Cut. O americano não muda;
+  - **o BIOS simulado do projeto difere do real em todas as regiões:** `VO_CONTROL` (`00FF0000` contra `00160000`),
+    `VO_STARTX/Y` no NTSC e `0x20`, `0x2C`, `0x98`, `0xA8`. O americano continua com o simulado (todas as referências
+    foram feitas com ele): **registrado, sem mudança**;
+  - **prova:** o PAL dá os 15 quadros idênticos e os 7 501 ticks; o jogo reprograma o vídeo logo no início.
+- **Item 2, comparação com o Flycast** (`flycast_oracle.py quadro --ip --exe --versao`, passos 250 e 800 do NEW GAME;
+  `VERSOES` com o passo de jogo e a porta A de cada versão):
+  - nos mesmos passos, o recompilado está adiantado em relação ao Flycast (Climax/menu contra Activision ou SEGA/animação)
+    **igualmente no americano, nos PAL, no japonês e no Director's Cut**. Não é próprio de nenhuma versão;
+  - a sequência de telas é a mesma em todas;
+  - causa provável, não verificada: o oráculo roda sem VMU, e o recompilado sem janela tem um cartão temporário;
+  - durante o filme, o original continua contando passos e o player nativo não (no Flycast PAL, o passo 1 700 já está no
+    filme).
+- **Item 4, janelas reais** (`BS_JANELA_CAPTURA`: a imagem apresentada, não a área de trabalho):
+  - o PAL alemão numa janela mediu **50,00 campos/s** (49,98–50,01 por trecho, em 45 s) e passou por título, menu e
+    filme;
+  - o americano, 59,94;
+  - o instalador (`BlueStinger-Recompiler --auto --directors-cut en --disco-ocidental … --confirmar-download`) abriu a
+    janela real e instalou o Director's Cut EN, saindo com 0.
+- **Prova do americano depois do boot novo:** 30 quadros e o resumo idênticos.
+- **Item 5, o Python baixado numa instalação completa:**
+  - com o PATH sem nenhum Python (até um venv de outra ferramenta precisou sair; a primeira tentativa usou ele e não
+    valeu), o Builder baixou o Python 3.14.10 oficial, conferiu o hash, extraiu na pasta de trabalho, aplicou o patch e
+    instalou a versão 4.
+
+### Fechamento do lote das versões: Codex, VMU no oráculo, legendas do PAL francês, Linux e `bs-extract` (2026-11-20)
+
+Pedido do mantenedor: "Faça as 5 coisas e pode publicar uma nova versão".
+- **1. Revisão Codex do P7** (`reviews/codex-20261120-081201.md`): 2 achados, os dois na ferramenta do oráculo, aceitos e
+  corrigidos. O código do jogo não teve achado: o Codex conferiu as palavras de região (little-endian), a cobertura de 0–6
+  no `native_boot.cpp`, o americano inalterado e a tabela `VERSOES` contra as `.inc`.
+  - **[MÉDIA]** o prazo de `entrar_bios()` não cobria a espera do ACK do `c`. Agora `continuar()` faz o `c` com prazo, e o
+    `socket.timeout` sobe para o laço das três tentativas do `quadro`;
+  - **[BAIXA]** os breakpoints da entrada e dos `jmp` ficavam na RAM num erro (com `--attach`, o Flycast segue vivo).
+    Agora `entrar_bios()` os remove num `finally`, com prazo, ou avisa quais ficaram.
+- **2. VMU no oráculo** (`flycast_oracle.py quadro --vmu <vmu> [--vmu-nome <arquivos>]`; o Flycast guarda a VMU pelo
+  produto, `T13001N_vmu_save_A1.bin` e `T13001D_18_vmu_save_A1.bin`, e avisa se criou outra):
+  - com uma VMU vazia (`n4_vmu.py nova`), o Flycast com o BIOS real chega mais cedo às mesmas telas do recompilado. A
+    diferença média para o quadro do recompilado no mesmo passo: americano passo 250 de 9,0 para 7,6 e passo 800 de 36,8
+    para 9,6; PAL alemão passo 250 de 9,0 para 7,8 e passo 800 de 35,8 para 10,9 (os dois agora no título);
+  - **a VMU explica a maior parte do adiantamento, e o resto é igual no americano e no PAL:** no passo 1 300 o
+    recompilado já está no filme do NEW GAME e o Flycast ainda no menu (65,7). O resto vem do tempo de carga e do filme
+    (o original conta passos durante o filme; o player nativo não), não da versão;
+  - evidências em `tmp/comp-vmu` (`lado_a_lado_us.png`, `lado_a_lado_de.png`).
+- **3. Legendas no PAL francês:**
+  - as 233 vozes `.WAV` do francês são idênticas às do alemão e às do inglês (SHA-256);
+  - nos 6 filmes com legenda, o áudio do francês bate com o do alemão em todas as 53 falas: correlação 1,000 e
+    deslocamento 0 ms, buscando ±100 ms (`tmp/fr-legendas/corr.py`, sobre os MP4 convertidos pelo Builder);
+  - os pacotes `legendas-en` 0.3.3 e `legendas-pt-br` 0.2.3 listam `T13001D 09 V1.000` (fora do git, como sempre).
+- **4. Linux:**
+  - `plat::http_download` no Linux pelo `curl` do sistema (`--proto =https --proto-redir =https`, sem shell), com o
+    `wget --https-only` como alternativa. Quem chama confere o SHA-256 (Director's Cut e filmes widescreen);
+  - build `linux-debug` no WSL (Ubuntu 24.04, clang 18) a partir de uma cópia da árvore em `tmp/linux-dc`: `bs-builder` e
+    `bs_unit_tests` compilam; 372 testes, 2 falhas no `telemetry_target_rules_fase5c`, do ambiente: a cópia está em
+    `/mnt/c`, um 9p que a telemetria trata (certo) como caminho de rede;
+  - **o fluxo do Director's Cut no Linux** (`dc::apply` real com `plat::http_download` e `run_process_argv`, por um
+    programa de teste só na cópia de `tmp/linux-dc`): japonês e americano do Redump em CHD; exportou os dois GDI, baixou
+    os 5 arquivos do patcher pelo `curl` e os conferiu, achou o `python3` 3.12 do sistema e aplicou o patch. **Os 4
+    arquivos do GDI saem idênticos byte a byte aos do Windows** (`tmp/dc/out-en`);
+  - o `bs-builder` completo do Linux não rodou aqui: o kit pede o SDL3 pré-compilado, que precisa dos cabeçalhos de X11,
+    Wayland, PipeWire, PulseAudio e ALSA (não estão no WSL). Fica para a montagem do pacote do Linux.
+- **5. `bs-extract` com `BS_BUILD_TOOLS=OFF`:** compila. Sem a libchdr, o `.zip`, o `.7z` e o `.chd` são recusados pelo
+  `disc_open` com a mensagem; `--info` do CDI conferido.
+- **Textos para o usuário:** `LEIA-ME-BUILDER.txt`, `LEIA-ME.txt` e `README.md` com as versões aceitas, o Director's Cut
+  e as subpastas de saves.
+- **Provas:** `ctest` com o CDI (msvc-release): 26 aprovados, 1 pulado.
+
 ### v0.9.7-2: o instalador baixa o mod "filmes widescreen" (2026-11-18, pedido do mantenedor)
 
 Pedido: "Publica no github uma nova versão que já faz o download dos vídeos". Worktree `tmp/wt-0972`, branch `v0.9.7-2`

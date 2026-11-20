@@ -1,4 +1,5 @@
 #include "bu_adapter.h"
+#include "versao/enderecos.h"
 
 #include "bu_machine.h"
 #include "guest_abi.h"
@@ -190,7 +191,7 @@ const std::pair<uint32_t, Sh4Func> kFns[] = {
 // Diagnostico BS_SAVES_H1 (so desenvolvimento, build com mods): o LOAD GAME do titulo abre o painel
 // em modo SAVE, como a hipotese H1 do oraculo (docs/N4-PREPARACAO.md). Sem ponto de save no jogo ao
 // alcance dos roteiros, e o caminho curto para um SAVE real do jogo no runtime.
-constexpr uint32_t kPanel = 0x8C01D200, kTitleLoadReturn = 0x8C0792CC;
+constexpr uint32_t kPanel = bs::jogo(0x8C01D200), kTitleLoadReturn = bs::jogo(0x8C0792CC);
 void fPanelH1(Sh4Context* c) {
     if ((c->pr & 0x1FFFFFFF) == (kTitleLoadReturn & 0x1FFFFFFF)) c->r[4] = 0;
     mods::call_original(kPanel, c);
@@ -202,7 +203,7 @@ void fPanelH1(Sh4Context* c) {
 // nada. Dali em diante e o fluxo do proprio jogo: estado 7 em [8C24D2CC+0x25B2], confirmacao, estado 8 e
 // 8C01D200(0, 8) chamado por 8C052240, com o estado real da partida. BS_SAVES_H2=<passo>: so a partir
 // desse passo de jogo (antes dele os roteiros apertam A em portas e nao podem mudar).
-constexpr uint32_t kInteract = 0x8C04FB80;
+constexpr uint32_t kInteract = bs::jogo(0x8C04FB80);
 uint64_t           g_h2Step  = 0;
 void fInteractH2(Sh4Context* c) {
     const uint32_t mode = c->r[6];

@@ -14,17 +14,18 @@
 //   i % 6 == 0: controle (flags & 0x21, erro 0, resposta 8) -> id/support/name (8C15C3D4) e decode
 //               (8C15C24C); teclado (flags & 0x40, idem) -> 8C17B60C (fora do contrato); senao
 //               "sem dispositivo" (8C15C1A2); depois off = ~on e as bordas press/release pelo modo
+#include "versao/enderecos.h"
 #include <cstdint>
 
 namespace bs::transitional::pad {
 
-constexpr uint32_t kTable        = 0x8C2D8970;  // PDS_PERIPHERAL[24]
+constexpr uint32_t kTable        = bs::jogo(0x8C2D8970);  // PDS_PERIPHERAL[24]
 constexpr uint32_t kUnitSize     = 0x34;
 constexpr int      kUnits        = 24;
-constexpr uint32_t kStatusTable  = 0x8C2D8E50;  // uint32_t[24], codigo de estado por unidade
-constexpr uint32_t kModeAddr     = 0x8C2D8EB0;  // modo do servidor (0 no jogo)
-constexpr uint32_t kNoDeviceName = 0x8C1DACAE;  // "(no device)"
-constexpr uint32_t kGamePdsPtr   = 0x8C24CCB0;  // PDS* escolhido pelo jogo (8C064878)
+constexpr uint32_t kStatusTable  = bs::jogo(0x8C2D8E50);  // uint32_t[24], codigo de estado por unidade
+constexpr uint32_t kModeAddr     = bs::jogo(0x8C2D8EB0);  // modo do servidor (0 no jogo)
+constexpr uint32_t kNoDeviceName = bs::jogo(0x8C1DACAE);  // "(no device)"
+constexpr uint32_t kGamePdsPtr   = bs::jogo(0x8C24CCB0);  // PDS* escolhido pelo jogo (8C064878)
 
 struct Pds {
     uint32_t id = 0, support = 0, on = 0, off = 0, press = 0, release = 0;

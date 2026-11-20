@@ -4,6 +4,7 @@
 // cadeia de quem escreveu o buffer (fase 3A). Cada linha e um par (entrada na biblioteca, rotina do jogo): a entrada e a
 // ultima rotina do SDK antes da primeira do jogo; a rotina e essa primeira rotina do jogo. So os pares medidos entram,
 // sem curinga; o resto fica desconhecido.
+#include "versao/enderecos.h"
 #include <cstdint>
 
 namespace bs::kamui {
@@ -31,36 +32,36 @@ struct HudEntry {
 inline constexpr HudEntry kHudTable[] = {
     // geometria projetada do Ninja, com os chamadores medidos (revisao Codex 20261109-024548: sem curinga; um chamador
     // novo fica desconhecido)
-    {0x8C15F856, 0x8C082C80, 0, DrawClass::Scene, HudRole::None, "modelos (desenho de objetos)"},
-    {0x8C15F856, 0x8C089520, 0, DrawClass::Scene, HudRole::None, "modelos (desenho de objetos)"},
-    {0x8C15F856, 0x8C08951A, 0, DrawClass::Scene, HudRole::None, "modelos (desenho de objetos)"},
-    {0x8C15F8B8, 0x8C084340, 0, DrawClass::Scene, HudRole::None, "modelos (desenho de objetos, variante)"},
-    {0x8C161738, 0x8C07B4E0, 0, DrawClass::Scene, HudRole::None, "modelos (hierarquia)"},
-    {0x8C160C12, 0x8C082C80, 0, DrawClass::Scene, HudRole::None, "poligonos projetados"},
-    {0x8C1601FE, 0x8C082C80, 0, DrawClass::Scene, HudRole::None, "poligonos projetados"},
+    {bs::jogo(0x8C15F856), bs::jogo(0x8C082C80), 0, DrawClass::Scene, HudRole::None, "modelos (desenho de objetos)"},
+    {bs::jogo(0x8C15F856), bs::jogo(0x8C089520), 0, DrawClass::Scene, HudRole::None, "modelos (desenho de objetos)"},
+    {bs::jogo(0x8C15F856), bs::jogo(0x8C08951A), 0, DrawClass::Scene, HudRole::None, "modelos (desenho de objetos)"},
+    {bs::jogo(0x8C15F8B8), bs::jogo(0x8C084340), 0, DrawClass::Scene, HudRole::None, "modelos (desenho de objetos, variante)"},
+    {bs::jogo(0x8C161738), bs::jogo(0x8C07B4E0), 0, DrawClass::Scene, HudRole::None, "modelos (hierarquia)"},
+    {bs::jogo(0x8C160C12), bs::jogo(0x8C082C80), 0, DrawClass::Scene, HudRole::None, "poligonos projetados"},
+    {bs::jogo(0x8C1601FE), bs::jogo(0x8C082C80), 0, DrawClass::Scene, HudRole::None, "poligonos projetados"},
     // cena desenhada como sprite/quad 2D ja projetado pelo jogo
-    {0x8C16938C, 0x8C057D00, 0, DrawClass::Scene, HudRole::None, "particulas e faiscas (cais)"},
-    {0x8C1692CC, 0x8C0584CC, 0, DrawClass::Scene, HudRole::None, "sprite preso ao mundo (projetado pelo jogo)"},
+    {bs::jogo(0x8C16938C), bs::jogo(0x8C057D00), 0, DrawClass::Scene, HudRole::None, "particulas e faiscas (cais)"},
+    {bs::jogo(0x8C1692CC), bs::jogo(0x8C0584CC), 0, DrawClass::Scene, HudRole::None, "sprite preso ao mundo (projetado pelo jogo)"},
     // HUD do gameplay
     // N9.5 fase 3B: 8C060278 (sprite 2D) e 8C0899D6 (retangulo 2D) sao rotinas genericas, chamadas tambem pelo titulo, pelos
     // menus de LOAD e pelo inventario (a sobreposicao de tela cheia). So os pontos de chamada medidos (o retorno) sao o HUD
     // do canto; qualquer outro ponto fica desconhecido
-    {0x8C1692CC, 0x8C060278, 0x8C0605CE, DrawClass::Screen, HudRole::CornerLeft, "nome do personagem (8C060380)"},
-    {0x8C1692CC, 0x8C060278, 0x8C061346, DrawClass::Screen, HudRole::CornerLeft, "moldura do alvo (8C061312)"},
-    {0x8C16CED8, 0x8C0899D6, 0x8C060838, DrawClass::Screen, HudRole::CornerLeft, "barra de vida (8C060380)"},
-    {0x8C16CED8, 0x8C0899D6, 0x8C0608DE, DrawClass::Screen, HudRole::CornerLeft, "barra de vida (8C060380)"},
-    {0x8C16CED8, 0x8C0899D6, 0x8C0609EC, DrawClass::Screen, HudRole::CornerLeft, "barra de vida, fim (8C060380)"},
-    {0x8C1692CC, 0x8C03C0C4, 0, DrawClass::Screen, HudRole::Center, "mensagens (texto central)"},
-    {0x8C1692CC, 0x8C0626AA, 0, DrawClass::Screen, HudRole::Unplaced, "elemento fora da tela (x ~800; papel nao identificado)"},
-    {0x8C1736A0, 0x8C07B4E0, 0, DrawClass::Screen, HudRole::Unplaced, "sprites degenerados na origem (invisiveis)"},
+    {bs::jogo(0x8C1692CC), bs::jogo(0x8C060278), bs::jogo(0x8C0605CE), DrawClass::Screen, HudRole::CornerLeft, "nome do personagem (8C060380)"},
+    {bs::jogo(0x8C1692CC), bs::jogo(0x8C060278), bs::jogo(0x8C061346), DrawClass::Screen, HudRole::CornerLeft, "moldura do alvo (8C061312)"},
+    {bs::jogo(0x8C16CED8), bs::jogo(0x8C0899D6), bs::jogo(0x8C060838), DrawClass::Screen, HudRole::CornerLeft, "barra de vida (8C060380)"},
+    {bs::jogo(0x8C16CED8), bs::jogo(0x8C0899D6), bs::jogo(0x8C0608DE), DrawClass::Screen, HudRole::CornerLeft, "barra de vida (8C060380)"},
+    {bs::jogo(0x8C16CED8), bs::jogo(0x8C0899D6), bs::jogo(0x8C0609EC), DrawClass::Screen, HudRole::CornerLeft, "barra de vida, fim (8C060380)"},
+    {bs::jogo(0x8C1692CC), bs::jogo(0x8C03C0C4), 0, DrawClass::Screen, HudRole::Center, "mensagens (texto central)"},
+    {bs::jogo(0x8C1692CC), bs::jogo(0x8C0626AA), 0, DrawClass::Screen, HudRole::Unplaced, "elemento fora da tela (x ~800; papel nao identificado)"},
+    {bs::jogo(0x8C1736A0), bs::jogo(0x8C07B4E0), 0, DrawClass::Screen, HudRole::Unplaced, "sprites degenerados na origem (invisiveis)"},
     // menus e telas 2D
-    {0x8C1692CC, 0x8C021560, 0, DrawClass::Screen, HudRole::Menu, "menu de pausa (texto)"},
-    {0x8C16CED8, 0x8C01F0AE, 0, DrawClass::Screen, HudRole::Menu, "menu de pausa"},
-    {0x8C16CED8, 0x8C01FAEE, 0, DrawClass::Screen, HudRole::Menu, "menu de pausa"},
-    {0x8C16CED8, 0x8C01FD40, 0, DrawClass::Screen, HudRole::Menu, "menu de pausa"},
-    {0x8C16CED8, 0x8C01FC60, 0, DrawClass::Screen, HudRole::Menu, "menu de pausa"},
-    {0x8C16CED8, 0x8C020140, 0, DrawClass::Screen, HudRole::Menu, "terminal ESER"},
-    {0x8C16CED8, 0x8C03C276, 0, DrawClass::Screen, HudRole::Menu, "terminal ESER"},
+    {bs::jogo(0x8C1692CC), bs::jogo(0x8C021560), 0, DrawClass::Screen, HudRole::Menu, "menu de pausa (texto)"},
+    {bs::jogo(0x8C16CED8), bs::jogo(0x8C01F0AE), 0, DrawClass::Screen, HudRole::Menu, "menu de pausa"},
+    {bs::jogo(0x8C16CED8), bs::jogo(0x8C01FAEE), 0, DrawClass::Screen, HudRole::Menu, "menu de pausa"},
+    {bs::jogo(0x8C16CED8), bs::jogo(0x8C01FD40), 0, DrawClass::Screen, HudRole::Menu, "menu de pausa"},
+    {bs::jogo(0x8C16CED8), bs::jogo(0x8C01FC60), 0, DrawClass::Screen, HudRole::Menu, "menu de pausa"},
+    {bs::jogo(0x8C16CED8), bs::jogo(0x8C020140), 0, DrawClass::Screen, HudRole::Menu, "terminal ESER"},
+    {bs::jogo(0x8C16CED8), bs::jogo(0x8C03C276), 0, DrawClass::Screen, HudRole::Menu, "terminal ESER"},
 };
 // clang-format on
 

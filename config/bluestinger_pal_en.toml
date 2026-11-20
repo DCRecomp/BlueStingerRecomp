@@ -1,0 +1,239 @@
+# GERADO por tools/dev/versao_config.py a partir de config/bluestinger_us.toml; NAO EDITAR A MAO (docs/PAL-PLANO.md, P3).
+# Blue Stinger PAL ingles (T13001D-05): os enderecos do jogo foram traduzidos pela tabela runtime/versao/include/versao/enderecos_pal_en.inc; os COMENTARIOS abaixo continuam com os
+# enderecos da versao americana (como o codigo nativo, bs::jogo).
+
+# Configuracao por jogo: Blue Stinger NTSC-U.
+# Contem apenas metadados e enderecos (fatos), nunca bytes do jogo.
+# O esquema completo sera definido nos marcos M1 (secao [input]) e M3 (demais).
+
+[game]
+title      = "Blue Stinger"
+product_id = "T13001D-05"
+version    = "V1.000"
+ip_date    = "19990722"
+region     = "E"
+os         = "katana"          # bit 0 dos perifericos = 0 (nao e Windows CE)
+
+[input]
+# Hash SHA-256 do 1ST_READ.BIN suportado (o mesmo de tools/extractor/known_versions.h).
+first_read_sha256 = "e2312ca5f50cfe13c81ff191f2804aae2e4263261be9b1586a2421ce88e7e860"   # 1ST_READ.BIN desta versao
+first_read_size   = 1975524
+
+[load]
+base  = 0x8C010000
+entry = 0x8C010000
+
+[analysis]
+pointer_candidates = true   # constantes do pool que apontam para inicio de funcao
+data_pointers      = true   # palavras de dados que apontam para inicio de funcao
+
+[codegen]
+# false: o jogo escreve em palavras do pool em tempo de execucao (p.ex. a pilha de
+# interrupcao em 8C198478, gravada por 8C19830E-8C198312); embutir o valor do arquivo
+# daria resultado errado. As constantes continuam guiando a analise de fluxo, e os
+# alvos resolvidos sao conferidos em tempo de execucao (BS_EXPECT_TARGET).
+inline_pool_constants = false
+funcs_per_file        = 400
+
+# --- biblioteca de threads cooperativa ---
+# setjmp 8C099F8C grava R15, R14, PR, R13-R0, MACH/MACL, GBR, FPSCR, FPUL e FR0-FR15 em
+# @r4 e devolve 0. longjmp 8C099F18 restaura esse contexto e faz rts para o PR salvo
+# com r0 = r5 (1 se 0). O yield (8C09037E) faz `if (setjmp(atual) == 0)
+# longjmp(escalonador, 1)`, o escalonador (8C0903C0) faz longjmp para cada thread, e a
+# criacao (8C090146) monta o contexto com PR = funcao de entrada e pilha nova.
+# Verificado no disassembly em 2026-10-14 (ver STATUS.md, Maple).
+[threads]
+setjmp  = [0x8C09A04C]
+longjmp = [0x8C099FD8]
+
+# --- codigo copiado para a RAM (R3) ---
+# 8C17C460 instala os vetores de excecao/interrupcao do Katana em VBR (0x8C00F400):
+# copia o stub de 8C198140 para VBR+0x100 e VBR+0x400, e o de 8C198174 para
+# VBR+0x600, depois de corrigir o literal de destino no pool (8C17C48E-8C17C494).
+# Verificado em 2026-10-13: RAM do Flycast em VBR+0x100/0x400/0x600 = esses bytes
+# (exceto o pool). Cada stub tem 0x34 bytes (codigo + pool).
+[[relocated]]
+dest   = 0x8C00F500
+source = 0x8C198120
+size   = 0x34
+
+[[relocated]]
+dest   = 0x8C00F800
+source = 0x8C198120
+size   = 0x34
+
+[[relocated]]
+dest   = 0x8C00FA00
+source = 0x8C198154
+size   = 0x34
+
+# Destinos que 8C17C460 grava no pool dos stubs (alcancados so via RAM):
+[[functions]]
+address = 0x8C1982D4   # tratador de interrupcao (literal em 8C17C4F4)
+
+[[functions]]
+address = 0x8C198188   # tratador de excecao (literal original em 8C198170/8C1981A4)
+
+# --- overrides manuais (exemplos) ---
+# [[functions]]          # funcoes extras / fronteiras forcadas
+# address = 0x8C0xxxxx
+# size    = 0x40
+#
+# [[jump_tables]]        # tabelas de salto manuais
+# braf_address = 0x8C0xxxxx
+# table        = 0x8C0xxxxx
+# count        = 8
+#
+# [[data_ranges]]        # regioes do executavel que sao dados
+# start = 0x8C0xxxxx
+# end   = 0x8C0xxxxx
+#
+# [[overrides]]          # funcoes substituidas por codigo em runtime/game/overrides
+# address = 0x8C0xxxxx
+# name    = "wait_vblank"
+#
+# [[midasm_hooks]]
+# address   = 0x8C0xxxxx
+# name      = "on_room_load"
+# registers = ["r4", "r5"]
+
+# --- port nativo: fronteiras migraveis (docs/N1-PLANO.md) ---
+# Chamadas sempre pelo slot, em todos os builds, para o provedor (legado/nativo) poder ser
+# trocado em execucao. N1: a API gdFs (Shinobi 1.05) que cria ou recebe GDFS, identificada por
+# contrato (disassembly + trace de argumentos/retornos, 2026-10-15). Nomes do SDK Katana.
+[native]
+slots = [
+  0x8C15BF40,  # gdFsOpen(nome, dirrec) -> GDFS
+  0x8C15B606,  # gdFsChangeDir(nome)
+  0x8C15B624,  # gdFsClose(gdfs)
+  0x8C15B660,  # gdFsGetFileSize(gdfs, &bytes)
+  0x8C15B67A,  # gdFsGetFileSctSize(gdfs, &setores)
+  0x8C15B694,  # gdFsGetFileFad(gdfs, &fad)        (guarda: sem equivalente nativo)
+  0x8C15B6AE,  # gdFsSeek(gdfs, setor, origem)
+  0x8C15B6FC,  # gdFsTell(gdfs)
+  0x8C15B712,  # (gdfs, &fim_de_arquivo)
+  0x8C15B73A,  # gdFsSetTransMode(gdfs, modo)
+  0x8C15B754,  # gdFsRead(gdfs, nsct, buf)
+  0x8C15B7DA,  # leitura por PIO (interna)        (guarda)
+  0x8C15B8B4,  # gdFsReqRd32(gdfs, nsct, buf)
+  0x8C15B528,  # espera do pedido (interna)        (guarda)
+  0x8C15BBD8,  # gdFsGetStat(gdfs)
+  0x8C15BBF0,  # gdFsGetTransStat(gdfs) -> bytes
+  0x8C15BC06,  # gdFsStop(gdfs)
+  0x8C15BD20,  # gdFsGetErr(gdfs)
+  0x8C15BD38,  # callback de fim de leitura (gdfs, func, obj)
+  0x8C15BD84,  # callback 2 (gdfs, func, obj)
+  0x8C15BDBE,  # callback de erro (gdfs, func, obj)
+  0x8C15AE08,  # servidor do gdFs (interno): conclui os pedidos assincronos nativos
+  # N3-2 (docs/N3-PLANO.md, --controles nativo; no legado os slots apontam para o gerado):
+  0x8C15C4C6,  # servidor pd (24 PDS_PERIPHERAL): transitional/pad_adapter os escreve
+  0x8C15C648,  # pdGetPeripheral(porta), tambem chamado por registrador (8C064878)
+  0x8C097680,  # disparo do DMA da camada per no VBlank: ponto de amostragem (latch); o original roda
+  # N4 (docs/N4-PREPARACAO.md, --saves nativo; no legado os slots apontam para o gerado): API bu
+  0x8C08BEAC,  # init(capacidade, mascara, work, callback): registra o servidor 8C08BDE8
+  0x8C08BEA8,  # servidor periodico da bu (bra 8C08BF50): conclusoes e callbacks
+  0x8C08C134,  # registro do callback de conclusao
+  0x8C08C13A,  # registro do callback de progresso
+  0x8C08CAF4,  # mount(drive, work, tamanho)
+  0x8C08C2BC,  # disk_info(drive, destino)
+  0x8C08C6F6,  # exists(drive, nome)
+  0x8C08C994,  # load(drive, nome, destino, bloco, nblocos), op 0x0E
+  0x8C08C8D8,  # save(drive, nome, origem, blocos, tempo*, flag), op 0x0C
+  0x8C08C756,  # status(drive): -1 ocupada
+  0x8C08C1D2,  # ultimo erro(drive)
+  0x8C08BF7C,  # exit (so por literal, sem chamador)
+  0x8C08C87E,  # op 0x0B (so por literal, sem chamador): sem suporte
+  # N5 (docs/N5-PLANO.md, --video nativo; no legado os slots apontam para o gerado): entradas MW da
+  # funcao de video do jogo (8C08B544); os metodos sao chamados pela tabela 8C1DD168
+  0x8C157FA4,  # create (pool estatico 32 x 120 B em [8C1580B8]+4)
+  0x8C158D22,  # parametro(h, n)
+  0x8C158D72,  # cor base(h, c)
+  0x8C158D8E,  # cor de offset(h, c) (fade)
+  0x8C1580C4,  # +0x14 destroy(h)
+  0x8C15812A,  # +0x18 start(h, nome)
+  0x8C158230,  # +0x1C stop(h)
+  0x8C1582A0,  # +0x20 estado(h)
+  # N6 fase D (docs/N6-PLANO.md secoes 10-13, --audio-efeitos nativo; no legado os slots apontam para o gerado):
+  # as 5 entradas do SDK de som que os consumidores do gerenciador de efeitos do jogo chamam (8C02A8C0,
+  # 8C02ACB2, 8C02AA8C, 8C02AB40); o gerenciador (fila, prioridade, 7 ativos, rodizio) continua o recompilado
+  0x8C15E1E8,  # parar(h): comando 0x12
+  0x8C15E068,  # tocar(h, banco, pedido, x): comando 0x11
+  0x8C15E17C,  # volume(h, v, t): comando 0x15 (medido no O6: TL = base do efeito - 2v); nao confere a inicializacao
+  0x8C15E0FC,  # pan(h, v, t): comando 0x16 (medido no O6: DIPAN)
+  0x8C15DF24,  # consulta(h, out): +24 bit 0 = canal tocando
+  # N6 fase E (docs/N6-PLANO.md secao 16, --audio-falas nativo; no legado os slots apontam para o gerado): o MW WAV
+  # da CRI que o player de falas do jogo (8C08B860, atualizacao 8C08B900) usa. create por literal; os metodos pela
+  # tabela 8C1DD248 (disassembly de 2026-10-20: cada metodo valida o handle em 8C159D92 antes de agir)
+  0x8C158FA4,  # PlyCreateWav(parametros): pool de 32 x 56 B em 0x8C2D7D38, +0 = tabela, +4 = em uso
+  0x8C1597A0,  # +0x0C servidor por handle
+  0x8C159718,  # +0x10 servidor por handle
+  0x8C159114,  # +0x14 destroy(h)
+  0x8C1591A8,  # +0x18 start(h, nome)
+  0x8C159280,  # +0x1C stop(h)
+  0x8C159320,  # +0x20 estado(h): 1 preparando, 2 tocando, 3 fim, 4 erro
+  0x8C159374,  # +0x24 (sem uso pelo jogo)
+  0x8C1593AA,  # +0x28 (h, modo 0/1): a funcao do jogo que o chamaria (8C08B8B8) nao tem chamador
+  0x8C1593FC,  # +0x2C (sem uso pelo jogo)
+  0x8C1594A4,  # +0x30 (sem uso pelo jogo)
+  0x8C1594EE,  # +0x34 (sem uso pelo jogo)
+  # N6 fase F (docs/N6-PLANO.md secao 18, --audio-musica nativo; no legado os slots apontam para o gerado): as entradas
+  # do SDK de som que o gerenciador de musica (8C02AD80, 8C02AE20, 8C02AE70) e o carregador (8C02A4FC; tambem
+  # 8C15DDA4 com as unidades do BS_SND.MLT) chamam. Pacote: [2] porta (byte 1 do handle), [3] valor + 0x80, [4..5] t
+  0x8C15D514,  # download(bloco, tipo, slot): +8 dados, +12 tamanho; SMPB/SMSB no nativo, os outros tipos no original
+  0x8C15DB8C,  # tocar(h, slot SMSB, sequencia, x): comando 0x01 (driver 0x4B3C)
+  0x8C15DD20,  # parar(h): comando 0x02 (0x4C20: KYONB = 0 nas vozes da porta)
+  0x8C15DCA0,  # volume(h, v, t): comando 0x05 (fade: 0x4D90 e 0x6640)
+  0x8C15DC20,  # pan(h, v, t): comando 0x06 (fade: 0x4E18 e 0x66E0)
+  0x8C15D748,  # comando 0x35 (global; sem chamada nas rotas medidas: o nativo repassa ao original e conta)
+  0x8C15D680,  # comando 0x36 (idem)
+  # N7c (docs/N7-PLANO.md secao 23, camera livre; no modo Original os slots apontam para o gerado): as seis chamadas da
+  # montagem da camera de gameplay (8C052240) sao diretas no gerado; transitional/free_camera filtra pelo PR e repassa
+  # qualquer outro chamador sem mudanca
+  0x8C174128,  # pitch do objeto camera (gira o vetor de visao em X)
+  0x8C174160,  # yaw do objeto camera (gira o vetor de visao em Y)
+  0x8C1742E8,  # soma a posicao do objeto camera
+  0x8C171384,  # translacao da matriz (52 chamadores)
+  0x8C170DA8,  # giro em Y da matriz (33 chamadores)
+  0x8C170D14,  # giro em X da matriz (25 chamadores)
+]
+# N2b (docs/N2b-PLANO.md, secao 1.2): back-edges dos lacos que esperam uma condicao acesa por
+# evento. O gerador emite BS_WAIT no desvio de volta e BS_WAIT_END na instrucao seguinte (por
+# onde passam todas as saidas). No N2b-1 so informam o monitor de progresso (modo sombra).
+# A thread 3 (servidor do CRI, 8C158840) NAO entra: trabalha ate ser preemptada.
+#
+# N2b-2 (--tempo experimental; o tempo nativo estavel ignora estes pontos): esperas do inventario
+# docs/N2b-ESPERAS.md e o back-edge condicional da thread 3. O que libera cada uma fica em
+# transitional/time_adapter.cpp (kWaitDecls). Back-edges com delay slot (bra) entram tambem: o
+# BS_WAIT vem depois do slot.
+esperas = [
+  0x8C064A8C,  # espera do VBlank do jogo (bandeira 0x8C24F88A), funcao 8C064A20
+  0x8C173066,  # espera do fim do render anterior, timeout 166 ms (8C173044)
+  0x8C0979B6,  # espera de bit com timeout (8C0978BE; nao exercitada no roteiro)
+  # N2b-2: esperas temporais do boot (V2 e V13)
+  0x8C172608,  # vsync do SPG_STATUS acender (laco 8C172624, f_8C172620)
+  0x8C17260E,  # vsync do SPG_STATUS apagar (laco 8C17262A)
+  0x8C1727E8,  # VBlank-In em ISTNRM (laco 8C172804, f_8C172642)
+  0x8C172ED8,  # contador do callback de VBlank 8C172602 (laco 8C172EF2, f_8C172D22)
+  0x8C1C6CE6,  # linha do SPG_STATUS sair de 0 (laco 8C1C6CB0, f_8C1C6B3C)
+  0x8C1C6CEE,  # linha do SPG_STATUS voltar a 0 (laco 8C1C6D08)
+  # N2b-2: esperas sincronas (a condicao e satisfeita na escrita; volta = erro explicito)
+  0x8C1C1DA6,  # DMA ch2: C2DST = 0 (f_8C1C1DB4)
+  0x8C096FA8,  # FIFO do G2 vazia, SB_FFST bit 0 (getter 8C09A054)
+  0x8C096FB8,  # idem, segundo teste
+  0x8C097314,  # FIFO do G2 vazia, SB_FFST bit 5 (getter 8C09A1F4)
+  0x8C097324,  # idem, segundo teste
+  # N2b-2: thread 3 (servidor do CRI, laco 8C158840): bloqueia so depois de passada ociosa
+  0x8C158840,  # back-edge bra da passada 8C1586B8
+]
+
+# --- N9.5 fase 3B: os pontos de chamada do HUD do canto (docs/N9-5-AUDITORIA.md secao 14) ---
+# 8C060278 (sprite 2D) e 8C0899D6 (retangulo 2D) sao rotinas genericas, usadas tambem pelo titulo, pelos menus de LOAD e
+# pelo inventario. Medidos em 17 cenas (a cadeia de chamadas da validacao e o retorno de cada chamada): so estes pontos de
+# chamada desenham o HUD do canto inferior esquerdo (o endereco e o retorno da chamada, o PR na entrada da rotina):
+#   8C0605CE  8C060380 -> 8C060278  o nome do personagem
+#   8C061346  8C061312 -> 8C060278  a moldura do alvo
+#   8C060838, 8C0608DE, 8C0609EC  8C060380 -> 8C0899D6  a barra de vida
+# O gerador poe essas chamadas dentro de BS_HUD_SCOPE; so a Remastered com o quadro largo liga a marca, e o
+# reposicionamento as ancora na borda esquerda. Nada muda no jogo nem na Original.
+[remaster]
+hud_chamadas_canto_esquerdo = [0x8C06062E, 0x8C0613A6, 0x8C060898, 0x8C06093E, 0x8C060A4C]

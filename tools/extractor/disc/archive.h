@@ -33,4 +33,9 @@ std::filesystem::path archive_extract_image(const std::filesystem::path& archive
                                             const std::function<void(double)>& progress = {},
                                             const std::atomic<bool>* cancel = nullptr);
 
+// Extrai todos os arquivos (os mesmos limites e nomes seguros), sem exigir imagem de disco. Director's Cut: o Python
+// "embeddable" oficial baixado pelo Builder quando o sistema nao tem Python 3.
+void archive_extract_all(const std::filesystem::path& archive, const std::filesystem::path& dir,
+                         const std::function<void(double)>& progress = {}, const std::atomic<bool>* cancel = nullptr);
+
 } // namespace bs::disc

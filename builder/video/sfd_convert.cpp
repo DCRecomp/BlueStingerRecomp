@@ -94,7 +94,7 @@ bool convert_sfd(const fs::path& sfd, const fs::path& mp4, const ConvertOptions&
     if (!demux_sfd(file, s, err)) return false;
     std::vector<int16_t> pcm;
     AdxInfo              a;
-    if (!adx_decode(s.audio, pcm, &a, err)) return false;
+    if (!adx_decode(s.audio, pcm, &a, err, true)) return false;  // disco: ADX mais curto que o declarado vale (Director's Cut)
     Mpeg1 m(std::move(s.video));
     if (!m.v) return fail(err, "MPEG-1 sem cabecalho de sequencia");
     plm_frame_t* f = m.next();
@@ -142,7 +142,7 @@ bool verify_conversion(const fs::path& sfd, const fs::path& mp4, Fidelity& fd, s
     if (!demux_sfd(file, s, err)) return false;
     std::vector<int16_t> ref;
     AdxInfo              a;
-    if (!adx_decode(s.audio, ref, &a, err)) return false;
+    if (!adx_decode(s.audio, ref, &a, err, true)) return false;  // a mesma leitura da conversao
     Mpeg1             m(std::move(s.video));
     nv::MfMovieReader rd;
     if (!rd.open(mp4, err)) return false;
@@ -204,8 +204,16 @@ bool verify_conversion(const fs::path& sfd, const fs::path& mp4, Fidelity& fd, s
         for (size_t i = 0; i < win && (i + size_t(lag)) * ch < mp4a.size(); i += 2) c += double(ref[i * ch]) * mp4a[(i + size_t(lag)) * ch];
         if (c > best) best = c, fd.audioDelaySamples = lag;
     }
+    // so ate o corte do I5 (audio_samples_without_padding), o mesmo da conversao: depois dele o MP4 so tem o resto do
+    // ultimo quadro do AAC, e a referencia, o preenchimento descartado (PAL P5, 2026-11-19: no E016 do disco alemao o
+    // preenchimento alto logo depois do corte derrubava o SNR de 45,4 para 24,1 dB)
+    const uint32_t refFrames = fd.framesRef;
+    const double   refFps    = m.v ? plm_video_get_framerate(m.v) : 0;
+    const size_t   keep      = refFps > 0 ? audio_samples_without_padding(ref, a.channels, a.sampleRate,
+                                                                          video_end_100ns(refFrames, refFps), a.totalSamples)
+                                          : ref.size() / ch;
     double sig = 0, noise = 0;
-    for (size_t i = 0; i < ref.size() / ch && (i + size_t(fd.audioDelaySamples)) * ch < mp4a.size(); ++i)
+    for (size_t i = 0; i < std::min(ref.size() / ch, keep) && (i + size_t(fd.audioDelaySamples)) * ch < mp4a.size(); ++i)
         for (uint32_t c = 0; c < ch; ++c) {
             const double x = ref[i * ch + c], y = mp4a[(i + size_t(fd.audioDelaySamples)) * ch + c];
             sig += x * x, noise += (x - y) * (x - y);

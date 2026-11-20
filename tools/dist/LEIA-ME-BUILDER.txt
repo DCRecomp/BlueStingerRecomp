@@ -3,7 +3,7 @@ Blue Stinger Builder
 
 O que e
 -------
-O Builder transforma a SUA imagem do Blue Stinger (Dreamcast, NTSC-U T13001N V1.000)
+O Builder transforma a SUA imagem do Blue Stinger (Dreamcast; americana, PAL ou japonesa)
 num jogo nativo para Windows x64: recompila o codigo SH-4 do jogo para C++, compila esse
 C++ junto com o runtime aqui, no seu computador, e prepara os dados do disco num formato
 proprio. Depois da conversao, o jogo NAO precisa mais da imagem (nem de emulador): a pasta
@@ -22,9 +22,17 @@ Requisitos
   as ferramentas CMake do C++). Download: https://visualstudio.microsoft.com/downloads/
   (secao "Ferramentas para Visual Studio"). Um Visual Studio 2022 ou mais novo com essa
   carga de trabalho tambem serve.
-- Uma imagem do Blue Stinger NTSC-U (T13001N V1.000): o disco original em GDI, CUE/BIN (como o
-  Redump) ou CHD, ou um CDI; tambem dentro de .zip ou .7z. Outras versoes (PAL, japonesa) sao recusadas, e a mensagem mostra o tamanho e o
-  SHA-256 do executavel encontrado: informe essa linha ao relatar (nunca a imagem).
+- Uma imagem do Blue Stinger: o disco original em GDI, CUE/BIN (como o Redump) ou CHD, ou um CDI;
+  tambem dentro de .zip ou .7z. Versoes aceitas: americana (T13001N V1.000), PAL alema (T13001D 18),
+  PAL inglesa (T13001D-05), PAL francesa (T13001D 09) e japonesa (HDR-0003 V1.006). As PAL rodam a
+  50 Hz. A Remastered so existe na americana. Uma versao desconhecida e recusada, e a mensagem mostra
+  o tamanho e o SHA-256 do executavel encontrado: informe essa linha ao relatar (nunca a imagem).
+- Director's Cut (opcional, na tela do disco): o disco japones v1.006 e um disco ocidental (o
+  americano do Redump para o ingles; o PAL frances para o frances). O Builder baixa, com a sua
+  confirmacao, o patcher espouaisso/Blue-Stinger-Directors-Cut-Patcher (GPL-3.0, de terceiros; commit
+  fixo, arquivos conferidos pelo SHA-256) e, se o sistema nao tiver Python 3, o Python oficial
+  "embeddable" de python.org (versao e hash fixos), so na pasta de trabalho. Um disco ja patcheado nao
+  e patcheado de novo.
 - Cerca de 1,2 GB livres (dados do jogo, jogo compilado e cache de compilacao); mais 1,3 GB durante a
   instalacao se a imagem estiver num .zip ou .7z (extraida e apagada no fim), e 2,5 GB ou mais com os
   filmes widescreen (Remastered).

@@ -39,6 +39,19 @@ Slot* find(uint32_t addr) {
 
 } // namespace
 
+#if BS_VERSAO_JOGO != 0
+uint32_t endereco_da_versao(uint32_t americano) {
+    const uint32_t v = bs::jogo_execucao(americano);
+    if (!v) {
+        char b[160];
+        std::snprintf(b, sizeof b, "endereco americano %08X sem traducao para esta versao (versao/enderecos_pal_de.inc)",
+                      americano);
+        throw std::runtime_error(b);
+    }
+    return v;
+}
+#endif
+
 void set_slots(const Slot* s, size_t count) {
     slots().assign(s, s + count);
     std::sort(slots().begin(), slots().end(), [](const Slot& a, const Slot& b) { return sh4_phys(a.addr) < sh4_phys(b.addr); });

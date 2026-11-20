@@ -3,8 +3,10 @@
 #include "app/recomp.h"
 #include "boot/disc_boot.h"
 #include "boot/native_boot.h"
+#include "boot_identity.h"
 #include "builder_platform.h"
 #include "child_process.h"
+#include "directors_cut.h"
 #include "filmes_widescreen.h"
 #include "project_export.h"
 #include "disc/archive.h"
@@ -609,14 +611,96 @@ Result build(const Request& req, const Callbacks& cb) {
                 throw StepError(ErrorKind::InvalidDisc, std::string("o pacote nao pode ser usado: ") + e.what());
             }
         }
+        // pasta de onde as faixas citadas pela folha nao podem sair (o pacote extraido; no Director's Cut, a saida do patch)
+        fs::path confine = extracted.p;
+        // Director's Cut (directors_cut.h): o patch de terceiros no disco japones, antes de tudo. Os GDIs temporarios
+        // (~3,6 GB) saem no fim, tambem em erro; o patcher e o Python baixados ficam para a proxima vez.
+        struct DcCleanup {
+            fs::path p;
+            ~DcCleanup() {
+                if (!p.empty()) dc::cleanup(p);
+            }
+        } dcWork;
+        RemoveDir westernExtracted;
+        if (!req.disc.empty() && req.directorsCut) {
+            BootFiles probe;
+            try {
+                probe = boot_read_disc(discPath, extracted.p);
+            } catch (const std::exception& e) {
+                throw StepError(ErrorKind::InvalidDisc, std::string("esta imagem nao pode ser usada: ") + e.what());
+            }
+            const int pv = game_version_of(probe.versionId);
+            if (pv == 4 || pv == 5) {
+                // o idioma pedido tem de ser o do disco ja patcheado (revisao Codex 2026-11-20)
+                if (pv != dc::patched_version(*req.directorsCut))
+                    throw StepError(ErrorKind::InvalidDisc, std::string("este disco ja tem o Director's Cut em ") + (pv == 4 ? "ingles" : "frances") +
+                                                                " (" + probe.versionId + "), mas foi pedida a versao em " +
+                                                                (pv == 4 ? "frances" : "ingles") + ": use o disco japones v1.006 para gerar a outra");
+                log("Director's Cut: o disco ja tem o patch (" + probe.versionId + "); nada e aplicado");
+            } else {
+                if (pv != 3)
+                    throw StepError(ErrorKind::InvalidDisc, "o Director's Cut parte do disco japones v1.006 (HDR-0003); esta imagem e " +
+                                                                probe.product + " " + probe.version + " (" + probe.versionId + ")");
+                if (!dc::language_supported(*req.directorsCut))
+                    throw StepError(ErrorKind::InvalidDisc, "a versao francesa do Director's Cut ainda nao tem suporte (o resultado do patch "
+                                                            "com o disco PAL frances ainda nao foi conferido); use a inglesa");
+                dc::Request dr;
+                dr.japaneseDisc = discPath;
+                dr.westernDisc  = req.westernDisc;
+                dr.language     = *req.directorsCut;
+                dr.work         = work / L"directors-cut";
+                dr.fetch        = plat::http_download;
+                dr.run          = [&](const std::vector<std::wstring>& argv, const fs::path& cwd, const std::function<void(const std::string&)>& on) {
+                    return run_process_argv(argv, cwd, {}, on, cb.cancel);
+                };
+                if (!req.directorsCutConfirmed) {
+                    std::string lista;
+                    for (const auto& l : dc::download_summary(dc::system_python(dr.run).empty())) lista += "\n  - " + l;
+                    throw StepError(ErrorKind::Other, "o Director's Cut baixa da internet:" + lista +
+                                                          "\nconfirme o download para continuar (no bs-builder: --confirmar-download)");
+                }
+                if (req.westernDisc.empty())
+                    throw StepError(ErrorKind::InvalidDisc, std::string("o Director's Cut precisa tambem do disco ") +
+                                                                (dr.language == dc::Language::En ? "americano original (Redump)" : "PAL frances"));
+                if (disc::archive_supported(req.westernDisc)) {
+                    westernExtracted.p = work / L"imagem-ocidental";
+                    fs::remove_all(westernExtracted.p, ec);
+                    try {
+                        dr.westernDisc = disc::archive_extract_image(req.westernDisc, westernExtracted.p, {}, cb.cancel);
+                    } catch (const disc::DiscError& e) {
+                        if (cb.cancel && cb.cancel->load()) throw Cancelled{};
+                        throw StepError(ErrorKind::InvalidDisc, std::string("o pacote do disco ocidental nao pode ser usado: ") + e.what());
+                    }
+                }
+                dr.cancel   = cb.cancel;
+                dr.log      = log;
+                dr.progress = [&](double f, const std::string& m) { progress(f, "Director's Cut: " + m); };
+                dcWork.p    = dr.work;
+                try {
+                    discPath = dc::apply(dr);
+                } catch (const std::exception& e) {
+                    if (cb.cancel && cb.cancel->load()) throw Cancelled{};
+                    throw StepError(ErrorKind::InvalidDisc, std::string("Director's Cut: ") + e.what());
+                }
+                confine = discPath.parent_path();
+                log("Director's Cut: patch aplicado; imagem " + path_text(discPath));
+            }
+        }
         if (!req.disc.empty()) {
             try {
-                boot = boot_read_disc(discPath, extracted.p);
+                boot = boot_read_disc(discPath, confine);
             } catch (const std::exception& e) {
                 throw StepError(ErrorKind::InvalidDisc, std::string("esta imagem nao pode ser usada: ") + e.what() +
                                 "\nE preciso uma imagem do Blue Stinger NTSC-U (T13001N V1.000): o disco original em GDI, CUE/BIN ou CHD (tambem dentro de .zip ou .7z), ou um CDI.");
             }
             log("disco: " + boot.product + " " + boot.version + " (" + boot.versionId + ")");
+            // Outras versoes (docs/PAL-PLANO.md, docs/DIRECTORS-CUT-ANALISE.md): os dois PAL e o japones instalam; uma versao
+            // reconhecida sem configuracao (game_version_config) e recusada com motivo
+            if (!game_version_config(game_version_of(boot.versionId)))
+                throw StepError(ErrorKind::InvalidDisc,
+                                "esta imagem e da versao " + boot.product + " (" + boot.versionId +
+                                    "), que ainda nao pode ser instalada: o suporte a ela esta em desenvolvimento.\n"
+                                    "Por enquanto, e preciso uma imagem do Blue Stinger NTSC-U (T13001N V1.000).");
             fs::create_directories(gameData);
             writeFileAtomic(gameData / L"IP.BIN", boot.ipBin);
             writeFileAtomic(gameData / L"1ST_READ.BIN", boot.firstRead);
@@ -641,6 +725,30 @@ Result build(const Request& req, const Callbacks& cb) {
                                 "uma vez (eles ficam guardados para as proximas compilacoes)");
             stampText = s;
         }
+        // versao do jogo (PAL P8): do disco, ou da marca dos dados ja preparados. Decide a configuracao do bs-recomp, o
+        // BS_VERSAO_JOGO do CMake e as pastas do C++ gerado e do build incremental (o americano fica nas de sempre; o
+        // gerador nao apaga arquivos de outra versao, que tem outro numero de funcoes)
+        const std::string versionId =
+            stampText.substr(fmtPrefix.size(), stampText.find(' ', fmtPrefix.size()) - fmtPrefix.size());
+        const int         gameVersion   = game_version_of(versionId);
+        const char* const versionConfig = game_version_config(gameVersion);
+        if (!versionConfig)
+            throw StepError(ErrorKind::InvalidDisc, "os dados preparados sao de uma versao que ainda nao pode ser instalada (" +
+                                                        versionId + ")");
+        const std::wstring versionSuffix = gameVersion == 0 ? L"" : L"-v" + std::to_wstring(gameVersion);
+        const fs::path     generatedDir  = cache / (L"generated" + versionSuffix);
+        if (fromProject) {  // o C++ do projeto e de uma versao so (config/versao_jogo.txt, gravado na exportacao)
+            const std::string pv = readText(kit / L"config" / L"versao_jogo.txt");
+            const int         projVersion = pv.empty() ? 0 : std::atoi(pv.c_str());
+            if (projVersion != gameVersion)
+                throw StepError(ErrorKind::Data, "o projeto e da versao " + std::to_string(projVersion) + " do jogo, e os dados desta saida da " +
+                                                     std::to_string(gameVersion) + " (" + versionId + "): exporte o projeto de novo a partir do disco desta versao");
+        }
+        // D-P2 (docs/PAL-PLANO.md): fora do americano, primeiro so a edicao Original
+        if (gameVersion != 0 && req.edition && *req.edition == native::edition::Edition::Remastered)
+            throw StepError(ErrorKind::Other, "a edicao Remastered ainda nao esta disponivel para esta versao do jogo (" + versionId +
+                                                  "): instale a edicao Original");
+        if (gameVersion != 0) log("versao do jogo: " + std::to_string(gameVersion) + " (" + versionId + ", " + versionConfig + ")");
         bool reuse = readText(dataStamp) == stampText;
         if (reuse) {
             progress(0.1, "conferindo os dados ja preparados");
@@ -655,7 +763,7 @@ Result build(const Request& req, const Callbacks& cb) {
                 // com a imagem em maos, so reaproveita se as faixas forem as dela: outra imagem com o mesmo executavel, ou
                 // dados de uma versao anterior do leitor (ex.: o comprimento das faixas do CHD), preparam de novo
                 if (reuse && !req.disc.empty()) {
-                    const auto img = disc::disc_open(discPath, extracted.p);
+                    const auto img = disc::disc_open(discPath, confine);
                     const auto man = disc::load_runtime_manifest(dataDir);
                     bool       same = img->tracks().size() == man.tracks.size();
                     for (size_t i = 0; same && i < man.tracks.size(); ++i) {
@@ -682,7 +790,7 @@ Result build(const Request& req, const Callbacks& cb) {
             fs::remove_all(dataDir, ec);  // pasta do proprio Builder (.bs-build\data)
             if (ec) throw StepError("nao foi possivel limpar " + path_text(dataDir) + " (" + error_text(ec) + ")");
             try {
-                const auto     imgp = disc::disc_open(discPath, extracted.p);
+                const auto     imgp = disc::disc_open(discPath, confine);
                 const auto&    img  = *imgp;
                 const auto     r =disc::prepare_runtime_data(img, dataDir, [&](double f, const std::string& w) {
                     progress(0.6 * f, "preparando os dados: " + w);
@@ -740,15 +848,15 @@ Result build(const Request& req, const Callbacks& cb) {
         enter(Step::Recompile);
         {
             RecompOptions ro;
-            ro.config      = kit / L"config" / L"bluestinger_us.toml";
+            ro.config      = kit / L"config" / widen(versionConfig);
             ro.executable  = gameData / L"1ST_READ.BIN";
-            ro.out         = cache / L"generated";
+            ro.out         = generatedDir;
             ro.analysisDir = work / L"analysis";
             std::ostringstream s;
             if (fromProject) {
                 // o C++ do projeto (talvez editado) vai para o cache, espelhado (arquivos que
                 // sairam do projeto tambem saem do cache)
-                const fs::path src = kit / L"generated", dst = cache / L"generated";
+                const fs::path src = kit / L"generated", dst = generatedDir;
                 fs::create_directories(dst);
                 for (const auto& e : fs::directory_iterator(dst))
                     if (!fs::exists(src / e.path().filename(), ec)) fs::remove_all(e.path(), ec);
@@ -772,7 +880,7 @@ Result build(const Request& req, const Callbacks& cb) {
         auto exportNow = [&] {
             enter(Step::Export);
             try {
-                export_project({kit, sdl3, toml, cache / L"generated", work / L"analysis" / L"functions.tsv", version, out},
+                export_project({kit, sdl3, toml, generatedDir, work / L"analysis" / L"functions.tsv", version, out, gameVersion},
                                fs::absolute(req.exportProject), log, cb.cancel);
             } catch (const ExportCancelled&) {
                 throw Cancelled{};
@@ -824,7 +932,7 @@ Result build(const Request& req, const Callbacks& cb) {
             for (const auto& e : fs::directory_iterator(modsSrc)) n += e.path().extension() == L".cpp";
             log("mods em C++: " + std::to_string(n));
         }
-        const fs::path    buildDir = cache / (req.buildType == "Debug" ? L"cmake-debug" : L"cmake");
+        const fs::path    buildDir = cache / ((req.buildType == "Debug" ? L"cmake-debug" : L"cmake") + versionSuffix);
         const std::string stamp    = path_text(kit) + "\n" + path_text(sdl3) + "\n" + path_text(toml) + "\n" + tc.stamp;
         if (req.clean || readText(buildDir / L".bs-kit") != stamp) {
             if (fs::exists(buildDir, ec)) log("build incremental descartado (kit, compilador ou pedido)");
@@ -840,7 +948,8 @@ Result build(const Request& req, const Callbacks& cb) {
                                              L"-DCMAKE_BUILD_TYPE=" + widen(req.buildType)};
             cmd.insert(cmd.end(), tc.cmakeArgs.begin(), tc.cmakeArgs.end());
             for (const wchar_t* a : {L"-DBS_BUILD_TOOLS=OFF", L"-DBS_BUILD_TESTS=OFF", L"-DBS_BUILD_GAME=ON"}) cmd.push_back(a);
-            cmd.push_back(L"-DBS_GENERATED_DIR=" + cmakePath(cache / L"generated"));
+            cmd.push_back(L"-DBS_GENERATED_DIR=" + cmakePath(generatedDir));
+            cmd.push_back(L"-DBS_VERSAO_JOGO=" + std::to_wstring(gameVersion));  // PAL P8: enderecos e cadencia da versao
             for (auto& a : plat::dependency_args(srcKit, srcSdl3, srcToml)) cmd.push_back(std::move(a));
             cmd.push_back(L"-DFETCHCONTENT_FULLY_DISCONNECTED=ON");
             cmd.push_back(L"-DBS_VERSION_OVERRIDE=" + widen(version));
@@ -1043,7 +1152,10 @@ Result build(const Request& req, const Callbacks& cb) {
         guard.p.clear();
         // 11. v0.9.7-2: o mod "filmes widescreen" (so a Remastered; a instalacao ja esta pronta: falha ou cancelamento aqui
         // viram aviso e os filmes que faltarem tocam no original 4:3)
-        if (req.widescreenMovies) {
+        if (req.widescreenMovies && gameVersion != 0) {
+            // D-P4: os filmes widescreen foram feitos dos filmes americanos (30 fps); nas outras versoes, nao
+            log("filmes widescreen: so na versao americana; ignorado nesta versao");
+        } else if (req.widescreenMovies) {
             const auto ic = native::install::read_config(res.installDir);
             if (ic.edition == native::edition::Edition::Remastered) {
                 const widescreen::Report wr = widescreen::install(

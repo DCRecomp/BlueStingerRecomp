@@ -4,6 +4,7 @@
 #include "util/hash.h"
 
 #include <cstring>
+#include <utility>
 
 namespace bs {
 
@@ -12,6 +13,32 @@ namespace bs {
 const KnownVersion kExtraVersions[] = {
     {"bluestinger_us_v1000_gd", "T13001N", "V1.000", 1975556,
      "491fd69cd64100786372169e95e50ca2733bbfb88a54ef15da6a1f66297f5593"},
+    // PAL alemao (docs/PAL-PLANO.md, P4): "Blue Stinger v1.000 (1999)(Activision)(PAL)(DE)[!]" da TOSEC, IP.BIN T13001D 18
+    // de 03/08/1999. Outro executavel (o mesmo jogo relocado, P1): o C++ e o da configuracao bluestinger_pal_de.toml, e
+    // o Builder instala desde o P8 (game_version_config).
+    {"bluestinger_pal_de_v1000", "T13001D", "V1.000", 1979556,
+     "7e8112704a43065afb528df02de40e0d89b66ddc38d1d4a93cce840b2a44f67f"},
+    // PAL ingles: Redump "Blue Stinger (Europe)", IP.BIN T13001D-05 (docs/DIRECTORS-CUT-ANALISE.md, secao 6). O mesmo
+    // jogo relocado (4 059 de 4 080 funcoes); o Builder instala (game_version_config, 2026-11-19).
+    {"bluestinger_pal_en_v1000", "T13001D-05", "V1.000", 1975524,
+     "e2312ca5f50cfe13c81ff191f2804aae2e4263261be9b1586a2421ce88e7e860"},
+    // Japones v1.006: Redump "Blue Stinger (Japan)", IP.BIN HDR-0003 (a base do Director's Cut; 3 974 de 4 080 funcoes
+    // iguais ao americano). Recusado pelo Builder ate ter o suporte.
+    {"bluestinger_jp_v1006", "HDR-0003", "V1.006", 1963652,
+     "72eedbb3b01798a3b090888381f854cfe3c330eded6572521628c6fb8a3059ea"},
+    // Director's Cut EN: o japones com o patch espouaisso/Blue-Stinger-Directors-Cut-Patcher (commit 747b4cc) e o americano
+    // Redump como fonte dos textos. O executavel so depende das duas entradas (o patcher confere o MD5 delas) e da versao
+    // do patcher: o mesmo hash para todo mundo. O codigo e o do japones (so dados mudam): a tabela e enderecos_jp.inc.
+    {"bluestinger_dc_en_v1006", "HDR-0003", "V1.006", 3286252,
+     "61ed239ffd14ccbce06f974bc949b4209331644a0aad322d9d7ca2583e7bd01a"},
+    // Director's Cut FR: o mesmo, com o PAL frances (Redump "Blue Stinger (France)") como fonte dos textos e das legendas.
+    // Deterministico (o mesmo track03 no Python 3.11 e no 3.14.10 embeddable, 2026-11-20).
+    {"bluestinger_dc_fr_v1006", "HDR-0003", "V1.006", 3287906,
+     "c71299307e2e25b2de5a86d207015bd7a7280076a49950fede8a7b68028fb5c2"},
+    // PAL frances: Redump "Blue Stinger (France)", IP.BIN T13001D 09 de 11/08/1999. O mesmo jogo relocado (4 046 de 4 080
+    // funcoes; BSS +3808). E tambem a fonte dos textos do Director's Cut FR (o patcher confere o MD5 e7b7484c...).
+    {"bluestinger_pal_fr_v1000", "T13001D", "V1.000", 1979364,
+     "2b8ecaf15d4dd50d20539943abc78b838a28243b52975c518009ae0698a021f5"},
 };
 const size_t kExtraVersionCount = sizeof(kExtraVersions) / sizeof(kExtraVersions[0]);
 
@@ -95,6 +122,30 @@ BootIdentity identify_boot(const std::vector<uint8_t>& raw, uint32_t bootTrackLb
     r.data   = raw;
     r.sha256 = util::sha256Hex(raw.data(), raw.size());
     return r;
+}
+
+int game_version_of(const std::string& versionId) {
+    static const std::pair<const char*, int> kPrefixos[] = {
+        {"bluestinger_us_", 0},     {"bluestinger_pal_de_", 1}, {"bluestinger_pal_en_", 2},
+        {"bluestinger_jp_", 3},     {"bluestinger_dc_en_", 4},  {"bluestinger_dc_fr_", 5},
+        {"bluestinger_pal_fr_", 6},
+    };
+    for (const auto& [p, v] : kPrefixos)
+        if (versionId.rfind(p, 0) == 0) return v;
+    return -1;
+}
+
+const char* game_version_config(int gameVersion) {
+    switch (gameVersion) {
+    case 0: return "bluestinger_us.toml";
+    case 1: return "bluestinger_pal_de.toml";  // gerada por tools/dev/versao_config.py (docs/PAL-PLANO.md, P3)
+    case 2: return "bluestinger_pal_en.toml";  // idem (docs/DIRECTORS-CUT-ANALISE.md, secao 6)
+    case 3: return "bluestinger_jp.toml";      // idem, com as excecoes conferidas a mao (tmp/discos/mapa-jp-larga)
+    case 4: return "bluestinger_dc_en.toml";   // a tabela do japones com o executavel do Director's Cut EN
+    case 5: return "bluestinger_dc_fr.toml";   // idem, Director's Cut FR
+    case 6: return "bluestinger_pal_fr.toml";  // PAL frances (tmp/discos/mapa-pal-fr, excecoes conferidas)
+    default: return nullptr;
+    }
 }
 
 std::string boot_rejection_text(const std::string& product, const std::string& version, const BootIdentity& id) {

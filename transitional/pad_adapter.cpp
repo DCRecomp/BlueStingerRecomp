@@ -1,4 +1,5 @@
 #include "pad_adapter.h"
+#include "versao/enderecos.h"
 
 #include "guest_abi.h"
 #include "input_bridge.h"
@@ -335,10 +336,10 @@ struct Closure {
     std::string path;
     bool        done = false;
     // funcoes do SDK pd e da camada per: entradas no codigo gerado
-    std::array<std::pair<uint32_t, uint64_t>, 14> fns = {{{0x8C15C4E6, 0}, {0x8C15C24C, 0}, {0x8C15C3D4, 0}, {0x8C15C490, 0},
-                                                          {0x8C15C1A2, 0}, {0x8C15C668, 0}, {0x8C17B60C, 0}, {0x8C08F4B6, 0},
-                                                          {0x8C08F4CC, 0}, {0x8C0979FA, 0}, {0x8C0975C0, 0}, {0x8C08F332, 0},
-                                                          {0x8C15C10C, 0}, {0x8C15C686, 0}}};  // 8C15C10C init e 8C15C686 encerramento do pd (originais)
+    std::array<std::pair<uint32_t, uint64_t>, 14> fns = {{{bs::jogo(0x8C15C4E6), 0}, {bs::jogo(0x8C15C24C), 0}, {bs::jogo(0x8C15C3D4), 0}, {bs::jogo(0x8C15C490), 0},
+                                                          {bs::jogo(0x8C15C1A2), 0}, {bs::jogo(0x8C15C668), 0}, {bs::jogo(0x8C17B60C), 0}, {bs::jogo(0x8C08F4B6), 0},
+                                                          {bs::jogo(0x8C08F4CC), 0}, {bs::jogo(0x8C0979FA), 0}, {bs::jogo(0x8C0975C0), 0}, {bs::jogo(0x8C08F332), 0},
+                                                          {bs::jogo(0x8C15C10C), 0}, {bs::jogo(0x8C15C686), 0}}};  // 8C15C10C init e 8C15C686 encerramento do pd (originais)
 };
 Closure& cl() {
     static Closure c;

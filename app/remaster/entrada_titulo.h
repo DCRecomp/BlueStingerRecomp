@@ -10,6 +10,7 @@
 // Onde: a espera do VBlank (8C064A20) e envolvida so nas chamadas indiretas (o produto nao tem os slots de mods) e o modulo so
 // age quando o retorno e o laco da atualizacao do titulo (8C078536). Cada acao aplicada vira um evento com o passo de jogo
 // (gravacao e reproducao: o mesmo evento no mesmo passo da o mesmo jogo).
+#include "versao/enderecos.h"
 #include <atomic>
 #include <cstdint>
 #include <functional>
@@ -85,22 +86,22 @@ private:
 
 // Enderecos e valores (docs/N9-2-PONTOS-DE-ENTRADA.md), para os testes.
 namespace enderecos {
-inline constexpr uint32_t kEsperaVblank   = 0x8C064A20;
-inline constexpr uint32_t kRetornoLacoTit = 0x8C078536;
-inline constexpr uint32_t kTitulo         = 0x8C24D2CC;  // estrutura do titulo
+inline constexpr uint32_t kEsperaVblank   = bs::jogo(0x8C064A20);
+inline constexpr uint32_t kRetornoLacoTit = bs::jogo(0x8C078536);
+inline constexpr uint32_t kTitulo         = bs::jogo(0x8C24D2CC);  // estrutura do titulo
 inline constexpr uint32_t kEstado         = kTitulo + 0x51C;
 inline constexpr uint32_t kCursor         = kTitulo + 0x51E;
 inline constexpr uint32_t kFade           = kTitulo + 0x520;
-inline constexpr uint32_t kEfeito         = 0x8C02A6B8;  // efeito sonoro (id, 0, 0)
-inline constexpr uint32_t kNovoJogoIni    = 0x8C07B2A0;  // (0)
-inline constexpr uint32_t kCarregar       = 0x8C01CE00;  // (drive, arquivo, 0x22): 7 trabalhando, 8 concluido
-inline constexpr uint32_t kVersaoSave     = 0x8C064700;  // () comparado com [8C24FDE8]
-inline constexpr uint32_t kVersaoEsperada = 0x8C24FDE8;
+inline constexpr uint32_t kEfeito         = bs::jogo(0x8C02A6B8);  // efeito sonoro (id, 0, 0)
+inline constexpr uint32_t kNovoJogoIni    = bs::jogo(0x8C07B2A0);  // (0)
+inline constexpr uint32_t kCarregar       = bs::jogo(0x8C01CE00);  // (drive, arquivo, 0x22): 7 trabalhando, 8 concluido
+inline constexpr uint32_t kVersaoSave     = bs::jogo(0x8C064700);  // () comparado com [8C24FDE8]
+inline constexpr uint32_t kVersaoEsperada = bs::jogo(0x8C24FDE8);
 // O menu original da tela de titulo, que a Remastered troca pelo nativo (o fundo, o logotipo e a personagem continuam):
 // as duas rotinas da tabela 8C07A278 chamadas por ponteiro a cada quadro (medido: desligadas, so o menu some).
-inline constexpr uint32_t kDesenhoPressStart = 0x8C079AAC;  // "PRESS START BUTTON" (some no 5 -> 6)
-inline constexpr uint32_t kDesenhoOpcoes   = 0x8C079D20;  // os textos NEW GAME, LOAD GAME, OPTIONS
-inline constexpr uint32_t kDesenhoDestaque = 0x8C07A4C0;  // a barra vermelha do item selecionado
+inline constexpr uint32_t kDesenhoPressStart = bs::jogo(0x8C079AAC);  // "PRESS START BUTTON" (some no 5 -> 6)
+inline constexpr uint32_t kDesenhoOpcoes   = bs::jogo(0x8C079D20);  // os textos NEW GAME, LOAD GAME, OPTIONS
+inline constexpr uint32_t kDesenhoDestaque = bs::jogo(0x8C07A4C0);  // a barra vermelha do item selecionado
 } // namespace enderecos
 
 } // namespace bs::remaster

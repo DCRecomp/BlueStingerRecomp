@@ -15,6 +15,7 @@
 // As rotinas puras do VMS (8C08CC58 tamanho, 8C08CA5C montagem com CRC) continuam recompiladas.
 //
 // Some no N9, quando os chamadores do jogo forem elevados.
+#include "versao/enderecos.h"
 #include "boundary_registry.h"
 #include "platform/saves.h"
 
@@ -23,13 +24,13 @@
 
 namespace bs::transitional::bu {
 
-constexpr uint32_t kInit = 0x8C08BDEC, kServer = 0x8C08BDE8, kRegDone = 0x8C08C074, kRegProgress = 0x8C08C07A,
-                   kMount = 0x8C08CA34, kDiskInfo = 0x8C08C1FC, kExists = 0x8C08C636, kLoad = 0x8C08C8D4,
-                   kSave = 0x8C08C818, kStatus = 0x8C08C696, kLastError = 0x8C08C112, kExit = 0x8C08BEBC,
-                   kUnknown0B = 0x8C08C7BE;
+constexpr uint32_t kInit = bs::jogo(0x8C08BDEC), kServer = bs::jogo(0x8C08BDE8), kRegDone = bs::jogo(0x8C08C074), kRegProgress = bs::jogo(0x8C08C07A),
+                   kMount = bs::jogo(0x8C08CA34), kDiskInfo = bs::jogo(0x8C08C1FC), kExists = bs::jogo(0x8C08C636), kLoad = bs::jogo(0x8C08C8D4),
+                   kSave = bs::jogo(0x8C08C818), kStatus = bs::jogo(0x8C08C696), kLastError = bs::jogo(0x8C08C112), kExit = bs::jogo(0x8C08BEBC),
+                   kUnknown0B = bs::jogo(0x8C08C7BE);
 // Registro do servidor no agendador (os mesmos argumentos do init original, 8C08BE3C..8C08BE50)
-constexpr uint32_t kSchedRegister = 0x8C17BFB4, kSchedPriority = 0x0A00, kSchedArgPtr = 0x8C0B92EC,
-                   kSchedHandle = 0x8C2B2D94, kInitFlag = 0x8C157D7C;
+constexpr uint32_t kSchedRegister = bs::jogo(0x8C17BFB4), kSchedPriority = 0x0A00, kSchedArgPtr = bs::jogo(0x8C0B92EC),
+                   kSchedHandle = bs::jogo(0x8C2B2D94), kInitFlag = bs::jogo(0x8C157D7C);
 
 struct Stats {
     uint64_t inits = 0, ticks = 0, mounts = 0, exists = 0, saves = 0, loads = 0, statusBusy = 0;

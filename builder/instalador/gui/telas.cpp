@@ -1,6 +1,7 @@
 #include "instalador/gui/telas.h"
 
 #include "boot/disc_boot.h"
+#include "boot_identity.h"
 #include "builder_platform.h"
 #include "disc/archive.h"
 #include "child_process.h"
@@ -119,6 +120,12 @@ struct Instalador::Impl {
     std::wstring              cdi, pasta;
     bool                      filmes = true, portatil = false, aceitaAlheia = false, logTecnico = false;
     bool                      filmesWidescreen = true;  // v0.9.7-2: o mod baixado na instalacao (so a Remastered), marcado por padrao
+    // Director's Cut (directors_cut.h): so com o disco japones v1.006; o segundo disco e a confirmacao do download
+    int                       cdiVersao = -1;  // game_version_of do disco conferido (-1: desconhecida, ex. dentro de .zip)
+    bool                      cdiPacote = false;  // .zip/.7z: so a lista foi lida
+    bool                      dc = false, dcConfirmado = false;
+    dc::Language              dcIdioma = dc::Language::En;
+    std::wstring              ocidental;
     std::string               legendas = "auto";
     Atalhos                   atalhos;
     std::optional<Instalacao> atualizando;
@@ -280,6 +287,7 @@ void Instalador::conferir_cdi() {
     s.cdiThread = std::thread([this, g, arq] {
         std::wstring info;
         bool         ok = false;
+        int          versao = -1;
         try {
             if (disc::archive_supported(arq)) {
                 // .zip/.7z (I8): so a lista aqui (extrair ~1 GB so para conferir seria lento); a instalacao extrai e
@@ -288,16 +296,21 @@ void Instalador::conferir_cdi() {
                 info = widen("pacote com " + n + " (conferido na instalacao)");
             } else {
                 const auto b = boot_read_disc(arq);
-                info = widen(b.product + " " + b.version + " (" + b.versionId + ")");
+                info   = widen(b.product + " " + b.version + " (" + b.versionId + ")");
+                versao = game_version_of(b.versionId);
             }
             ok = true;
         } catch (const std::exception& e) {
             info = widen(e.what());
         }
-        h_.postar([this, g, ok, info] {
+        const bool pacote = disc::archive_supported(arq);
+        h_.postar([this, g, ok, info, versao, pacote] {
             if (g != s_->cdiGeracao) return;
             s_->cdiEstado = ok ? Impl::Cdi::Ok : Impl::Cdi::Erro;
             s_->cdiInfo   = info;
+            s_->cdiVersao = versao;
+            s_->cdiPacote = pacote;
+            if (versao != 3 && !(versao < 0 && pacote)) s_->dc = false;  // a opcao so existe para o japones
             h_.redesenhar();
         });
     });
@@ -329,11 +342,19 @@ void Instalador::instalar() {
         if (c_.portatil) req.portableSaves = *c_.portatil;
         req.edition = c_.edicao;
         req.widescreenMovies = c_.filmesWidescreen;
+        req.directorsCut     = c_.directorsCut;
+        if (c_.discoOcidental) req.westernDisc = *c_.discoOcidental;
+        req.directorsCutConfirmed = c_.confirmarDownload;
     } else {
         req.portableSaves = s.portatil;
         req.edition       = s.edicao;
         req.subtitles     = s.legendas;
         req.widescreenMovies = s.filmesWidescreen && s.edicao == Edition::Remastered;  // v0.9.7-2
+        if (s.dc && (s.cdiVersao == 3 || s.cdiPacote) && dc::language_supported(s.dcIdioma)) {  // Director's Cut: confirmado na tela do disco
+            req.directorsCut          = s.dcIdioma;
+            req.westernDisc           = fs::path(s.ocidental);
+            req.directorsCutConfirmed = s.dcConfirmado;
+        }
     }
     std::error_code ec;
     if (!c_.desinstalador.empty() && fs::is_regular_file(c_.desinstalador, ec))
@@ -759,11 +780,66 @@ void Instalador::cdi(const Ret& r) {
     }
         break;
     }
+    // outras versoes (docs/DIRECTORS-CUT-ANALISE.md): a Remastered so no americano por ora; o Director's Cut so no japones
+    bool podeSeguir = s.cdiEstado == Impl::Cdi::Ok;
+    if (s.cdiEstado == Impl::Cdi::Ok) {
+        float yv = y + 48;
+        auto  nota = [&](const std::wstring& t, Cor cor) {
+            const float h = ui_.altura_texto(t, est(tema::kPequeno), r.w);
+            ui_.rotulo(t, est(tema::kPequeno), {r.x, yv, r.w, h}, cor);
+            yv += h + 8;
+        };
+        if (s.cdiVersao > 0 && s.edicao == Edition::Remastered) {
+            nota(tr("cdi.remaster_na"), tema::kCoral);
+            podeSeguir = false;
+        }
+        if (s.cdiVersao == 4 || s.cdiVersao == 5) nota(tr("dc.already"), tema::kTextoSuave);
+        // dentro de .zip/.7z a versao so e conhecida na instalacao (extrair ~1 GB so para conferir seria lento): a opcao
+        // aparece e o Builder recusa se o disco nao for o japones v1.006 (revisao Codex 2026-11-19)
+        if (s.cdiVersao == 3 || (s.cdiVersao < 0 && s.cdiPacote)) {
+            const std::wstring t = tr("dc.check"), d = tr(s.cdiVersao == 3 ? "dc.check.hint" : "dc.check.hint.pkg");
+            const float        h = ui_.altura_texto(t, est(tema::kCorpo), r.w - 30) + 2 + ui_.altura_texto(d, est(tema::kPequeno), r.w - 30) + 10;
+            ui_.caixa(id("dc.check"), t, d, {r.x, yv, r.w, h}, s.dc);
+            yv += h + 6;
+            if (s.dc) {
+                const float meia = (r.w - 16) / 2;
+                if (ui_.opcao(id("dc.lang", 0), 2, tr("dc.lang.en"), {}, {r.x, yv, meia, 26}, s.dcIdioma == dc::Language::En))
+                    s.dcIdioma = dc::Language::En;
+                // o frances ainda nao: o resultado do patch com o disco PAL frances nao foi conferido (revisao Codex 2026-11-19)
+                const bool fr = dc::language_supported(dc::Language::Fr);
+                if (ui_.opcao(id("dc.lang", 1), 2, tr(fr ? "dc.lang.fr" : "dc.lang.fr.na"), {}, {r.x + meia + 16, yv, meia, 26},
+                              s.dcIdioma == dc::Language::Fr, fr))
+                    s.dcIdioma = dc::Language::Fr;
+                yv += 34;
+                ui_.campo(id("dc.western"), s.ocidental, {r.x, yv, r.w - bw - 12, 36},
+                          tr(s.dcIdioma == dc::Language::En ? "dc.western.en" : "dc.western.fr"));
+                if (ui_.botao(id("dc.browse"), tr("browse"), {r.dir() - bw, yv, bw, tema::kBotaoAltura})) {
+                    h_.escolher_arquivo(tr("dlg.disc_title"), fs::path(s.ocidental), [this](fs::path f) {
+                        if (f.empty()) return;
+                        s_->ocidental = f.wstring();
+                        h_.redesenhar();
+                    });
+                }
+                yv += 44;
+                // o que sera baixado e a confirmacao explicita (sem ela, nao segue)
+                const std::wstring lista =
+                    L"• " +
+                    tr("dc.patcher", {widen(dc::kRepository), widen(std::string(dc::kCommit).substr(0, 7)),
+                                      std::to_wstring(std::size(dc::kPatcherFiles))}) +
+                    L"\n• " + tr("dc.python");
+                nota(tr("dc.download") + L"\n" + lista, tema::kTextoSuave);
+                ui_.caixa(id("dc.confirm"), tr("dc.confirm"), {}, {r.x, yv, r.w, 26}, s.dcConfirmado);
+                yv += 32;
+                std::error_code ec;
+                if (!s.dcConfirmado || s.ocidental.empty() || !fs::is_regular_file(fs::path(s.ocidental), ec)) podeSeguir = false;
+            }
+        }
+    }
     const float nh = ui_.altura_texto(tr("cdi.privacy"), est(tema::kPequeno), r.w);
     ui_.rotulo(tr("cdi.privacy"), est(tema::kPequeno), {r.x, rodapeY - nh - 18, r.w, nh}, tema::kTextoApagado);
     if (ui_.botao(id("nav.back"), tr("nav.back"), {r.x, rodapeY, 120, tema::kBotaoAltura}) || ui_.escape()) ir(Tela::Edicao);
     if (ui_.botao(id("nav.next"), tr("nav.next"), {r.dir() - 160, rodapeY, 160, tema::kBotaoAltura}, TipoBotao::Primario,
-                  s.cdiEstado == Impl::Cdi::Ok, true))
+                  podeSeguir, true))
         ir(Tela::Componentes);
 }
 
@@ -1219,6 +1295,13 @@ void Instalador::simular(Tela t, Simulacao sim) {
     s.alvo = s.pasta;
     s.info = {};
     if (sim == Simulacao::AvisoPasta) s.info.exists = true, s.info.ours = true, s.portatil = true;
+    s.cdiVersao = 0, s.dc = false;
+    if (sim == Simulacao::DirectorsCut) {  // o disco japones com a opcao marcada, o segundo disco e a confirmacao
+        s.cdi       = c_.linux_ ? L"/run/media/jogador/USB/Blue Stinger (Japan).chd" : L"D:\\Jogos\\Blue Stinger (Japan).chd";
+        s.cdiInfo   = L"HDR-0003 V1.006 (bluestinger_jp_v1006)";
+        s.cdiVersao = 3, s.dc = true, s.dcConfirmado = true;
+        s.ocidental = c_.linux_ ? L"/run/media/jogador/USB/Blue Stinger (USA).chd" : L"D:\\Jogos\\Blue Stinger (USA).chd";
+    }
     if (t == Tela::BoasVindas) s.encontradas.clear();
     s.logTecnico = sim == Simulacao::Progresso;
     if (t == Tela::BoasVindas && sim == Simulacao::Sucesso) {

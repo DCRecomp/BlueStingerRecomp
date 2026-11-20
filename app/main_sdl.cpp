@@ -11,6 +11,7 @@
 // grafico: sem console, o log vai para bluestinger.log ao lado do executavel (ou em
 // %LOCALAPPDATA%\BlueStingerRecomp).
 #include "boot/native_boot.h"
+#include "versao/enderecos.h"  // kJogoIdentidade
 #include "runtime_data.h"
 #include "assist.h"
 #include "bs_version.h"
@@ -393,10 +394,11 @@ std::string keyName(SDL_Keycode k) {
 
 void printStats(const bs::GameHost& host) {
     const bs::GameStats s = host.stats();
-    std::printf("desempenho: %llu VBlanks; trabalho por campo: media %.2f ms, maximo %.2f ms; acima de 16,68 ms: "
+    std::printf("desempenho: %llu VBlanks; trabalho por campo: media %.2f ms, maximo %.2f ms; acima de %s ms: "
                 "%llu; ultimo ritmo %.2f campos/s\n",
-                (unsigned long long)s.vblanks, s.workAvgMs, s.workMaxMs, (unsigned long long)s.overBudget,
-                s.fieldsPerSecond);
+                (unsigned long long)s.vblanks, s.workAvgMs, s.workMaxMs,
+                BS_VERSAO_PAL ? "20" : "16,68",  // o orcamento por campo de game_host.cpp (kFieldMs)
+                (unsigned long long)s.overBudget, s.fieldsPerSecond);
 }
 
 void errorBox(SDL_Window* parent, const std::string& msg) {
@@ -1759,7 +1761,7 @@ TempSaves g_tempSaves;
 
 // "auto" (o padrao): pt-BR se um pacote de mods\ tiver as falas em pt-BR, senao en-US, senao desligadas (com aviso).
 std::string resolveAutoSubtitles() {
-    const auto mods = bs::native::localization::ModPackages::discover(modsPath(), "T13001N V1.000");
+    const auto mods = bs::native::localization::ModPackages::discover(modsPath(), bs::kJogoIdentidade);
     for (const char* lang : {"pt-BR", "en-US"})
         if (const auto f = mods.find("legendas/falas.{idioma}.toml", lang); f && f->language == lang) {
             std::fprintf(stderr, "[legenda] idioma automatico: %s (pacote %s)\n", lang, f->package->id.c_str());
@@ -1821,6 +1823,7 @@ fs::path savesRoot(const Args& a) {
         root = userDir() / L"saves";
         std::fprintf(stderr, "[saves] pasta Documentos indisponivel: usando %s\n", utf8(root).c_str());
     }
+    if (*bs::kVersaoPastaSaves) root /= bs::kVersaoPastaSaves;  // PAL P6: cada versao do jogo com a sua subpasta
     return root;
 }
 
@@ -2316,7 +2319,7 @@ int mainWindow(Args& a) {
     if (!editionProfile().enhanced_water) prefs.graphics.water = st::Water::Original;
     if (!prefs.graphics.vulkan) a.render = 0;
     std::vector<std::string> languages;  // os idiomas dos pacotes de legendas encontrados
-    const auto modPackages = bs::native::localization::ModPackages::discover(modsPath(), "T13001N V1.000");
+    const auto modPackages = bs::native::localization::ModPackages::discover(modsPath(), bs::kJogoIdentidade);
     for (const auto& pr : modPackages.problems())
         std::fprintf(stderr, "[menu] pacote de mod recusado (%s): %s\n", utf8(pr.dir.filename()).c_str(), pr.message.c_str());
     for (const auto& pkg : modPackages.packages())

@@ -27,6 +27,7 @@
 // para os buffers da camada per, como no legado.
 //
 // Some no N9, quando os consumidores do jogo forem elevados.
+#include "versao/enderecos.h"
 #include "boundary_registry.h"
 #include "platform/input.h"
 
@@ -35,13 +36,13 @@
 
 namespace bs::transitional::pad {
 
-constexpr uint32_t kServer     = 0x8C15C4E6;
-constexpr uint32_t kGetter     = 0x8C15C668;
-constexpr uint32_t kDmaTrigger = 0x8C0975C0;
+constexpr uint32_t kServer     = bs::jogo(0x8C15C4E6);
+constexpr uint32_t kGetter     = bs::jogo(0x8C15C668);
+constexpr uint32_t kDmaTrigger = bs::jogo(0x8C0975C0);
 // per_info(i) (8C08F4CC -> 8C0979FA): *(*(8C097AAC)) + (int16)*(8C097AA2) + 120 * i
-constexpr uint32_t kPerInfoPtrLiteral = 0x8C097AAC, kPerInfoOffLiteral = 0x8C097AA2, kPerInfoStride = 120;
+constexpr uint32_t kPerInfoPtrLiteral = bs::jogo(0x8C097AAC), kPerInfoOffLiteral = bs::jogo(0x8C097AA2), kPerInfoStride = 120;
 // per_raw(i) (8C08F4B6): *(8C08F578) + 24 * i; +2 erro, +4 resposta, +8 quadro (condicao em quadro + 8)
-constexpr uint32_t kPerRawLiteral = 0x8C08F578, kPerRawStride = 24;
+constexpr uint32_t kPerRawLiteral = bs::jogo(0x8C08F578), kPerRawStride = 24;
 constexpr uint32_t kControllerFunction = 0xFE060F00;  // dados da funcao do controle padrao (DEVICE_INFO)
 
 // Negativos do teste do N3-2 (BS_PAD_NATIVO_MUTACAO=<lista>): cada um tem de ser acusado.

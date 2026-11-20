@@ -107,6 +107,30 @@ BS_TEST(video_mw_core_lifecycle) {
     BS_CHECK(c.stats().starts == 1 && c.stats().stops == 1 && !c.frame(fr));
 }
 
+// PAL P5: filme de 25 fps consultado a cada 2 campos de 50 Hz (40 ms), com a variacao de alguns ms do instante da
+// consulta. Sem fase, as consultas caem nas fronteiras e o filme repete e pula quadros; com meio campo de fase
+// (MwCoreOptions::phase100ns, o padrao do PAL), cada quadro aparece uma vez.
+BS_TEST(video_mw_core_fase_pal) {
+    TempDir  d{"fase"};
+    fs::path data = d.p / "data" / "video", mods = d.p / "mods" / "video";
+    fs::create_directories(data), fs::create_directories(mods);
+    makeMovie(data / "E001.mp4", 64, 48, 25, 50, false);
+    writeText(data / "manifest.toml", "[[filme]]\nid = 3\noriginal = \"E001.SFD\"\narquivo = \"E001.mp4\"\nquadros = 50\nfps = 25.0\n");
+    auto run = [&](int64_t phase) {
+        tv::MwCoreOptions o;
+        o.catalog    = {data, mods};
+        o.phase100ns = phase;
+        tv::MwPlayerCore c(o);
+        c.start("E001.SFD", 0);
+        const int jitter[] = {0, 3, -2, 1, -3, 2, -1};  // ms, como o instante da chamada dentro do campo
+        for (int k = 0; k < 45; ++k) c.status((int64_t(k) * 40 + (k ? jitter[k % 7] : 0)) * kMs);
+        return c.stats();
+    };
+    const auto sem = run(0), com = run(100'000);
+    BS_CHECK(sem.framesSkipped > 0);  // o defeito que a fase corrige
+    BS_CHECK(com.framesSkipped == 0 && com.framesShown == 45);
+}
+
 // preparacao parametrizada (PENDENTE O1b): N consultas em 1 antes do 2; o filme conta do fim dela
 BS_TEST(video_mw_core_prep_polls) {
     Fixture f;

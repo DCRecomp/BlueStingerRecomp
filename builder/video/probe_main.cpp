@@ -94,7 +94,7 @@ static int probe(const fs::path& p) {
     if (const char* raw = std::getenv("BS_PROBE_RAW")) dumpRaw(s, raw);
     std::vector<int16_t> pcm;
     bv::AdxInfo          a;
-    const bool           ok = bv::adx_decode(s.audio, pcm, &a, &err);
+    const bool           ok = bv::adx_decode(s.audio, pcm, &a, &err, true);
     int                  peak = 0;
     size_t               clip = 0;
     for (int16_t v : pcm) peak = std::max(peak, std::abs(int(v))), clip += (v == 32767 || v == -32768);

@@ -1,4 +1,5 @@
 #include "remaster/entrada_titulo.h"
+#include "versao/enderecos.h"
 
 #include "cpu/sh4_context.h"
 #include "cpu/sh4_mem.h"
@@ -183,10 +184,10 @@ bool EntradaTitulo::aplicar(Sh4Context* c, const Evento& ev) {
         sh4_write16(c, e::kCursor, 0);
         chamar(c, e::kNovoJogoIni, 0);
         sh4_write16(c, e::kEstado, 7);
-        sh4_write8(c, 0x8C24D2AA, 1);
-        sh4_write16(c, 0x8C24D29E, 8);
-        sh4_write16(c, 0x8C24D2A0, 0x00FF);
-        sh4_write32(c, 0x8C24D298, 0xBF800000u);  // -1.0f
+        sh4_write8(c, bs::jogo(0x8C24D2AA), 1);
+        sh4_write16(c, bs::jogo(0x8C24D29E), 8);
+        sh4_write16(c, bs::jogo(0x8C24D2A0), 0x00FF);
+        sh4_write32(c, bs::jogo(0x8C24D298), 0xBF800000u);  // -1.0f
         resultado_.store(1);
         return true;
     }
@@ -199,8 +200,8 @@ bool EntradaTitulo::aplicar(Sh4Context* c, const Evento& ev) {
     const uint32_t r = chamar(c, e::kCarregar, 0, uint32_t(ev.arquivo), 0x22);
     if (r == 7 && quadrosNaEtapa_ < kLimiteLoad) return false;
     if (r != 8) {  // falhou ou nao terminou: a maquina do load volta ao inicio, o titulo continua no menu
-        sh4_write32(c, 0x8C1F3858, 0);
-        sh4_write8(c, 0x8C1F3A60, 0);
+        sh4_write32(c, bs::jogo(0x8C1F3858), 0);
+        sh4_write8(c, bs::jogo(0x8C1F3A60), 0);
         std::fprintf(stderr, "[remaster] carregar %d falhou (retorno %u em %u quadros)\n", ev.arquivo, r, quadrosNaEtapa_);
         resultado_.store(-1);
         return true;

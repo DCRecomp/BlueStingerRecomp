@@ -102,7 +102,8 @@ bool        cli_toolchain_options();
 const char* cli_usage_extra();
 
 // v0.9.7-2 (filmes widescreen, filmes_widescreen.h): baixa `url` (so HTTPS, redirecionamentos HTTPS seguidos) para `dst`.
-// Windows: WinHTTP (do sistema). Linux: ainda nao (falso com a mensagem). onBytes(recebidos, total ou 0) pode ser nulo.
+// Windows: WinHTTP (do sistema). Linux: o curl do sistema (ou o wget), so HTTPS. onBytes(recebidos, total ou 0) pode ser
+// nulo (no Linux, chamado so no fim).
 bool http_download(const std::string& url, const std::filesystem::path& dst, const std::atomic<bool>* cancel,
                    const std::function<void(uint64_t, uint64_t)>& onBytes, std::string* err);
 

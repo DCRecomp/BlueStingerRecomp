@@ -3,7 +3,7 @@ Blue Stinger (recompilado)
 
 O que e
 -------
-Versao nativa para Windows x64 do Blue Stinger (Dreamcast, NTSC-U T13001N V1.000), gerada
+Versao nativa para Windows x64 do Blue Stinger (Dreamcast; a versao do seu disco), gerada
 na sua maquina pelo Blue Stinger Builder: o codigo SH-4 do jogo foi recompilado para C++ e
 compilado com o runtime nativo. Nao e um emulador.
 
@@ -37,7 +37,9 @@ antigo, temporario) e informe o caso.
 Saves
 -----
 Sem cartao de memoria: o jogo ve um cartao (Socket 1) e grava cada slot como arquivo em
-Documentos\DC-Recomp\Blue Stinger\saves\card0 (BLUESTIN.000 a .005, com copia anterior .bak).
+Documentos\DC-Recomp\Blue Stinger\saves\card0 (BLUESTIN.000 a .005, com copia anterior .bak). As
+outras versoes usam uma subpasta de saves (saves\PAL-DE\card0, e PAL-EN, PAL-FR, JP, DC-EN, DC-FR): o save de uma versao nao
+e aberto por outra.
   --saves-portatil ............. saves\ ao lado do BlueStinger.exe (o "Modo portatil" do
                                  BlueStinger-Recompiler grava isso em instalacao.toml, ao lado do
                                  jogo: vale ao abrir o BlueStinger.exe direto e depois de mover a pasta)

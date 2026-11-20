@@ -1,4 +1,5 @@
 #include "free_camera.h"
+#include "versao/enderecos.h"
 
 #include "cpu/sh4_mem.h"
 #include "cpu/sh4_runtime.h"
@@ -86,12 +87,12 @@ Vec3 orbit(const Vec3& pos, int32_t yaw, int32_t pitch, const Vec3& player, int3
 
 namespace {
 
-constexpr uint32_t kCamera = 0x8C24CD50;  // posicao +0, yaw +0x10
-constexpr uint32_t kScene  = 0x8C24CD68;  // != 0: camera roteirizada (secao 23.1)
-constexpr uint32_t kPlayer = 0x8C24D668;
+constexpr uint32_t kCamera = bs::jogo(0x8C24CD50);  // posicao +0, yaw +0x10
+constexpr uint32_t kScene  = bs::jogo(0x8C24CD68);  // != 0: camera roteirizada (secao 23.1)
+constexpr uint32_t kPlayer = bs::jogo(0x8C24D668);
 // A referencia do movimento do Eliot: a copia do yaw da camera do jogo (0x8C24D2CC + 0x3B4), feita de CD60 em
 // 8C041674/8C041830/8C04199E e refeita durante o toque quando o analogico muda bastante (BS_RAM_WATCH, 2026-10-22)
-constexpr uint32_t kMoveRef = 0x8C24D680;
+constexpr uint32_t kMoveRef = bs::jogo(0x8C24D680);
 constexpr int32_t  kMaxPitch     = 14563;  // 80 graus: o pitch final nunca passa disso
 constexpr float    kCutDistance  = 60.0f;  // salto de posicao entre montagens: corte de camera
 constexpr int32_t  kCutYaw       = 7282;   // 40 graus
@@ -102,8 +103,8 @@ enum Fn { Pitch, Yaw, Position, Translate, RotY, RotX, kFns };
 struct Site {
     uint32_t addr, pr;
 };
-constexpr Site kSites[kFns] = {{0x8C174148, 0x8C052892}, {0x8C174180, 0x8C05289A}, {0x8C174308, 0x8C0528AC},
-                               {0x8C1713A4, 0x8C0528DA}, {0x8C170DC8, 0x8C0528E4}, {0x8C170D34, 0x8C05290C}};
+constexpr Site kSites[kFns] = {{bs::jogo(0x8C174148), bs::jogo(0x8C052892)}, {bs::jogo(0x8C174180), bs::jogo(0x8C05289A)}, {bs::jogo(0x8C174308), bs::jogo(0x8C0528AC)},
+                               {bs::jogo(0x8C1713A4), bs::jogo(0x8C0528DA)}, {bs::jogo(0x8C170DC8), bs::jogo(0x8C0528E4)}, {bs::jogo(0x8C170D34), bs::jogo(0x8C05290C)}};
 
 struct ScriptLine {
     uint64_t vblank;

@@ -58,7 +58,14 @@ public:
 
     virtual std::string formatName() const = 0;
 
+    // Setor bruto de 2 352 bytes (`index` a partir do inicio da faixa, depois do pregap), como numa faixa .bin/.raw de GDI
+    // (Director's Cut: o patcher le GDI). Audio em ordem little-endian. Lanca DiscError se a imagem nao guarda o setor
+    // bruto (faixa de 2048 ou 2336 bytes por setor).
+    void readRawSector(const Track& t, uint32_t index, uint8_t* out2352) const;
+
 protected:
+    // O audio do CHD vem big-endian (chdman); as outras imagens guardam como no GDI
+    virtual bool audioBigEndian() const { return false; }
     // `offset` e relativo ao arquivo da faixa `t` (o CDI tem um arquivo so; GDI e CUE, um por faixa).
     virtual void readRaw(const Track& t, uint64_t offset, void* dst, size_t n) const = 0;
     std::vector<Track> tracks_;

@@ -56,9 +56,24 @@ ModPackages ModPackages::discover(const fs::path& modsDir, std::string_view game
         p.provisional = t["provisorio"].value_or(false);
         if (!valid_resource_id(p.id)) { fail("id invalido: '" + p.id + "'"); continue; }
         if (!valid_utf8(p.name)) { fail("nome nao e UTF-8"); continue; }
-        if (const auto want = t["jogo"].value<std::string>(); want && !gameVersion.empty() && *want != gameVersion) {
-            fail("feito para " + *want + ", nao para " + std::string(gameVersion));
-            continue;
+        // jogo: uma versao ("T13001N V1.000") ou a lista das versoes conferidas (PAL P6: as legendas americanas servem nos
+        // dois PAL, com as mesmas vozes e os filmes nos mesmos tempos)
+        if (!gameVersion.empty() && t.contains("jogo")) {
+            std::vector<std::string> wants;
+            bool                     okJogo = true;
+            if (const auto one = t["jogo"].value<std::string>()) wants.push_back(*one);
+            else if (const auto* arr = t["jogo"].as_array()) {
+                for (const auto& v : *arr)
+                    if (const auto s = v.value<std::string>()) wants.push_back(*s);
+                    else okJogo = false;
+            } else okJogo = false;
+            if (!okJogo || wants.empty()) { fail("'jogo' tem de ser um texto ou uma lista de textos"); continue; }
+            if (std::find(wants.begin(), wants.end(), std::string(gameVersion)) == wants.end()) {
+                std::string lista;
+                for (const auto& w : wants) lista += (lista.empty() ? "" : ", ") + w;
+                fail("feito para " + lista + ", nao para " + std::string(gameVersion));
+                continue;
+            }
         }
         bool okLangs = true;
         if (const auto* arr = t["idiomas"].as_array()) {

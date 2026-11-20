@@ -119,18 +119,26 @@ bool adx_parse_header(std::span<const uint8_t> d, AdxInfo& h, std::string* err) 
     return true;
 }
 
-bool adx_decode(std::span<const uint8_t> d, std::vector<int16_t>& pcm, AdxInfo* infoOut, std::string* err) {
+bool adx_decode(std::span<const uint8_t> d, std::vector<int16_t>& pcm, AdxInfo* infoOut, std::string* err, bool acceptTruncated) {
     AdxInfo h;
     if (!adx_parse_header(d, h, err)) return false;
+    h.declaredSamples = h.totalSamples;
     if (infoOut) *infoOut = h;
     pcm.assign(size_t(h.totalSamples) * h.channels, 0);
+    // fim antecipado aceito: corta no ultimo quadro completo (todos os canais) ja decodificado
+    auto stopAt = [&](uint32_t done) {
+        h.totalSamples = std::min(done, h.declaredSamples), h.truncated = true;
+        pcm.resize(size_t(h.totalSamples) * h.channels);
+        if (infoOut) *infoOut = h;
+        return true;
+    };
     int32_t hist[2][2] = {};
     size_t  o = h.dataOffset;
     for (uint32_t done = 0; done < h.totalSamples; done += 32) {
         for (uint8_t ch = 0; ch < h.channels; ++ch, o += 18) {
-            if (o + 18 > d.size()) return fail(err, "ADX truncado antes do total de amostras");
+            if (o + 18 > d.size()) return acceptTruncated ? stopAt(done) : fail(err, "ADX truncado antes do total de amostras");
             const uint16_t scaleRaw = be16(d, o);
-            if (scaleRaw & 0x8000) return fail(err, "ADX: marca de fim antes do total de amostras");
+            if (scaleRaw & 0x8000) return acceptTruncated ? stopAt(done) : fail(err, "ADX: marca de fim antes do total de amostras");
             const int32_t scale = scaleRaw;
             for (int k = 0; k < 32; ++k) {
                 const uint8_t b      = d[o + 2 + size_t(k / 2)];

@@ -28,11 +28,18 @@ struct AdxInfo {
     uint16_t highpass = 0;
     uint32_t dataOffset = 0;  // primeiro bloco
     int32_t  coef1 = 0, coef2 = 0;  // preditor em ponto fixo (>> 12)
+    uint32_t declaredSamples = 0;   // o total do cabecalho (igual a totalSamples, salvo num ADX truncado aceito)
+    bool     truncated = false;     // os dados acabaram antes do total declarado (so com acceptTruncated)
 };
 
 bool adx_parse_header(std::span<const uint8_t> adx, AdxInfo& info, std::string* err = nullptr);
 // PCM 16 bits intercalado, totalSamples por canal (o resto do ultimo bloco e descartado).
-bool adx_decode(std::span<const uint8_t> adx, std::vector<int16_t>& pcm, AdxInfo* info = nullptr, std::string* err = nullptr);
+// acceptTruncated (so para SFD do proprio disco, ja conferido setor a setor): dados que acabam antes do total declarado
+// valem ate o ultimo bloco completo, como o Sofdec, que toca o stream ate o fim; totalSamples passa a ser o decodificado
+// e `truncated` fica true. Director's Cut: o patcher encurta o OPENING.SFD para 1 s e mantem o total original. Sem a
+// opcao (padrao), um ADX truncado e recusado.
+bool adx_decode(std::span<const uint8_t> adx, std::vector<int16_t>& pcm, AdxInfo* info = nullptr, std::string* err = nullptr,
+                bool acceptTruncated = false);
 // Coeficientes do preditor pela frequencia de corte (os do codificador da CRI).
 void adx_coefficients(uint32_t highpass, uint32_t sampleRate, int32_t& coef1, int32_t& coef2);
 

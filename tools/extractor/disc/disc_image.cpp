@@ -1,5 +1,7 @@
 #include "disc/disc_image.h"
 
+#include <utility>
+
 namespace bs::disc {
 
 uint32_t Track::userDataOffset() const {
@@ -32,6 +34,24 @@ void DiscImage::readUserData(uint32_t lba, uint8_t* out) const {
     if (!t->isData()) throw DiscError("LBA " + std::to_string(lba) + " pertence a uma faixa de audio");
     uint64_t off = t->file_offset + uint64_t(lba - t->start_lba) * t->sector_size + t->userDataOffset();
     readRaw(*t, off, out, kUserDataSize);
+}
+
+void DiscImage::readRawSector(const Track& t, uint32_t index, uint8_t* out) const {
+    if (index >= t.length) throw DiscError("setor " + std::to_string(index) + " alem do fim da faixa " + std::to_string(t.number));
+    // inicio dos 2 352 bytes dentro do passo guardado: CHD (user_offset) e GDI/CUE/CDI com 2352 por setor
+    uint32_t rawStart = 0;
+    if (t.user_offset >= 0) {
+        const uint32_t header = !t.isData() ? 0 : t.mode == TrackMode::Mode1 ? 16 : 24;
+        if (uint32_t(t.user_offset) != header || t.sector_size < 2352)
+            throw DiscError("a faixa " + std::to_string(t.number) + " nao guarda o setor bruto (sem os 2 352 bytes)");
+        rawStart = 0;
+    } else if (t.sector_size != 2352) {
+        throw DiscError("a faixa " + std::to_string(t.number) + " tem " + std::to_string(t.sector_size) +
+                        " bytes por setor, nao o setor bruto de 2 352");
+    }
+    readRaw(t, t.file_offset + uint64_t(index) * t.sector_size + rawStart, out, 2352);
+    if (!t.isData() && audioBigEndian())
+        for (size_t i = 0; i + 1 < 2352; i += 2) std::swap(out[i], out[i + 1]);
 }
 
 InputFile::InputFile(const std::filesystem::path& path) {

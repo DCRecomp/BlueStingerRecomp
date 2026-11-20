@@ -13,6 +13,7 @@
 // Build incremental do CMake: %LOCALAPPDATA%\BlueStingerRecomp\build\<hash da saida>
 // (caminho curto: o MSVC nao passa de 260 caracteres).
 // Uma falha em qualquer etapa deixa a versao instalada anterior intacta.
+#include "directors_cut.h"
 #include "platform/install_config.h"
 
 #include <atomic>
@@ -71,6 +72,13 @@ struct Request {
     // v0.9.7-2: depois de instalar a Remastered, baixa o mod "filmes widescreen" para <instalacao>\mods\video
     // (filmes_widescreen.h). Falso por padrao (o CLI e os testes nao usam a rede); o instalador marca por padrao.
     bool                  widescreenMovies = false;
+    // Director's Cut (directors_cut.h, docs/DIRECTORS-CUT-ANALISE.md): com o disco japones v1.006 em `disc`, aplica o patch de
+    // terceiros antes de recompilar, com o texto do `westernDisc` (americano Redump para EN, PAL frances para FR). Baixa o
+    // patcher (e o Python, se faltar): sem directorsCutConfirmed a instalacao para com a lista do que seria baixado. Um disco
+    // que ja tem o patch segue sem aplicar nada.
+    std::optional<dc::Language> directorsCut;
+    std::filesystem::path       westernDisc;
+    bool                        directorsCutConfirmed = false;
 };
 
 struct Callbacks {

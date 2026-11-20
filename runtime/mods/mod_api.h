@@ -7,10 +7,10 @@
 //
 //   #include "mods/mod_api.h"
 //   static void minhaVersao(bs::Sh4Context* c) {
-//       bs::mods::call_original(0x8C194580, c);   // comportamento original
+//       bs::mods::call_original(bs::jogo(0x8C194580), c);   // comportamento original
 //       c->r[0] = 1;                               // e depois muda o retorno
 //   }
-//   BS_MOD(exemplo) { bs::mods::replace(0x8C194580, minhaVersao); }
+//   BS_MOD(exemplo) { bs::mods::replace(bs::jogo(0x8C194580), minhaVersao); }
 //
 // Uma funcao SH-4 recompilada recebe o contexto (registradores r0-r15, FPU, memoria em
 // c->ram) e segue a convencao do jogo (argumentos em r4-r7, retorno em r0). O mapa
@@ -19,7 +19,14 @@
 // replace() vale para TODAS as chamadas: diretas (o codigo gerado chama pelo slot da
 // funcao quando BS_MODS=ON) e indiretas (despacho por ponteiro). Sem mods (build normal),
 // as chamadas diretas continuam diretas, sem custo.
+//
+// Enderecos (PAL P2, docs/PAL-PLANO.md): os desta API sao os da versao COMPILADA (os do codigo
+// gerado). Num mod, escreva o endereco americano dentro de bs::jogo() (versao/enderecos.h), como o
+// codigo nativo: bs::mods::replace(bs::jogo(0x8C194580), minhaVersao). No americano bs::jogo(a) == a;
+// no PAL, um endereco que nao esta na tabela nao compila. Endereco lido de texto (variavel de
+// ambiente de diagnostico): endereco_da_versao() na leitura.
 #include "cpu/sh4_runtime.h"
+#include "versao/enderecos.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -34,6 +41,14 @@ struct Slot {
     Sh4Func* slot;
     Sh4Func  original;
 };
+
+// Endereco americano lido em tempo de execucao (texto de diagnostico) -> endereco da versao compilada. No americano,
+// ele mesmo; no PAL, std::runtime_error se o endereco nao esta na tabela.
+#if BS_VERSAO_JOGO == 0
+inline uint32_t endereco_da_versao(uint32_t americano) { return americano; }
+#else
+uint32_t endereco_da_versao(uint32_t americano);  // mod_api.cpp
+#endif
 
 // Chamado pelo codigo gerado (register_functions) com os slots de todas as funcoes.
 void set_slots(const Slot* slots, size_t count);
@@ -50,8 +65,8 @@ void    call_original(uint32_t addr, Sh4Context* c);  // fatal se nao existe
 // Esperas (N2b, criterio B10). Um mod que reescreve um laco de espera do jogo (por exemplo a
 // espera do VBlank em 8C064A20) chama wait() em cada volta e wait_end() na saida, como o codigo
 // gerado faz com BS_WAIT/BS_WAIT_END nos pontos declarados em [native] esperas:
-//   while (bs::sh4_read16(c, bandeira) == 0) bs::mods::wait(c, 0x8C064A2C, 0x8C064A26, 6);
-//   bs::mods::wait_end(c, 0x8C064A2C);
+//   while (bs::sh4_read16(c, bandeira) == 0) bs::mods::wait(c, bs::jogo(0x8C064A2C), bs::jogo(0x8C064A26), 6);
+//   bs::mods::wait_end(c, bs::jogo(0x8C064A2C));
 // `pc` identifica a espera (o back-edge do original), `resume` e onde o original retomaria (vira
 // SPC se uma interrupcao for entregue) e `cycles` o custo estimado de uma volta (enquanto o tempo
 // andar por ciclos, sem ele o laco nao deixa o tempo andar). Um laco de espera sem wait() e

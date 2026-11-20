@@ -1,4 +1,5 @@
 #include "debug/cri_diag.h"
+#include "versao/enderecos.h"
 
 #include "aica/aica_regs.h"  // kAicaRamSize
 #include "system/sound_bus.h"
@@ -24,29 +25,29 @@
 namespace bs {
 namespace {
 
-constexpr uint32_t kPass      = 0x8C1586B8;  // passada do servidor do CRI
-constexpr uint32_t kTable     = 0x8C2D0D84;  // 32 entradas de 120 bytes; +4 = ativa
+constexpr uint32_t kPass      = bs::jogo(0x8C1586B8);  // passada do servidor do CRI
+constexpr uint32_t kTable     = bs::jogo(0x8C2D0D84);  // 32 entradas de 120 bytes; +4 = ativa
 constexpr uint32_t kEntries   = 32;
 constexpr uint32_t kEntrySize = 120;
 // Servidor ADX (8C178874): estrutura em 0x8C2F4F38, quantidade de handles em +0xB4, base da
 // tabela em +0xB8, passo 0x3EF0; um handle trabalha com o estado (+64) entre 1 e 5.
-constexpr uint32_t kAdx       = 0x8C2F4F38;
+constexpr uint32_t kAdx       = bs::jogo(0x8C2F4F38);
 constexpr uint32_t kAdxStride = 0x3EF0;
 // Servidor por objeto (8C175976): ponteiro para o objeto registrado (0 = nenhum).
-constexpr uint32_t kSrvObj    = 0x8C1DD618;
+constexpr uint32_t kSrvObj    = bs::jogo(0x8C1DD618);
 // Gerenciador de streaming do objeto servidor (8C174888), disassembly 2026-10-16:
 //  controle em 0x8C2DA958: +0 quantidade, +4 base, +8 leitura em curso (8C174C7C a acompanha),
 //  +12/+20 tamanho e progresso do pedido (8C174E16), +36 indice do rodizio (8C174A36);
 //  entradas de 68 bytes: +0 em uso, +4 estado (2 = pode ler), +12 limiar, +48 "buffer cheio"
 //  (posto por 8C174888 quando nao ha espaco; limpo por 8C174998 quando o predicado 8C1749E0
 //  ve o nivel do buffer do handle +60 no limiar ou abaixo), +60 handle.
-constexpr uint32_t kStreamCtl    = 0x8C2DA958;
+constexpr uint32_t kStreamCtl    = bs::jogo(0x8C2DA958);
 constexpr uint32_t kStreamStride = 68;
-constexpr uint32_t kMgr      = 0x8C174888;  // metodo do objeto servidor (gerenciador de streaming)
-constexpr uint32_t kIssue    = 0x8C174BAA;  // emite (ou continua) a leitura de um bloco
-constexpr uint32_t kDrained  = 0x8C1749E0;  // predicado: buffer cheio voltou ao limiar
-constexpr uint32_t kCandidate = 0x8C174A36; // proxima entrada que pode ler (rodizio)
-constexpr uint32_t kLevel     = 0x8C19135A; // nivel do buffer do handle (r4), em *r5 (usado por 8C1749E0)
+constexpr uint32_t kMgr      = bs::jogo(0x8C174888);  // metodo do objeto servidor (gerenciador de streaming)
+constexpr uint32_t kIssue    = bs::jogo(0x8C174BAA);  // emite (ou continua) a leitura de um bloco
+constexpr uint32_t kDrained  = bs::jogo(0x8C1749E0);  // predicado: buffer cheio voltou ao limiar
+constexpr uint32_t kCandidate = bs::jogo(0x8C174A36); // proxima entrada que pode ler (rodizio)
+constexpr uint32_t kLevel     = bs::jogo(0x8C19135A); // nivel do buffer do handle (r4), em *r5 (usado por 8C1749E0)
 
 enum class Mode {
     Off, Count, SkipMw, SkipAll, SkipNoStream, SkipFirstPerVblank, RepeatNoStream,
@@ -60,7 +61,7 @@ enum class Mode {
 // (contador de VBlanks do callback 8C158A26, comparado com [0x8C1DD1B4] para pedir a troca).
 // Os carimbos 0x8C1DD228/238 sao lidos por 8C158864 so para copia-los em 224/230; a decisao ali
 // e pela bandeira logica 0x8C1DD23C (acesa pelo callback de VBlank).
-constexpr uint32_t kMeterLo = 0x8C1DD1C8, kMeterHi = 0x8C1DD23C;  // 0x8C1DD23C: bandeira logica, fora
+constexpr uint32_t kMeterLo = bs::jogo(0x8C1DD1C8), kMeterHi = bs::jogo(0x8C1DD23C);  // 0x8C1DD23C: bandeira logica, fora
 std::FILE*         g_meters = nullptr;
 std::FILE*         g_flowLog = nullptr;  // BS_CRI_FLUXO_LOG: uma linha por passada com trabalho (VBlank, tipo)
 uint64_t           g_meterVblank = ~0ull, g_meterChanges = 0, g_meterHash = 0, g_consumerHits = 0;
@@ -368,7 +369,7 @@ void effectPass(Sh4Context* c, uint32_t mw, uint32_t adx) {
         ++g.skipped;  // bloqueio simulado: a passada nao roda e nada muda
         // modo sombra: o monitor de progresso ve o bloqueio como a espera condicional que o N2b-2
         // declararia no back-edge do laco da thread 3 (so informa; a execucao nao muda)
-        sh4_wait_point(c, 0x8C158860);
+        sh4_wait_point(c, bs::jogo(0x8C158860));
         return;
     }
     const uint64_t gd0 = sys_disc_state_hash(), tm0 = sh4_tmu_state_hash();
@@ -469,8 +470,8 @@ void wrapper(Sh4Context* c) {
 //    pedida).
 // A cessao de cada render (8C158864, PR 8C15889C) e as trocas pedidas pelo callback de VBlank
 // (8C17DFE8) NAO entram. A TN normalizada (TNC) remove so os eventos registrados aqui.
-constexpr uint32_t kLock = 0x8C1588AA, kYield = 0x8C17DDCC;
-constexpr uint32_t kLockYieldPr = 0x8C1588C2, kCriYieldPr = 0x8C158854;
+constexpr uint32_t kLock = bs::jogo(0x8C1588AA), kYield = bs::jogo(0x8C17DDCC);
+constexpr uint32_t kLockYieldPr = bs::jogo(0x8C1588C2), kCriYieldPr = bs::jogo(0x8C158854);
 std::FILE*         g_lockLog = nullptr;
 uint64_t           g_lockCalls = 0, g_lockWithSwitch = 0, g_lockSwitches = 0;
 

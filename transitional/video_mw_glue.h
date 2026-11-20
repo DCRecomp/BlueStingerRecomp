@@ -14,6 +14,7 @@
 //   r6/r7 nunca sao lidos (as entradas tem 1 ou 2 argumentos).
 // Propriedade: o player (MP4, audio, legendas) pertence ao MwPlayerCore e vive entre start e
 // stop/destroy; nada do guest aponta para memoria do host.
+#include "versao/enderecos.h"
 #include "video_mw_core.h"
 
 #include <cstdint>
@@ -23,9 +24,9 @@
 
 namespace bs::transitional::video {
 
-constexpr uint32_t kEntCreate = 0x8C157FC4, kEntParam = 0x8C158D42, kEntBase = 0x8C158D92, kEntOffset = 0x8C158DAE;
-constexpr uint32_t kEntDestroy = 0x8C1580E4, kEntStart = 0x8C15814A, kEntStop = 0x8C158250, kEntStat = 0x8C1582C0;
-constexpr uint32_t kMwPoolPtr = 0x8C1580B8, kMwVtable = 0x8C1DD168, kMwEntries = 32, kMwEntrySize = 120;
+constexpr uint32_t kEntCreate = bs::jogo(0x8C157FC4), kEntParam = bs::jogo(0x8C158D42), kEntBase = bs::jogo(0x8C158D92), kEntOffset = bs::jogo(0x8C158DAE);
+constexpr uint32_t kEntDestroy = bs::jogo(0x8C1580E4), kEntStart = bs::jogo(0x8C15814A), kEntStop = bs::jogo(0x8C158250), kEntStat = bs::jogo(0x8C1582C0);
+constexpr uint32_t kMwPoolPtr = bs::jogo(0x8C1580B8), kMwVtable = bs::jogo(0x8C1DD168), kMwEntries = 32, kMwEntrySize = 120;
 
 class GuestPort {
 public:

@@ -6,7 +6,7 @@ Recompilação estática (AOT) de **Blue Stinger** (Sega Dreamcast, 1999, SH-4) 
 sempre provadas contra o jogo original rodando no emulador Flycast. Não usa BIOS nem interpretador do SH-4.
 
 > **Este repositório não contém o jogo** nem nenhum dado dele. Você precisa fornecer a sua própria cópia do disco
-> (CDI, NTSC-U T13001N V1.000). Ver [LEGAL.md](LEGAL.md).
+> (GDI, CUE/BIN, CHD ou CDI; versões abaixo). Ver [LEGAL.md](LEGAL.md).
 
 ## Status (2026-11-02)
 
@@ -41,7 +41,12 @@ Planos por etapa em [docs/](docs/).
 
 | Produto | Versão | Região | Status |
 |---|---|---|---|
-| T13001N | V1.000 (1999-07-05) | NTSC-U | alvo inicial |
+| T13001N | V1.000 (1999-07-05) | NTSC-U | alvo do projeto; Original e Remastered |
+| T13001D 18 | V1.000 | PAL alemã | Original, 50 Hz (o mesmo código, relocado) |
+| T13001D-05 | V1.000 | PAL inglesa | Original, 50 Hz |
+| T13001D 09 | V1.000 | PAL francesa | Original, 50 Hz |
+| HDR-0003 | V1.006 | NTSC-J | Original |
+| Director's Cut | EN e FR | a japonesa com o patch de [espouaisso](https://github.com/espouaisso/Blue-Stinger-Directors-Cut-Patcher) (GPL-3.0, baixado pelo instalador com confirmação) | Original |
 
 ## Como usar
 

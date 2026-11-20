@@ -4,6 +4,7 @@
 //              todos os setores contra a imagem.
 #include "disc/archive.h"
 #include "disc/disc_open.h"
+#include "disc/gdi_export.h"
 #include "extract.h"
 #include "runtime_data.h"
 
@@ -18,6 +19,7 @@ static void usage() {
     std::fprintf(stderr,
                  "uso: bs-extract [--info] [--force] <imagem .gdi|.cue|.chd|.cdi|.zip|.7z> [saida]\n"
                  "     bs-extract --runtime <imagem .gdi|.cue|.chd|.cdi|.zip|.7z> <pasta de dados>\n"
+                 "     bs-extract --gdi <imagem> <pasta>: a imagem como GDI (setores brutos; patcher do Director's Cut)\n"
                  "  saida      pasta de destino (padrao: game-data)\n"
                  "  --info     so mostra faixas, IP.BIN e hash do executavel\n"
                  "  --force    extrai mesmo com hash de executavel desconhecido\n"
@@ -49,17 +51,37 @@ struct Unpacked {
     }
 };
 static std::string unpack(const std::string& image, const std::string& out, Unpacked& u) {
+#if BS_DISC_CHD
     if (!bs::disc::archive_supported(image)) return image;
     u.dir = std::filesystem::path(out).concat(".imagem");
     std::filesystem::remove_all(u.dir);
     std::cout << "extraindo o pacote para " << u.dir.string() << "\n";
     return bs::disc::archive_extract_image(image, u.dir).string();
+#else
+    // BS_BUILD_TOOLS=OFF: sem a libchdr, o miniz e o LZMA SDK; o .zip, o .7z e o .chd sao recusados por disc_open, com a
+    // mensagem (o .cdi, o .gdi e o .cue abrem)
+    (void)out, (void)u;
+    return image;
+#endif
 }
 
 int main(int argc, char** argv) {
     bs::ExtractOptions opt;
     opt.out = "game-data";
     int positional = 0;
+    if (argc == 4 && std::string(argv[1]) == "--gdi") {  // Director's Cut: a imagem como GDI (gdi_export.h)
+        try {
+            Unpacked u;
+            const std::string img = unpack(argv[2], argv[3], u);
+            const auto        d   = bs::disc::disc_open(img, u.dir);
+            const auto        gdi = bs::disc::export_gdi(*d, argv[3], "disco");
+            std::cout << "GDI: " << gdi.string() << "\n";
+            return 0;
+        } catch (const std::exception& e) {
+            std::cerr << "erro: " << e.what() << "\n";
+            return 1;
+        }
+    }
     if (argc == 4 && std::string(argv[1]) == "--runtime") {
         try {
             Unpacked u;

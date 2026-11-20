@@ -65,6 +65,10 @@ int main(int argc, char** argv) {
         else if (a == L"--edicao" && more && parseEdition(args[i + 1], req)) ++i;
         else if (a == L"--somente-exportar") req.exportOnly = true;
         else if (a == L"--filmes-widescreen") req.widescreenMovies = true;  // v0.9.7-2: baixa o mod (so a Remastered)
+        else if (a == L"--directors-cut" && more && (args[i + 1] == L"en" || args[i + 1] == L"fr"))  // directors_cut.h (fr: recusado no Builder)
+            req.directorsCut = args[++i] == L"en" ? dc::Language::En : dc::Language::Fr;
+        else if (a == L"--disco-ocidental" && more) req.westernDisc = P(args[++i]);
+        else if (a == L"--confirmar-download") req.directorsCutConfirmed = true;
         else if (a == L"--tipo" && more) req.buildType = narrow(args[++i]);
         else if (plat::cli_toolchain_options() && a == L"--compilador" && more) req.toolchainDir = P(args[++i]);  // so Linux
         else if (plat::cli_toolchain_options() && a == L"--compilador-sistema") req.systemToolchain = true;
@@ -73,6 +77,8 @@ int main(int argc, char** argv) {
                          "uso: bs-builder --disc <imagem.cdi> --out <pasta> [--kit <pasta>] [--sdl3 <pasta>]\n"
                          "                [--vcvars <vcvars64.bat> | --vswhere <vswhere.exe>] [--clean] [--name <subpasta>]\n"
                          "                [--edicao original|remastered] [--filmes-widescreen]\n"
+                         "                [--directors-cut en|fr --disco-ocidental <imagem> --confirmar-download]\n"
+                         "                (disco japones v1.006 em --disc; baixa o patcher de terceiros, GPL-3.0)\n"
                          "                [--projeto <pasta>]      exporta o projeto C++ editavel\n"
                          "  bs-builder --de-projeto <pasta> --out <pasta> [--disc <cdi>]   compila o projeto (mods)\n"
                          "                [--verify-vblanks N] [--sem-filmes] [--tipo Release|Debug]\n"

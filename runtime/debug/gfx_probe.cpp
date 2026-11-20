@@ -1,4 +1,5 @@
 #include "debug/gfx_probe.h"
+#include "versao/enderecos.h"
 
 #include "cpu/sh4_runtime.h"
 #include "pvr/pvr_regs.h"
@@ -20,7 +21,7 @@ bool g_gfx_probe = false;
 
 namespace {
 
-constexpr uint32_t kIsr = 0x8C1C53E2;  // tratador do Holly do Kamui (docs/N8-7-KAMUI.md secao 1.2)
+constexpr uint32_t kIsr = bs::jogo(0x8C1C53E2);  // tratador do Holly do Kamui (docs/N8-7-KAMUI.md secao 1.2)
 
 const char* region_of(uint32_t p) {
     const uint32_t r = p & 0x01800000;

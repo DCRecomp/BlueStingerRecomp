@@ -13,6 +13,7 @@
 //     no jogo; aceito e contado)  +0x0C/+0x10 servidor por handle e +0x24/+0x2C/+0x30/+0x34: sem uso pelo jogo
 //     com o handle nativo; respondem 0 e ficam contados (tem que ficar 0: prova de que nada do original o ve).
 //   Nada do guest aponta para memoria do host; o player vive entre start e stop/destroy.
+#include "versao/enderecos.h"
 #include "audio/voice_player.h"
 
 #include <cstdint>
@@ -21,10 +22,10 @@
 
 namespace bs::transitional::sound {
 
-constexpr uint32_t kWavCreate = 0x8C158FC4, kWavServer0C = 0x8C1597C0, kWavServer10 = 0x8C159738, kWavDestroy = 0x8C159134,
-                   kWavStart = 0x8C1591C8, kWavStop = 0x8C1592A0, kWavStat = 0x8C159340, kWav24 = 0x8C159394,
-                   kWavMode = 0x8C1593CA, kWav2C = 0x8C15941C, kWav30 = 0x8C1594C4, kWav34 = 0x8C15950E;
-constexpr uint32_t kWavPool = 0x8C2D7D38, kWavVtable = 0x8C1DD248, kWavEntries = 32, kWavEntrySize = 56;
+constexpr uint32_t kWavCreate = bs::jogo(0x8C158FC4), kWavServer0C = bs::jogo(0x8C1597C0), kWavServer10 = bs::jogo(0x8C159738), kWavDestroy = bs::jogo(0x8C159134),
+                   kWavStart = bs::jogo(0x8C1591C8), kWavStop = bs::jogo(0x8C1592A0), kWavStat = bs::jogo(0x8C159340), kWav24 = bs::jogo(0x8C159394),
+                   kWavMode = bs::jogo(0x8C1593CA), kWav2C = bs::jogo(0x8C15941C), kWav30 = bs::jogo(0x8C1594C4), kWav34 = bs::jogo(0x8C15950E);
+constexpr uint32_t kWavPool = bs::jogo(0x8C2D7D38), kWavVtable = bs::jogo(0x8C1DD248), kWavEntries = 32, kWavEntrySize = 56;
 
 class VoiceGuest {
 public:

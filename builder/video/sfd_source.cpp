@@ -25,7 +25,7 @@ bool analyze_sfd(const fs::path& sfd, SfdSource& r, std::string* err) {
     if (!demux_sfd(file, s, err)) return false;
     std::vector<int16_t> pcm;
     AdxInfo              a;
-    if (!adx_decode(s.audio, pcm, &a, err)) return false;
+    if (!adx_decode(s.audio, pcm, &a, err, true)) return false;  // disco: ADX mais curto que o declarado vale (Director's Cut)
     if (a.sampleRate == 0) return fail("ADX sem taxa de amostragem");
     Mpeg1 m(std::move(s.video));
     if (!m.v) return fail("MPEG-1 sem cabecalho de sequencia");

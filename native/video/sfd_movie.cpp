@@ -38,7 +38,7 @@ public:
         fmt_.fps    = plm_video_get_framerate(video_);
         if (!s.audio.empty()) {
             AdxInfo adx;
-            if (!adx_decode(s.audio, pcm_, &adx, err)) return false;
+            if (!adx_decode(s.audio, pcm_, &adx, err, true)) return false;  // SFD do disco (Director's Cut: OPENING curto)
             fmt_.hasAudio   = true;
             fmt_.sampleRate = adx.sampleRate;
             fmt_.channels   = adx.channels;

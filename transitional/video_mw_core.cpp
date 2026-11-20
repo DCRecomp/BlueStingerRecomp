@@ -94,7 +94,7 @@ int32_t MwPlayerCore::status(int64_t now) {
         state_      = kMwPlaying;
         start100ns_ = now;  // o filme comeca a contar quando sai da preparacao
     }
-    const int64_t pos = std::max<int64_t>(0, now - start100ns_);
+    const int64_t pos = std::max<int64_t>(0, now - start100ns_ + o_.phase100ns);  // fase: MwCoreOptions
     std::string   err;
     play_->advance(pos, &err);
     feedAudio(pos);

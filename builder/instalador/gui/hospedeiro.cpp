@@ -83,11 +83,11 @@ int capturar(const Config& base, const fs::path& pasta, const std::vector<int>& 
     using S = Instalador::Simulacao;
     const std::pair<Tela, S> casos[] = {
         {Tela::BoasVindas, S::Nada},     {Tela::BoasVindas, S::Sucesso},  {Tela::Edicao, S::Nada},
-        {Tela::Cdi, S::Nada},            {Tela::Componentes, S::Nada},    {Tela::Pasta, S::Nada},
+        {Tela::Cdi, S::Nada},            {Tela::Cdi, S::DirectorsCut},    {Tela::Componentes, S::Nada},    {Tela::Pasta, S::Nada},
         {Tela::Pasta, S::AvisoPasta},    {Tela::Progresso, S::Progresso}, {Tela::Conclusao, S::Sucesso},
         {Tela::Conclusao, S::Erro},      {Tela::Conclusao, S::Cancelado}, {Tela::Verificar, S::Verificado},
         {Tela::Verificar, S::Erro},      {Tela::Desinstalar, S::Nada},    {Tela::DesinstalarFim, S::Desinstalado}};
-    const char* nomesSim[] = {"", "progresso", "sucesso", "erro", "cancelado", "verificado", "desinstalado", "aviso"};
+    const char* nomesSim[] = {"", "progresso", "sucesso", "erro", "cancelado", "verificado", "desinstalado", "aviso", "directors-cut"};
     std::error_code ec;
     fs::create_directories(pasta, ec);
     std::ofstream rel(pasta / "cortes.txt", std::ios::binary | std::ios::trunc);
@@ -278,6 +278,10 @@ bool ler_linha(const std::vector<std::wstring>& args, Linha& l) {
         else if (a == L"--integrar") l.c.integrar = true;
         else if (a == L"--steam") l.c.steam = true;
         else if (a == L"--filmes-widescreen") l.c.filmesWidescreen = true;  // v0.9.7-2
+        else if (a == L"--directors-cut" && more && (args[i + 1] == L"en" || args[i + 1] == L"fr"))  // directors_cut.h
+            l.c.directorsCut = args[++i] == L"en" ? dc::Language::En : dc::Language::Fr;
+        else if (a == L"--disco-ocidental" && more) l.c.discoOcidental = fs::path(args[++i]);
+        else if (a == L"--confirmar-download") l.c.confirmarDownload = true;
         else if (a == L"--pasta" && more) l.c.pastaDesinstalar = fs::path(args[++i]);
         else if (a == L"--captura" && more) l.captura = fs::path(args[++i]);
         else if (a == L"--teclas" && more) l.teclas = fs::path(args[++i]);

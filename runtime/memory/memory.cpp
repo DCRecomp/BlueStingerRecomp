@@ -2,6 +2,7 @@
 // acesso; M4 implementa o mapa de regioes (BIOS/flash HLE, registradores,
 // VRAM, AICA, store queues).
 #include <tuple>
+#include "versao/enderecos.h"
 #include <map>
 #include "cpu/sh4_mem.h"
 #include "cpu/sh4_runtime.h"
@@ -170,8 +171,8 @@ void ww_poll_note(Sh4Context* c, uint32_t resume, bool callReturn) {
         w.dirty = false;
     }
     if (declare && !callReturn &&
-        (resume == 0x8C172624 || resume == 0x8C17262A || resume == 0x8C172804 || resume == 0x8C172EF2 ||
-         resume == 0x8C1C6CB0 || resume == 0x8C1C6D08))
+        (resume == bs::jogo(0x8C172624) || resume == bs::jogo(0x8C17262A) || resume == bs::jogo(0x8C172804) || resume == bs::jogo(0x8C172EF2) ||
+         resume == bs::jogo(0x8C1C6CB0) || resume == bs::jogo(0x8C1C6D08)))
         sh4_wait_point(c, resume);  // modo sombra: so informa o monitor
 }
 namespace {

@@ -220,9 +220,45 @@ const char* cli_usage_extra() {
 
 bool env_present(const wchar_t* name) { return std::getenv(narrow(name).c_str()) != nullptr; }
 
-bool http_download(const std::string&, const std::filesystem::path&, const std::atomic<bool>*,
-                   const std::function<void(uint64_t, uint64_t)>&, std::string* err) {
-    if (err) *err = "download ainda nao disponivel no Linux";
+// Linux: pelo curl do sistema (ou o wget), sem shell e sem dependencia nova de compilacao. So HTTPS, tambem nos
+// redirecionamentos; o arquivo baixado e sempre conferido pelo hash por quem chama (filmes widescreen, Director's Cut).
+bool http_download(const std::string& url, const std::filesystem::path& dst, const std::atomic<bool>* cancel,
+                   const std::function<void(uint64_t, uint64_t)>& onBytes, std::string* err) {
+    if (url.rfind("https://", 0) != 0) {
+        if (err) *err = "so HTTPS";
+        return false;
+    }
+    const std::vector<std::vector<std::wstring>> tools = {
+        {L"curl", L"--proto", L"=https", L"--proto-redir", L"=https", L"--fail", L"--silent", L"--show-error",
+         L"--location", L"--max-redirs", L"5", L"--connect-timeout", L"30", L"--retry", L"2", L"--output",
+         path_wide(dst), widen(url)},
+        {L"wget", L"--https-only", L"--quiet", L"--tries=3", L"--timeout=60", L"--max-redirect=5",
+         L"--output-document=" + path_wide(dst), widen(url)}};
+    std::string last;
+    for (const auto& argv : tools) {
+        std::error_code ec;
+        fs::remove(dst, ec);
+        std::string out;
+        const ProcessResult pr = run_process_argv(argv, fs::current_path(ec), current_env(), [&](const std::string& l) {
+            if (!l.empty()) out = l;
+        }, cancel);
+        if (!pr.started) continue;  // ferramenta ausente: a proxima
+        if (pr.cancelled || (cancel && cancel->load())) {
+            fs::remove(dst, ec);
+            if (err) *err = "cancelado";
+            return false;
+        }
+        if (pr.exitCode == 0 && fs::is_regular_file(dst, ec)) {
+            if (onBytes) {
+                const uint64_t n = fs::file_size(dst, ec);
+                onBytes(n, n);
+            }
+            return true;
+        }
+        last = narrow(argv[0]) + " saiu com " + std::to_string(pr.exitCode) + (out.empty() ? "" : ": " + out);
+        fs::remove(dst, ec);
+    }
+    if (err) *err = last.empty() ? "nem curl nem wget no sistema (instale o pacote curl)" : last;
     return false;
 }
 
