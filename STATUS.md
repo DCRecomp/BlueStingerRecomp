@@ -4820,6 +4820,42 @@ Pedido do mantenedor: "Faça as 5 coisas e pode publicar uma nova versão".
     `progresso-download` e `componentes-remastered`. Na tela de componentes da Remastered, a explicação dos pacotes locais
     fica de fora por falta de espaço (a tela só a mostra quando cabe).
 
+### v0.9.7-4: defesa contra o fechamento do instalador ao escolher a imagem (issue #3, 2026-11-20)
+
+- **O relato** (#3, vídeo de 10 s com a v0.9.7-3): na tela do disco, o usuário escolhe pelo "Procurar…"
+  `…\gdi\Blue Stinger v1.000 (1999)(Activision)(NTSC)(US)[!][%BLUESTINGER].gdi` (TOSEC); o diálogo fecha, o cursor fica
+  ocupado ~1 s, a tela não chega a mostrar o caminho novo e a janela some, sem mensagem. O diálogo tinha a extensão de
+  terceiros "OneCommander Connector (Experimental)".
+- **O que não é:** a leitura do disco. Com o GDI americano montado com esse nome exato (hardlinks em `tmp/issue3-repro`),
+  o `bs-extract --info` lê as 3 faixas e reconhece `bluestinger_us_v1000_gd`; num erro de leitura o instalador mostraria a
+  mensagem.
+- **Causa provável, não confirmada:** a extensão do Explorer, que roda dentro do processo que abre o diálogo. Também havia
+  um risco nosso: o diálogo modal abria de dentro do desenho do quadro (o clique é tratado durante o desenho), e o laço
+  modal podia redesenhar a janela por cima do quadro em andamento.
+- **Defesa:**
+  - **o seletor roda num processo auxiliar** (o próprio `BlueStinger-Recompiler.exe --seletor arquivo|pasta`, com a
+    janela do instalador como dona e desabilitada enquanto ele está aberto; o caminho volta em UTF-8 pela saída padrão).
+    Se uma extensão derrubar o auxiliar, o instalador segue e mostra "O seletor de arquivos do Windows falhou (código …)
+    … Digite ou cole o caminho no campo";
+  - o diálogo abre pela fila de mensagens, depois do quadro, e um `WM_PAINT` dentro do próprio desenho é adiado;
+  - **falha fatal com registro:** um filtro de exceção não tratada (e o `std::terminate`) grava
+    `<executável>-erro.txt` ao lado do `.exe` (ou na pasta temporária) com o código, o endereço e o módulo (o `.exe` ou a
+    DLL de terceiros), e mostra a mensagem com o caminho, em vez de a janela sumir;
+  - gatilhos só de teste: `BS_INSTALADOR_TESTE_FALHA=1` (falha fatal) e `=seletor` (o auxiliar cai), e
+    `BS_INSTALADOR_TESTE_SELETOR=<caminho>` (o auxiliar responde sem o diálogo).
+- **Revisão Codex** (`reviews/codex-20261120-133930.md`, das duas mudanças da v0.9.7-4): 4 achados, todos aceitos.
+  - **[ALTA]** a primeira versão protegia o diálogo dentro do processo com `__try/__except` e seguia depois de um acesso
+    inválido em código de terceiros, com o estado do COM incerto. **Corrigido** com o processo auxiliar (a proteção dentro
+    do processo saiu);
+  - **[MÉDIA]** a velocidade e o tempo restante ficavam congelados se o servidor parasse. Agora, sem dados há mais de
+    20 s, a linha diz "esperando o servidor (sem dados há N s)";
+  - **[MÉDIA]** o registro de falha usava buffers de `MAX_PATH` sem conferir os retornos. Agora usa buffers estáticos de
+    32 768 caracteres (a pilha pode estar no fim) e confere `GetModuleFileNameW` e `GetTempPathW`;
+  - **[BAIXA]** os testes não exercitavam o caso real. **Aceito em parte:** o I8 do `test_instalador` prova a falha fatal
+    (arquivo com código e módulo, saída `0xC0000005`) e o protocolo do auxiliar (caminho com acento, CJK, `[!]` e `%`; a
+    queda dele chega como código). O diálogo real com a extensão de terceiros e o lado da janela (desabilitar, esperar
+    processando mensagens) **não têm teste automático**: ficam para a conferência manual numa janela.
+
 ### v0.9.7-2: o instalador baixa o mod "filmes widescreen" (2026-11-18, pedido do mantenedor)
 
 Pedido: "Publica no github uma nova versão que já faz o download dos vídeos". Worktree `tmp/wt-0972`, branch `v0.9.7-2`

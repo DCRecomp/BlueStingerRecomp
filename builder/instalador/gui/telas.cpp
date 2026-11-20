@@ -1091,13 +1091,19 @@ void Instalador::progresso(const Ret& r) {
                    est(tema::kCorpo, Peso::SemiNegrito, false), {r.x, y, r.w, 22}, tema::kTexto);
         y += 26;
         double vel = d.velocidadeFixa;
-        if (vel <= 0 && d.amostras.size() >= 2) {
+        // revisao Codex 20261120-133930 (MEDIA): sem dados ha mais de 20 s, a velocidade e o tempo antigos nao valem mais
+        const double parado = d.amostras.empty() || d.velocidadeFixa > 0 ? 0 : ui_.agora() - d.amostras.back().first;
+        if (parado > 20) {
+            vel = -1;
+        } else if (vel <= 0 && d.amostras.size() >= 2) {
             const double dt = d.amostras.back().first - d.amostras.front().first;
             if (dt >= 2) vel = double(d.amostras.back().second - d.amostras.front().second) / dt;
         }
         auto         mb    = [&](uint64_t b) { return tr("size.mb", {std::to_wstring(b / (1024 * 1024))}); };  // anda a cada MB
         std::wstring linha = d.tamanho ? tr("dl.bytes", {mb(d.recebidos), mb(d.tamanho)}) : tr("dl.bytes.nosize", {mb(d.recebidos)});
-        if (vel > 0) {
+        if (vel < 0) {
+            linha += L" · " + tr("dl.stalled", {std::to_wstring(int(parado))});
+        } else if (vel > 0) {
             linha += L" · " + velocidade(vel);
             if (d.tamanho > d.recebidos) linha += L" · " + tr("dl.eta", {restante(double(d.tamanho - d.recebidos) / vel)});
         } else {

@@ -14,6 +14,7 @@
 #       depois do processo); dados pessoais iguais; atalho, entrada e lista removidos
 #   I7  instalacao limpa da Original (--auto --integrar) e desinstalacao sem nada do jogador, com & % ^ e Unicode no nome da
 #       pasta: a pasta some
+#   I8  falha fatal (BS_INSTALADOR_TESTE_FALHA=1, so teste): o arquivo <exe>-erro.txt com o codigo e o modulo
 # O kit de fontes e o HEAD exportado (git archive). Codigo de saida 0 = todos os casos passaram. Leva de 20 a 40 minutos
 # (duas compilacoes completas).
 param(
@@ -199,6 +200,29 @@ $r = Run (Join-Path $pastaB "BlueStinger\BlueStinger-Desinstalar.exe") @("--past
 $t0 = Get-Date
 while ((Test-Path -LiteralPath $pastaB) -and ((Get-Date) - $t0).TotalSeconds -lt 30) { Start-Sleep -Milliseconds 500 }
 Check "I7 desinstalacao sem arquivos do jogador remove a pasta (nome com & % ^ e Unicode)" ($r.Code -eq 0 -and -not (Test-Path -LiteralPath $pastaB)) "codigo $($r.Code)"
+
+# --- I8 (v0.9.7-4, issue #3): uma falha fatal deixa o arquivo de erro com o codigo e o modulo, em vez de a janela sumir ---
+$pastaF = Join-Path $Work "falha"
+New-Item -ItemType Directory -Force -Path $pastaF | Out-Null
+Copy-Item -LiteralPath $rec -Destination $pastaF
+$env:BS_INSTALADOR_TESTE_FALHA = "1"
+$r = Run (Join-Path $pastaF "BlueStinger-Recompiler.exe") @("--captura", (Join-Path $pastaF "capturas")) 60000
+Remove-Item Env:BS_INSTALADOR_TESTE_FALHA
+$erro = Join-Path $pastaF "BlueStinger-Recompiler-erro.txt"
+$txt = if (Test-Path -LiteralPath $erro) { [IO.File]::ReadAllText($erro) } else { "" }
+Check "I8 falha fatal: arquivo de erro com codigo e modulo" ($r.Code -eq [int]0xC0000005 -and $txt -match 'codigo: 0xC0000005' -and $txt -match 'modulo: .*BlueStinger-Recompiler\.exe \+0x') "codigo $($r.Code)"
+# o seletor de arquivos roda num processo auxiliar (--seletor): responde o caminho na saida padrao (UTF-8, com acento e
+# CJK), e uma extensao do Explorer que o derrube so derruba o auxiliar (o instalador ve o codigo e segue)
+$escolhido = Join-Path $Work ("imagem " + [char]0xE7 + [char]0x65E5 + " [!][%X].gdi")
+$aux = @("--seletor", "arquivo", "--titulo", "t", "--inicial", $Work, "--dono", "0", "--idioma", "pt-BR")
+$env:BS_INSTALADOR_TESTE_SELETOR = $escolhido
+$r = Run $rec $aux 60000
+Remove-Item Env:BS_INSTALADOR_TESTE_SELETOR
+Check "I8 seletor auxiliar: devolve o caminho escolhido" ($r.Code -eq 0 -and $r.Out.Trim() -eq $escolhido) "codigo $($r.Code): $($r.Out.Trim())"
+$env:BS_INSTALADOR_TESTE_FALHA = "seletor"
+$r = Run $rec $aux 60000
+Remove-Item Env:BS_INSTALADOR_TESTE_FALHA
+Check "I8 seletor auxiliar: a falha fica no auxiliar (codigo para o instalador)" ($r.Code -eq [int]0xC0000005 -and -not $r.Out.Trim()) "codigo $($r.Code)"
 
 if (Test-Path $regTeste) { Remove-Item -Recurse -Force $regTeste }
 $falhas = @($results | Where-Object { -not $_.Ok }).Count
