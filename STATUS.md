@@ -4856,6 +4856,24 @@ Pedido do mantenedor: "Faça as 5 coisas e pode publicar uma nova versão".
     queda dele chega como código). O diálogo real com a extensão de terceiros e o lado da janela (desabilitar, esperar
     processando mensagens) **não têm teste automático**: ficam para a conferência manual numa janela.
 
+### v0.9.7-4: pacote do Windows (2026-11-20)
+
+- **Pacote final** (`make_builder -Versao v0.9.7-4 -LegendasLocais` em `0dc9a16`):
+  - **`test_builder`** com o CDI: 24 casos, 0 falhas;
+  - **`test_instalador`:** 31 casos, 0 falhas (I8 novo), numa cópia da suíte em `tmp/release-0974/suite-prazo` que só
+    muda o prazo do processo e da espera do roteiro de 1 h para 4 h. O I1 baixa os 13 filmes widescreen (2 547 802 374
+    bytes) do Internet Archive e levou 7 444 s; com a suíte original, falhou duas vezes por tempo nas rodadas anteriores
+    (I2–I7 passando);
+  - **instalações pelo `bs-builder` do pacote**, cada uma com `--version`, `--verify-data` e 600 VBlanks sem janela, todos
+    com código 0: PAL francês (CHD, `bluestinger_pal_fr_v1000`), japonês (CHD, `bluestinger_jp_v1006`) e Director's Cut
+    EN (japonês + americano, `--confirmar-download`, `bluestinger_dc_en_v1006`);
+  - **`ctest`** com o CDI: 26 aprovados, 1 pulado (`movie_manifest`, que pede `BS_DATA_DIR`);
+  - **ZIP:** `BlueStinger-Builder-v0.9.7-4-win-x64.zip`, 15 409 761 B, `d9676640…2df3dd5`, com 2 950 arquivos. Em relação à
+    v0.9.7-3, entram só as 6 configurações das versões, as 4 tabelas de endereços com o `enderecos.h` e o exportador de GDI
+    (`gdi_export`); nada do jogo.
+- **Publicação** (pedido do mantenedor, "Faça as 5 coisas e pode publicar uma nova versão"): pre-release só para Windows.
+  A tag aponta para o commit deste registro.
+
 ### v0.9.7-2: o instalador baixa o mod "filmes widescreen" (2026-11-18, pedido do mantenedor)
 
 Pedido: "Publica no github uma nova versão que já faz o download dos vídeos". Worktree `tmp/wt-0972`, branch `v0.9.7-2`
