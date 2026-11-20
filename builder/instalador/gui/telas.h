@@ -86,7 +86,7 @@ public:
     void iniciar();  // depois de a janela existir (o --auto comeca aqui)
 
     // Capturas e testes: tela e estados simulados, cortes de texto acumulados.
-    enum class Simulacao { Nada, Progresso, Sucesso, Erro, Cancelado, Verificado, Desinstalado, AvisoPasta, DirectorsCut };
+    enum class Simulacao { Nada, Progresso, Sucesso, Erro, Cancelado, Verificado, Desinstalado, AvisoPasta, DirectorsCut, Download, Remastered };
     void simular(Tela t, Simulacao s);
     std::vector<Corte>& cortes() { return ui_.cortes; }
     Tela tela() const { return tela_; }

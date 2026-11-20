@@ -1160,7 +1160,11 @@ Result build(const Request& req, const Callbacks& cb) {
             if (ic.edition == native::edition::Edition::Remastered) {
                 const widescreen::Report wr = widescreen::install(
                     res.installDir / L"mods" / L"video", plat::http_download, cb.cancel, log,
-                    [&](double f) { progress(0.5 + 0.5 * f, "filmes widescreen"); });
+                    [&](double f) { progress(0.5 + 0.5 * f, "filmes widescreen"); }, widescreen::kBaseUrl,
+                    [&](const widescreen::Andamento& a) {
+                        if (cb.download)
+                            cb.download({a.atual, a.quantos, a.arquivo, a.recebidos, a.tamanho, a.sessao, a.fim});
+                    });
                 res.widescreenDownloaded = wr.baixados, res.widescreenPresent = wr.presentes;
                 if (!wr.aviso.empty()) res.warning += (res.warning.empty() ? "" : "\n") + wr.aviso;
             } else {

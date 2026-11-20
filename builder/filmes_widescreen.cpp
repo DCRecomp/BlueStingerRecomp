@@ -3,6 +3,7 @@
 
 #include "util/hash.h"
 
+#include <chrono>
 #include <fstream>
 #include <sstream>
 
@@ -92,8 +93,21 @@ std::map<std::string, std::string> read_registry(const fs::path& dir) {
 
 Report install(const fs::path& dir, const Fetch& fetch, const std::atomic<bool>* cancel,
                const std::function<void(const std::string&)>& log, const std::function<void(double)>& progress,
-               const std::string& baseUrl) {
-    Report rep;
+               const std::string& baseUrl, const std::function<void(const Andamento&)>& andamento) {
+    Report    rep;
+    Andamento an;
+    auto      A = [&] {
+        if (andamento) andamento(an);
+    };
+    // no fim (qualquer saida depois da lista): o instalador tira a linha do download da tela
+    struct Fim {
+        Andamento&                                   a;
+        const std::function<void(const Andamento&)>& f;
+        ~Fim() {
+            a.fim = true;
+            if (f) f(a);
+        }
+    } fim{an, andamento};
     auto   L = [&](const std::string& s) {
         if (log) log("filmes widescreen: " + s);
     };
@@ -153,9 +167,26 @@ Report install(const fs::path& dir, const Fetch& fetch, const std::atomic<bool>*
         }
         const fs::path part = dir / fs::path(e.file + ".part");
         L("baixando " + e.file + " (" + std::to_string(i + 1) + "/" + std::to_string(lista.size()) + ")");
+        an.atual = i + 1, an.quantos = lista.size(), an.arquivo = e.file, an.recebidos = 0, an.tamanho = 0;
+        A();
+        const uint64_t base  = an.sessao;
+        using relogio        = std::chrono::steady_clock;
+        auto           marca = relogio::now();
+        uint64_t       naMarca = 0;
         const bool ok = fetch(baseUrl + e.file, part, cancel, [&](uint64_t got, uint64_t total) {
             if (total) P(f0 + (f1 - f0) * double(got) / double(total));
+            an.recebidos = got, an.tamanho = total, an.sessao = base + got;
+            A();
+            const auto   agora = relogio::now();
+            const double dt    = std::chrono::duration<double>(agora - marca).count();
+            if (dt >= kLogIntervalo) {  // o motivo da demora tambem no builder.log e no CLI
+                const uint64_t mb = 1024 * 1024;
+                L(e.file + ": " + std::to_string(got / mb) + (total ? " de " + std::to_string(total / mb) : std::string()) +
+                  " MB, " + std::to_string(uint64_t(double(got - naMarca) / dt / 1024)) + " KB/s");
+                marca = agora, naMarca = got;
+            }
         }, &err);
+        if (ok) an.sessao = base + an.recebidos;
         if (!ok) {
             fs::remove(part, ec);
             if (stopped()) {

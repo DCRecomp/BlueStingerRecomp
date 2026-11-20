@@ -15,6 +15,7 @@
 #include <toml++/toml.hpp>
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cwctype>
 #include <deque>
@@ -60,6 +61,26 @@ std::wstring duracao(double s) {
     wchar_t   b[32];
     std::swprintf(b, 32, L"%d:%02d", t / 60, t % 60);
     return b;
+}
+
+// v0.9.7-4: velocidade de download (KB/s abaixo de 1 MB/s, senao MB/s com uma casa) e tempo restante por extenso
+std::wstring velocidade(double bps) {
+    wchar_t s[32];
+    if (bps < 1024.0 * 1024) {
+        std::swprintf(s, 32, L"%.0f", bps / 1024);
+        return tr("rate.kb", {s});
+    }
+    std::swprintf(s, 32, L"%.1f", bps / (1024.0 * 1024));
+    std::wstring v = s;
+    if (std::string(ui::current_language().code) == "pt-BR") std::replace(v.begin(), v.end(), L'.', L',');
+    return tr("rate.mb", {v});
+}
+
+std::wstring restante(double s) {
+    if (s < 60) return tr("eta.lt1");
+    const int min = int(std::ceil(s / 60));
+    if (min < 60) return tr("eta.min", {std::to_wstring(min)});
+    return tr("eta.hmin", {std::to_wstring(min / 60), std::to_wstring(min % 60)});
 }
 
 Estilo est(float tam, Peso p = Peso::Normal, bool quebra = true) {
@@ -149,6 +170,16 @@ struct Instalador::Impl {
     std::deque<std::string>   log;
     double                    inicio = 0, fimEm = 0;
     bool                      confirmarCancelar = false, cancelando = false;
+    // v0.9.7-4: o download dos filmes widescreen (o motivo da demora): filme, MB, velocidade e tempo restante
+    struct Download {
+        bool                                   ativo = false;
+        size_t                                 i = 0, n = 0;
+        std::string                            arquivo;
+        uint64_t                               recebidos = 0, tamanho = 0;
+        std::deque<std::pair<double, uint64_t>> amostras;  // (instante, bytes da sessao): a velocidade dos ultimos segundos
+        double                                 velocidadeFixa = 0;  // so a captura (--captura)
+    } dl;
+    std::optional<Edition> edicaoSim;  // so as capturas (simular)
     std::atomic<bool>         cancelar{false};
     // resultado
     std::optional<Result>     res;
@@ -364,6 +395,7 @@ void Instalador::instalar() {
     s.cancelando = false;
     s.res.reset();
     s.prog = {};
+    s.dl   = {};
     {
         std::lock_guard l(s.m);
         s.log.clear();
@@ -382,6 +414,26 @@ void Instalador::instalar() {
                 h_.redesenhar();
             });
         };
+        // no maximo 4 por segundo (a cada 64 KB numa rede rapida seriam milhares), mais a troca de filme e o fim
+        cb.download = [this, ultimo = std::chrono::steady_clock::time_point{}, ultimoFilme = size_t(0)](
+                          const DownloadProgress& d) mutable {
+            const auto agora = std::chrono::steady_clock::now();
+            if (!d.done && d.index == ultimoFilme && agora - ultimo < std::chrono::milliseconds(250)) return;
+            ultimo = agora, ultimoFilme = d.index;
+            h_.postar([this, d] {
+                auto& dl = s_->dl;
+                if (d.done) {
+                    dl = {};
+                } else {
+                    dl.ativo = true, dl.i = d.index, dl.n = d.count, dl.arquivo = d.file;
+                    dl.recebidos = d.received, dl.tamanho = d.size;
+                    const double t = ui_.agora();
+                    dl.amostras.emplace_back(t, d.session);
+                    while (dl.amostras.size() > 2 && t - dl.amostras.front().first > 20) dl.amostras.pop_front();
+                }
+                h_.redesenhar();
+            });
+        };
         cb.log = [this](const std::string& l) {
             std::lock_guard g(s_->m);
             s_->log.push_back(l);
@@ -397,6 +449,7 @@ void Instalador::ao_terminar(Result r) {
     terminou_ = true;
     juntar();
     s.fimEm = ui_.agora();
+    s.dl    = {};
     if (r.ok) {
         s.prog.concluir();
         // pacotes locais escolhidos: viram arquivos do jogador em mods/<id> (preservados e nunca apagados pelo instalador)
@@ -1032,6 +1085,31 @@ void Instalador::progresso(const Ret& r) {
     dir.h = Alinha::Fim;
     ui_.rotulo(tr("prog.elapsed", {duracao(ui_.agora() - s.inicio)}), dir, {r.x + r.w * 0.7f, y + 2, r.w * 0.3f, 20}, tema::kTextoSuave);
     y += 34;
+    if (s.dl.ativo) {  // v0.9.7-4: o motivo da demora (o download dos filmes widescreen), com velocidade e tempo restante
+        const auto& d = s.dl;
+        ui_.rotulo(tr("dl.file", {widen(d.arquivo), std::to_wstring(d.i), std::to_wstring(d.n)}),
+                   est(tema::kCorpo, Peso::SemiNegrito, false), {r.x, y, r.w, 22}, tema::kTexto);
+        y += 26;
+        double vel = d.velocidadeFixa;
+        if (vel <= 0 && d.amostras.size() >= 2) {
+            const double dt = d.amostras.back().first - d.amostras.front().first;
+            if (dt >= 2) vel = double(d.amostras.back().second - d.amostras.front().second) / dt;
+        }
+        auto         mb    = [&](uint64_t b) { return tr("size.mb", {std::to_wstring(b / (1024 * 1024))}); };  // anda a cada MB
+        std::wstring linha = d.tamanho ? tr("dl.bytes", {mb(d.recebidos), mb(d.tamanho)}) : tr("dl.bytes.nosize", {mb(d.recebidos)});
+        if (vel > 0) {
+            linha += L" · " + velocidade(vel);
+            if (d.tamanho > d.recebidos) linha += L" · " + tr("dl.eta", {restante(double(d.tamanho - d.recebidos) / vel)});
+        } else {
+            linha += L" · " + tr("dl.eta.calc");
+        }
+        ui_.rotulo(linha, est(tema::kCorpo, Peso::Normal, false), {r.x, y, r.w, 22}, tema::kTextoSuave);
+        y += 28;
+        const std::wstring nota = tr("dl.note");
+        const float        nh   = ui_.altura_texto(nota, est(tema::kPequeno), r.w);
+        ui_.rotulo(nota, est(tema::kPequeno), {r.x, y, r.w, nh}, tema::kAmbar);
+        y += nh + 14;
+    }
     const float rodapeY = r.base() - tema::kBotaoAltura;
     // detalhes tecnicos (o mesmo texto do builder.log)
     const std::wstring det = tr(s.logTecnico ? "prog.hide" : "prog.details");
@@ -1053,7 +1131,7 @@ void Instalador::progresso(const Ret& r) {
         p.soltar_recorte();
     }
     if (s.confirmarCancelar) {
-        const std::wstring t = tr("prog.cancel.ask");
+        const std::wstring t = tr(s.dl.ativo ? "prog.cancel.ask.dl" : "prog.cancel.ask");
         ui_.rotulo(t, est(tema::kCorpo), {r.x, rodapeY - 34, r.w, 24}, tema::kTexto);
         if (ui_.botao(id("prog.cancel.yes"), tr("prog.cancel.yes"), {r.dir() - 180, rodapeY, 180, tema::kBotaoAltura}, TipoBotao::Perigo))
             s.cancelar = true, s.cancelando = true, s.confirmarCancelar = false;
@@ -1295,6 +1373,8 @@ void Instalador::simular(Tela t, Simulacao sim) {
     s.alvo = s.pasta;
     s.info = {};
     if (sim == Simulacao::AvisoPasta) s.info.exists = true, s.info.ours = true, s.portatil = true;
+    if (!s.edicaoSim) s.edicaoSim = s.edicao;  // a edicao da captura: a Remastered so na variante "remastered"
+    s.edicao = sim == Simulacao::Remastered ? Edition::Remastered : *s.edicaoSim;
     s.cdiVersao = 0, s.dc = false;
     if (sim == Simulacao::DirectorsCut) {  // o disco japones com a opcao marcada, o segundo disco e a confirmacao
         s.cdi       = c_.linux_ ? L"/run/media/jogador/USB/Blue Stinger (Japan).chd" : L"D:\\Jogos\\Blue Stinger (Japan).chd";
@@ -1310,6 +1390,15 @@ void Instalador::simular(Tela t, Simulacao sim) {
         b.pasta = c_.linux_ ? fs::path(L"/mnt/jogos/Blue Stinger Original") : fs::path(L"E:\\Jogos\\Blue Stinger Original");
         b.edicao = Edition::Original, b.versao = "Blue Stinger v0.8.0 (22396c1d5a)", b.instante = 1;
         s.encontradas = {a, b};
+    }
+    s.dl = {};
+    if (sim == Simulacao::Download) {  // v0.9.7-4: o download dos filmes widescreen, ja com a velocidade medida
+        s.prog = {};
+        s.prog.avancar(Step::Install, 0.92);
+        s.inicio            = -(41 * 60 + 17);
+        s.dl.ativo          = true, s.dl.i = 13, s.dl.n = 13, s.dl.arquivo = "NEWGAME.mp4";
+        s.dl.recebidos      = uint64_t(1077) << 20, s.dl.tamanho = 1528972724;
+        s.dl.velocidadeFixa = 256.0 * 1024;
     }
     if (sim == Simulacao::Progresso) {
         s.prog = {};

@@ -4793,6 +4793,33 @@ Pedido do mantenedor: "Faça as 5 coisas e pode publicar uma nova versão".
   e as subpastas de saves.
 - **Provas:** `ctest` com o CDI (msvc-release): 26 aprovados, 1 pulado.
 
+### v0.9.7-4: o instalador mostra o download dos filmes widescreen e avisa da demora (2026-11-20, pedido do mantenedor)
+
+- **Achado nos testes do pacote:** o `test_instalador` falhou duas vezes no I1 por tempo (1 h no processo e na espera do
+  roteiro), e o I2–I7 passou.
+  - **Causa:** o I1 instala a Remastered com a opção dos filmes widescreen, marcada por padrão, e baixa os 13 filmes
+    (2 547 802 374 bytes) do Internet Archive. Hoje o servidor deu de 220 a 480 KB/s; o `NEWGAME.mp4` sozinho tem
+    1 528 972 724 bytes.
+  - **Não estava travado:** a listagem da pasta mostrava o `.part` com 0 bytes (o NTFS só atualiza o tamanho de um
+    arquivo aberto quando ele fecha), mas o tamanho real, lido pelo arquivo aberto, crescia.
+  - **Não é regressão:** o download não mudou desde a v0.9.7-2; na v0.9.7-3 o I1 coube em 1 h.
+  - O jogador não via nada disso: a tela ficava em "92% · Instalando" por mais de uma hora.
+- **Mudança (pedido do mantenedor: "para quem for instalar poder ver o motivo da demora", com um aviso na opção):**
+  - `widescreen::install` informa o andamento (`Andamento`: filme i de n, bytes do filme, total da sessão e o fim) e
+    escreve no log a cada 30 s uma linha com MB e KB/s (`builder.log` e CLI);
+  - `Callbacks::download` leva o andamento do Builder à interface; o instalador limita a 4 atualizações por segundo;
+  - **tela de progresso:** "Baixando os filmes widescreen: NEWGAME.mp4 (13 de 13)", "1077 MB de 1458 MB · 256 KB/s ·
+    faltam cerca de 26 min para este filme" (a velocidade dos últimos 20 s) e, em âmbar, que os filmes vêm do Internet
+    Archive (cerca de 2,5 GB), que o download pode levar mais de uma hora e que o jogo já está instalado. Cancelar nesse
+    ponto pergunta "Parar o download?";
+  - **a opção** "Filmes widescreen" diz que o download, do Internet Archive, pode levar mais de uma hora.
+- **Provas:**
+  - unitário novo `widescreen_andamento_por_filme_e_fim`; `bs_unit_tests` 380/0; `ctest` com o CDI: 26 aprovados,
+    1 pulado;
+  - capturas `--captura` (pt-BR e en-US, 100–200 %): 144 imagens, 0 cortes de texto, com as variantes novas
+    `progresso-download` e `componentes-remastered`. Na tela de componentes da Remastered, a explicação dos pacotes locais
+    fica de fora por falta de espaço (a tela só a mostra quando cabe).
+
 ### v0.9.7-2: o instalador baixa o mod "filmes widescreen" (2026-11-18, pedido do mantenedor)
 
 Pedido: "Publica no github uma nova versão que já faz o download dos vídeos". Worktree `tmp/wt-0972`, branch `v0.9.7-2`

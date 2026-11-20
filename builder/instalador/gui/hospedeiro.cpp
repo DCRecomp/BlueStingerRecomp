@@ -83,11 +83,11 @@ int capturar(const Config& base, const fs::path& pasta, const std::vector<int>& 
     using S = Instalador::Simulacao;
     const std::pair<Tela, S> casos[] = {
         {Tela::BoasVindas, S::Nada},     {Tela::BoasVindas, S::Sucesso},  {Tela::Edicao, S::Nada},
-        {Tela::Cdi, S::Nada},            {Tela::Cdi, S::DirectorsCut},    {Tela::Componentes, S::Nada},    {Tela::Pasta, S::Nada},
-        {Tela::Pasta, S::AvisoPasta},    {Tela::Progresso, S::Progresso}, {Tela::Conclusao, S::Sucesso},
+        {Tela::Cdi, S::Nada},            {Tela::Cdi, S::DirectorsCut},    {Tela::Componentes, S::Nada},    {Tela::Componentes, S::Remastered},    {Tela::Pasta, S::Nada},
+        {Tela::Pasta, S::AvisoPasta},    {Tela::Progresso, S::Progresso}, {Tela::Progresso, S::Download}, {Tela::Conclusao, S::Sucesso},
         {Tela::Conclusao, S::Erro},      {Tela::Conclusao, S::Cancelado}, {Tela::Verificar, S::Verificado},
         {Tela::Verificar, S::Erro},      {Tela::Desinstalar, S::Nada},    {Tela::DesinstalarFim, S::Desinstalado}};
-    const char* nomesSim[] = {"", "progresso", "sucesso", "erro", "cancelado", "verificado", "desinstalado", "aviso", "directors-cut"};
+    const char* nomesSim[] = {"", "progresso", "sucesso", "erro", "cancelado", "verificado", "desinstalado", "aviso", "directors-cut", "download", "remastered"};
     std::error_code ec;
     fs::create_directories(pasta, ec);
     std::ofstream rel(pasta / "cortes.txt", std::ios::binary | std::ios::trunc);

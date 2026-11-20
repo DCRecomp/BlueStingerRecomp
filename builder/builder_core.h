@@ -17,6 +17,8 @@
 #include "platform/install_config.h"
 
 #include <atomic>
+#include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <functional>
 #include <optional>
@@ -81,11 +83,23 @@ struct Request {
     bool                        directorsCutConfirmed = false;
 };
 
+// O download de um arquivo grande (hoje so os filmes widescreen): filme `index` de `count`, bytes deste arquivo
+// (`size` 0 = desconhecido) e o total recebido na execucao (`session`, a base da velocidade). `done`: acabou.
+struct DownloadProgress {
+    size_t      index = 0, count = 0;
+    std::string file;
+    uint64_t    received = 0, size = 0, session = 0;
+    bool        done = false;
+};
+
 struct Callbacks {
     // fracao: progresso total de 0 a 1. Pode ser chamada de outra thread que nao a da GUI.
     std::function<void(Step, double fraction, const std::string& message)> progress;
     std::function<void(const std::string& line)>                           log;
     const std::atomic<bool>*                                               cancel = nullptr;
+    // v0.9.7-4: andamento do download dos filmes widescreen (instalador: filme, MB, velocidade e tempo restante). Pode
+    // ser nulo e ser chamado de outra thread.
+    std::function<void(const DownloadProgress&)> download;
 };
 
 // Tipo do erro, para a interface simples mostrar uma mensagem traduzida (a mensagem tecnica fica em

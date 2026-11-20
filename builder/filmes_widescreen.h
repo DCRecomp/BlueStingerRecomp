@@ -42,10 +42,22 @@ struct Report {
     std::string aviso;  // vazio = tudo certo
 };
 
-// O fluxo inteiro (testavel com um Fetch falso). progress(0..1) e log(linha) podem ser nulos.
+// v0.9.7-4 (mantenedor, 2026-11-20): o andamento do download, para o instalador mostrar o motivo da demora (filme, MB,
+// velocidade e tempo restante). `recebidos`/`tamanho` sao do filme atual (tamanho 0 = desconhecido; no Linux o curl so
+// informa no fim); `sessao` soma os bytes recebidos de todos os filmes desta execucao (a base da velocidade).
+struct Andamento {
+    size_t      atual = 0, quantos = 0;  // filme atual (1..quantos)
+    std::string arquivo;
+    uint64_t    recebidos = 0, tamanho = 0, sessao = 0;
+    bool        fim = false;  // o download acabou (concluido, com falhas ou cancelado)
+};
+
+// O fluxo inteiro (testavel com um Fetch falso). progress(0..1), log(linha) e andamento podem ser nulos. No log, uma linha
+// com o andamento a cada kLogIntervalo segundos de um mesmo filme.
+inline constexpr double kLogIntervalo = 30;
 Report install(const std::filesystem::path& modsVideo, const Fetch& fetch, const std::atomic<bool>* cancel,
                const std::function<void(const std::string&)>& log, const std::function<void(double)>& progress,
-               const std::string& baseUrl = kBaseUrl);
+               const std::string& baseUrl = kBaseUrl, const std::function<void(const Andamento&)>& andamento = nullptr);
 
 std::map<std::string, std::string> read_registry(const std::filesystem::path& modsVideo);
 

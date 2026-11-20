@@ -10,6 +10,7 @@
 #include <iterator>
 #include <map>
 #include <string>
+#include <vector>
 
 namespace fs = std::filesystem;
 using namespace bs::builder::widescreen;
@@ -91,6 +92,28 @@ BS_TEST(widescreen_baixa_confere_e_registra) {
     const Report r2 = install(d.p, s.fetch(), nullptr, nullptr, nullptr, kBase);
     BS_CHECK(r2.baixados == 0 && r2.presentes == 2);
     BS_CHECK(s.pedidos[kBase + "E001.mp4"] == 1);
+}
+
+// v0.9.7-4: o andamento que o instalador mostra (filme i de n, bytes do filme, total da sessao) e o fim, uma vez
+BS_TEST(widescreen_andamento_por_filme_e_fim) {
+    Pasta    d("andamento");
+    Servidor s;
+    s.arquivos[kBase + "E001.mp4"] = "filme 1";
+    s.arquivos[kBase + "E002.mp4"] = "filme dois";
+    s.arquivos[kBase + "SHA256SUMS.txt"] = sha("filme 1") + "  E001.mp4\n" + sha("filme dois") + "  E002.mp4\n";
+    std::vector<Andamento> v;
+    const Report r = install(d.p, s.fetch(), nullptr, nullptr, nullptr, kBase, [&](const Andamento& a) { v.push_back(a); });
+    BS_CHECK(r.baixados == 2);
+    BS_CHECK(v.size() == 5);  // E001: inicio e bytes; E002: inicio e bytes; fim
+    BS_CHECK(v[0].atual == 1 && v[0].quantos == 2 && v[0].arquivo == "E001.mp4" && v[0].recebidos == 0 && !v[0].fim);
+    BS_CHECK(v[1].recebidos == 7 && v[1].tamanho == 7 && v[1].sessao == 7);
+    BS_CHECK(v[2].atual == 2 && v[2].arquivo == "E002.mp4" && v[2].sessao == 7);
+    BS_CHECK(v[3].recebidos == 10 && v[3].sessao == 17);
+    BS_CHECK(v[4].fim && v[4].sessao == 17);
+    // ja presentes: nada a baixar, so o fim
+    v.clear();
+    install(d.p, s.fetch(), nullptr, nullptr, nullptr, kBase, [&](const Andamento& a) { v.push_back(a); });
+    BS_CHECK(v.size() == 1 && v[0].fim);
 }
 
 BS_TEST(widescreen_hash_errado_e_descartado) {
