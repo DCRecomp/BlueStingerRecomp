@@ -4993,8 +4993,21 @@ a v0.9.7-4 saiu antes, sem ele. **Sem commit** (nenhum pedido de commit nem de p
   removidos") foram interferência minha: o I9 avulso rodou ao mesmo tempo e registrou a entrada dele na mesma chave de
   teste do registro (`HKCU\Software\BlueStingerRecomp\Teste\Uninstall`) às 21:45; o I1 conferiu às 22:24 e achou duas. **Não contam como aprovados:** a suíte
   inteira roda de novo, isolada, depois do commit (com o I9 dentro).
-- **Pendente:** a suíte inteira (`test_builder` e `test_instalador`, isolados) depois do commit; o
-  `BlueStinger-Developer` (projeto editável) continua só com o MSVC.
+- **Commit `628fb4a`** (autorizado pelo mantenedor: "Autorizado"). `ctest` com o CDI antes dele: 26 aprovados, 1 pulado.
+- **Pacote final** (`make_builder -Versao v0.9.7-5 -LegendasLocais` em `628fb4a`), suítes isoladas:
+  - **`test_builder`** com o CDI: **28 casos, 0 falhas**, com os 4 do compilador portátil (download real, jogo instalado
+    em 256 s; sem o runtime do MSVC e com as licenças; a pasta conferida fora do Builder, hash `c8d78208…`, 10 594
+    arquivos; a segunda compilação sem baixar, 136 s);
+  - **`test_instalador`:** **32 casos, 0 falhas**, com o I9 dentro da suíte (254 s, o compilador baixado no cache do
+    teste); a cópia em `tmp/release-0974/suite-prazo` só muda o prazo de 1 h para 4 h (o I1 baixa os filmes do Internet
+    Archive: 7 266 s);
+  - **instalações pelo `bs-builder` do pacote** (com o Visual Studio), cada uma com `--version`, `--verify-data` e 600
+    VBlanks sem janela, todos com código 0: PAL francês (`bluestinger_pal_fr_v1000`), japonês (`bluestinger_jp_v1006`)
+    e Director's Cut EN (`bluestinger_dc_en_v1006`);
+  - **ZIP:** `BlueStinger-Builder-v0.9.7-5-win-x64.zip`, 15 550 814 B, `34be1963…d6d3f4`, com 2 951 arquivos; em relação
+    à v0.9.7-4, no kit entra só o `app/stdio_ucrt_mingw.cpp` (o resto está nos executáveis do Builder); nada do jogo.
+- **Pendente:** a publicação (espera a confirmação do mantenedor); o `BlueStinger-Developer` (projeto editável) continua
+  só com o MSVC.
 
 ### v0.9.7-2: o instalador baixa o mod "filmes widescreen" (2026-11-18, pedido do mantenedor)
 
