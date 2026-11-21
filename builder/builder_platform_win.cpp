@@ -114,6 +114,13 @@ std::vector<fs::path> cache_roots(const fs::path& work) {
     return roots;
 }
 
+std::vector<fs::path> cache_roots_privadas() {
+    std::vector<fs::path> roots;
+    if (const auto v = envVar(L"BS_BUILDER_CACHE"); !v.empty()) roots.push_back(v);  // testes
+    if (const auto v = envVar(L"LOCALAPPDATA"); !v.empty()) roots.push_back(fs::path(v) / L"BlueStingerRecomp");
+    return roots;
+}
+
 const char* cache_hint() {
     return "nenhuma pasta de cache de compilacao utilizavel (o caminho precisa ser curto e so ter "
            "caracteres da pagina de codigo do Windows). Defina BS_BUILDER_CACHE com uma pasta como "
@@ -216,7 +223,16 @@ std::vector<std::pair<fs::path, std::wstring>> extra_licenses(const fs::path& ki
 
 void make_executable(const fs::path&) {}
 
-void toolchain_env(Env&, const fs::path&) {}
+void toolchain_env(Env& env, const fs::path& cache) {
+    // v0.9.7-5: o compilador portatil (Zig) guarda a libc++ e o mingw-w64 compilados em <raiz>/zig, ao lado do cache de
+    // compilacao (como no Linux); sem isso iria para %LOCALAPPDATA%\zig. Com o MSVC as variaveis nao fazem nada.
+    fs::path        zig = cache.parent_path().parent_path() / L"zig";
+    std::error_code ec;
+    fs::create_directories(zig, ec);
+    if (ec || probe_writable(zig)) zig = cache / L"zig";
+    if (!env.count(L"ZIG_GLOBAL_CACHE_DIR")) env[L"ZIG_GLOBAL_CACHE_DIR"] = zig.native();
+    if (!env.count(L"ZIG_LOCAL_CACHE_DIR")) env[L"ZIG_LOCAL_CACHE_DIR"] = env[L"ZIG_GLOBAL_CACHE_DIR"];
+}
 
 bool supports_project() { return true; }
 

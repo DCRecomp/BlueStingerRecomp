@@ -17,11 +17,16 @@ esta distribuicao leva legendas transcritas das falas do jogo e tambem e so para
 Requisitos
 ----------
 - Windows 10 ou 11, x64.
-- "Build Tools para Visual Studio" (gratuito) com a carga de trabalho
-  "Desenvolvimento para desktop com C++" (inclui o compilador MSVC x64, o SDK do Windows e
-  as ferramentas CMake do C++). Download: https://visualstudio.microsoft.com/downloads/
-  (secao "Ferramentas para Visual Studio"). Um Visual Studio 2022 ou mais novo com essa
-  carga de trabalho tambem serve.
+- Um compilador C++, de uma destas formas:
+  - o compilador portatil: sem o Visual Studio, o instalador oferece baixar o Zig, o CMake e o
+    Ninja oficiais (cerca de 125 MB, cada arquivo conferido pelo SHA-256), guardados so em
+    %LOCALAPPDATA%\BlueStingerRecomp\compilador e usados nas proximas instalacoes. Nada e
+    instalado no sistema. Na linha de comando: bs-builder ... --compilador-portatil;
+  - ou o "Build Tools para Visual Studio" (gratuito) com a carga de trabalho
+    "Desenvolvimento para desktop com C++" (inclui o compilador MSVC x64, o SDK do Windows e
+    as ferramentas CMake do C++). Download: https://visualstudio.microsoft.com/downloads/
+    (secao "Ferramentas para Visual Studio"). Um Visual Studio 2022 ou mais novo com essa
+    carga de trabalho tambem serve. Com ele instalado, o instalador o usa.
 - Uma imagem do Blue Stinger: o disco original em GDI, CUE/BIN (como o Redump) ou CHD, ou um CDI;
   tambem dentro de .zip ou .7z. Versoes aceitas: americana (T13001N V1.000), PAL alema (T13001D 18),
   PAL inglesa (T13001D-05), PAL francesa (T13001D 09) e japonesa (HDR-0003 V1.006). As PAL rodam a
@@ -89,7 +94,8 @@ Codigo de saida: 0 = sucesso; 1 = falha; 3 = cancelado. BS_BUILDER_VERBOSE=1 mos
 
 Problemas comuns
 ----------------
-- "Visual Studio / Build Tools nao encontrado": instale os Build Tools como acima.
+- "Visual Studio / Build Tools nao encontrado": marque o compilador portatil na tela da pasta
+  (ou use --compilador-portatil), ou instale os Build Tools como acima.
 - "sem permissao de gravacao": escolha uma pasta sua (por exemplo em Documentos).
 - "caminho longo demais": escolha uma pasta de saida mais curta (ex.: C:\Jogos\BS).
 - "O jogo esta aberto?": feche o BlueStinger.exe antes de recompilar.
@@ -102,4 +108,7 @@ Licencas
 O projeto e MIT. Os textos de licenca, os avisos de terceiros (SDL3, HIDAPI, yuv2rgb, fdlibm), os
 termos do Microsoft C++ e do runtime ao lado dos executaveis e a procedencia de cada componente estao
 em licencas\ (comece por licencas\AVISOS.txt). O Visual Studio Build Tools e instalado e aceito por
-voce, nos termos da Microsoft; ele nao faz parte desta distribuicao.
+voce, nos termos da Microsoft; ele nao faz parte desta distribuicao. O compilador portatil (Zig: MIT,
+LLVM Apache-2.0 com excecao; mingw-w64: ZPL 2.1; CMake: BSD-3-Clause; Ninja: Apache-2.0) tambem nao: e
+baixado por escolha sua, dos sites oficiais, com as licencas na propria pasta. O jogo compilado com ele
+leva em licencas\ os avisos do mingw-w64 e da libc++.

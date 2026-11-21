@@ -62,6 +62,10 @@ struct Config {
     std::optional<dc::Language>          directorsCut;
     std::optional<std::filesystem::path> discoOcidental;
     bool                                 confirmarDownload = false;
+    // v0.9.7-5 (Windows): --compilador-portatil (usar o Zig, o CMake e o Ninja oficiais baixados: a opcao e a confirmacao) e
+    // --vswhere <caminho> (testes: um vswhere inexistente simula a maquina sem o Visual Studio)
+    bool                                 compiladorPortatil = false;
+    std::filesystem::path                vswhere;
     std::optional<Fase>   cancelarNaFase;     // --cancelar-na-fase (testes): cancela quando o Builder entra nela
     std::vector<std::wstring> idiomasSistema; // preferencias do sistema, para o idioma inicial
     bool                  linux_ = false;     // textos e opcoes do Linux (compilador portatil, sem entrada de desinstalacao)
@@ -86,7 +90,7 @@ public:
     void iniciar();  // depois de a janela existir (o --auto comeca aqui)
 
     // Capturas e testes: tela e estados simulados, cortes de texto acumulados.
-    enum class Simulacao { Nada, Progresso, Sucesso, Erro, Cancelado, Verificado, Desinstalado, AvisoPasta, DirectorsCut, Download, Remastered };
+    enum class Simulacao { Nada, Progresso, Sucesso, Erro, Cancelado, Verificado, Desinstalado, AvisoPasta, DirectorsCut, Download, Remastered, SemCompilador, CompiladorDownload };
     void simular(Tela t, Simulacao s);
     std::vector<Corte>& cortes() { return ui_.cortes; }
     Tela tela() const { return tela_; }

@@ -4,7 +4,8 @@
 #
 #   powershell -ExecutionPolicy Bypass -File tools/dist/test_builder.ps1 -Disc <imagem.cdi> [-Builder <pasta>] [-Work <pasta>]
 #
-# Codigo de saida 0 = todos os casos passaram. Leva alguns minutos (3 compilacoes completas).
+# Codigo de saida 0 = todos os casos passaram. Leva alguns minutos (5 compilacoes completas; 2 com o compilador portatil,
+# que e baixado da rede, ~125 MB, no cache do teste).
 param(
     [Parameter(Mandatory = $true)][string]$Disc,
     [string]$Builder = "",
@@ -242,6 +243,28 @@ $conv = [regex]::Match([IO.File]::ReadAllText($blog), "filmes: (\d+) convertidos
 Check "filmes: reaproveitados na compilacao seguinte (SHA-256)" ($r.Code -eq 0 -and $conv.Success -and $conv.Groups[1].Value -eq "0" -and $conv.Groups[2].Value -eq "16") $conv.Value
 $r = Run $cli @("--disc", $cdi, "--out", $out1)
 Check "--sem-filmes: os filmes da compilacao anterior saem do pacote" ($r.Code -eq 0 -and -not (Test-Path -LiteralPath $man)) (FailLine $r)
+
+# v0.9.7-5: o compilador portatil (Zig, CMake e Ninja oficiais, baixados e conferidos pelo SHA-256 no cache do teste), com
+# um vswhere inexistente (a maquina sem o Visual Studio): o jogo instala, responde, nao leva o runtime do MSVC e leva as
+# licencas do que o Zig liga nele; a segunda compilacao usa o compilador ja montado, sem baixar
+$outZ = Join-Path $Work "zig ç\BS"
+$exeZ = Join-Path $outZ "BlueStinger\BlueStinger.exe"
+$semVs = @("--vswhere", (Join-Path $Work "nao existe\vswhere.exe"))
+$r = Run $cli (@("--disc", $cdi, "--out", $outZ, "--sem-filmes", "--compilador-portatil") + $semVs) 3600000
+$logZ = if (Test-Path -LiteralPath (Join-Path $outZ ".bs-build\builder.log")) { [IO.File]::ReadAllText((Join-Path $outZ ".bs-build\builder.log"), [Text.Encoding]::UTF8) } else { "" }
+$verZ = if (Test-Path -LiteralPath (Join-Path $outZ "BlueStinger\VERSAO.txt")) { [IO.File]::ReadAllText((Join-Path $outZ "BlueStinger\VERSAO.txt")) } else { "" }
+$vz = if (Test-Path -LiteralPath $exeZ) { Run $exeZ @("--version") } else { @{ Code = -1; Out = "" } }
+$semCrt = -not (Test-Path -LiteralPath (Join-Path $outZ "BlueStinger\vcruntime140.dll"))
+$licZ = (Test-Path -LiteralPath (Join-Path $outZ "BlueStinger\licencas\mingw-w64-COPYING.txt")) -and (Test-Path -LiteralPath (Join-Path $outZ "BlueStinger\licencas\libcxx-LICENSE.txt"))
+Check "compilador portatil: baixado, conferido e o jogo instalado responde" ($r.Code -eq 0 -and $vz.Code -eq 0 -and $logZ -match "compilador portatil: baixando Zig" -and $verZ -match "portatil do Builder \(Zig 0\.13\.0\)") "codigo $($r.Code), $($r.Secs) s$(if ($r.Code -ne 0) { "; $(FailLine $r)" })"
+Check "compilador portatil: sem o runtime do MSVC e com as licencas do mingw-w64 e da libc++" ($semCrt -and $licZ)
+# a pasta montada conferida fora do Builder (outra implementacao do hash e cada arquivo contra os zips oficiais)
+$pastaTc = Join-Path $env:BS_BUILDER_CACHE "compilador\zig-0.13.0"
+$conf = & python -I (Join-Path $repo "tools\dev\conferir_compilador_portatil.py") $pastaTc 2>&1
+Check "compilador portatil: a pasta montada confere fora do Builder (hash fixado e zips oficiais)" ($LASTEXITCODE -eq 0) (($conf | Out-String).Trim())
+$r = Run $cli (@("--disc", $cdi, "--out", $outZ, "--sem-filmes", "--compilador-portatil", "--clean") + $semVs) 3600000
+$logZ = [IO.File]::ReadAllText((Join-Path $outZ ".bs-build\builder.log"), [Text.Encoding]::UTF8)
+Check "compilador portatil: a segunda compilacao nao baixa de novo" ($r.Code -eq 0 -and $logZ -notmatch "compilador portatil: baixando" -and $logZ -match "compilador portatil: ") "codigo $($r.Code), $($r.Secs) s"
 
 $env:BS_BUILDER_CACHE = ""
 $fails = @($results | Where-Object { -not $_.Ok }).Count

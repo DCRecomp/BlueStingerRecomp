@@ -1,0 +1,38 @@
+# v0.9.7-5: instalacao da Original numa maquina sem o Visual Studio (vswhere inexistente), so pelo teclado (test_instalador,
+# I9). A sondagem do Visual Studio demora (BS_INSTALADOR_TESTE_SONDA_MS): o "Instalar" apertado durante ela fica pendente;
+# sem o Visual Studio a tela mostra o compilador portatil e nao instala sem a caixa; marcada, instala com o Zig.
+# @CDI@ e @PASTA@ sao trocados.
+confere boas-vindas
+tecla Enter
+espera edicao 10
+estado edicao original
+tecla Enter
+espera cdi 10
+tecla Tab
+tecla SelecionarTudo
+texto @CDI@
+repete Enter ate componentes 120
+tecla Enter
+espera pasta 10
+tecla Tab
+tecla SelecionarTudo
+texto @PASTA@
+estado msvc procurando
+tecla Enter
+estado pendente 1
+captura pasta-procurando
+aguarda msvc nao 60
+estado pendente 0
+confere pasta
+estado compilador 0
+captura pasta-sem-vs
+tecla Enter
+confere pasta
+tecla Espaco
+estado compilador 1
+tecla Enter
+espera progresso 10
+captura progresso
+espera conclusao 3600
+captura conclusao
+estado res.ok 1

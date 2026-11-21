@@ -17,7 +17,7 @@ add_library(bs_native STATIC platform/data_files.cpp platform/clock.cpp platform
             platform/stall_trace.cpp         # N8.8: diagnostico BS_TRAVAS (travas, esperas, fila de audio)
             platform/telemetry.cpp           # N9.5 fase 5C: telemetria de desempenho (BS_TELEMETRIA, desligada por padrao)
             platform/saves_io_${BS_PLAT}.cpp platform/xinput_pad_${BS_PLAT}.cpp)  # N9-L: backends de plataforma
-target_link_libraries(bs_native PUBLIC bs_native_api PRIVATE tomlplusplus::tomlplusplus $<$<PLATFORM_ID:Windows>:xinput>
+target_link_libraries(bs_native PUBLIC bs_native_api PRIVATE tomlplusplus::tomlplusplus $<$<PLATFORM_ID:Windows>:${BS_LIB_XINPUT}>
                       $<$<PLATFORM_ID:Windows>:psapi>)
 
 # N5: filmes nativos (catalogo por ID com mods, leitura e gravacao MP4 por Media Foundation)
@@ -110,6 +110,13 @@ add_library(bs_native_localization STATIC localization/locale.cpp localization/m
             localization/dialogue_bridge.cpp)  # N6 fase E: eventos das falas -> legendas
 target_link_libraries(bs_native_localization PUBLIC bs_native_api bs_native_audio_core PRIVATE bs_native_video tomlplusplus::tomlplusplus)
 
+# as linhas do rasterizador em paralelo: std::execution::par no MSVC; o pool de threads padrao (soft_parallel_posix.cpp, so
+# std::thread) no Linux e no Windows com o compilador portatil (Zig/MinGW: a libc++ nao tem os algoritmos paralelos)
+if(MSVC)
+  set(BS_PARALELO win)
+else()
+  set(BS_PARALELO posix)
+endif()
 # N7 (preparacao): regras portaveis do renderer nativo (texturas do PVR para RGBA8, validacao e ordem
 # da IR de render); sem API grafica - o backend Vulkan fica fora do jogo ate a integracao
 add_library(bs_native_render STATIC render/texture_convert.cpp render/render_ir.cpp render/fidelity_scenes.cpp
@@ -120,7 +127,7 @@ add_library(bs_native_render STATIC render/texture_convert.cpp render/render_ir.
             render/water.cpp                # N9.7: ondulacao so nas superficies de agua identificadas
             render/material_catalog.cpp     # N9.6 fase 2b: o catalogo de materiais por TextureId (Remastered)
             render/soft/soft_raster.cpp     # N8.7: rasterizador de referencia em software (o recuo do Vulkan)
-            render/soft/soft_parallel_${BS_PLAT}.cpp  # N9-L: linhas em paralelo (backend de plataforma)
+            render/soft/soft_parallel_${BS_PARALELO}.cpp  # N9-L: linhas em paralelo (backend de plataforma)
             render/soft/soft_device.cpp)    # N8.7: o renderizador em software sobre a IR
 # (N8.8: o contrato do Kamui com os enderecos do guest saiu daqui para runtime/kamui, a biblioteca bs_kamui)
 target_link_libraries(bs_native_render PUBLIC bs_native_api PRIVATE tomlplusplus::tomlplusplus)
@@ -138,7 +145,7 @@ if(WIN32)
 else()
   target_sources(bs_native_audio PRIVATE audio/audio_output_posix.cpp)
 endif()
-target_link_libraries(bs_native_audio PUBLIC bs_native_api PRIVATE bs_native $<$<PLATFORM_ID:Windows>:xaudio2;ole32>)
+target_link_libraries(bs_native_audio PUBLIC bs_native_api PRIVATE bs_native $<$<PLATFORM_ID:Windows>:${BS_LIB_XAUDIO2};ole32>)
 
 if(BS_BUILD_TESTS AND BS_BUILD_TOOLS)
   # Compila todos os cabecalhos so com native/ no include path: nada do legado pode vazar.

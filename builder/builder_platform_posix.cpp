@@ -104,6 +104,8 @@ std::vector<fs::path> cache_roots(const fs::path& work) {
     return roots;
 }
 
+std::vector<fs::path> cache_roots_privadas() { return {}; }  // o compilador portatil do Linux vem no pacote
+
 const char* cache_hint() {
     return "nenhuma pasta de cache de compilacao utilizavel (sem permissao de gravacao em ~/.cache nem na pasta de "
            "saida). Defina BS_BUILDER_CACHE com uma pasta gravavel, por exemplo ~/bs-cache.";

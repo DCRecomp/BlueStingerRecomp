@@ -65,6 +65,15 @@ if(WIN32)
 else()
   set(BS_PLAT posix)
 endif()
+# bibliotecas de importacao do XInput e do XAudio2: no MSVC, xinput.lib e xaudio2.lib (XInput1_4.dll e XAudio2_9.dll); no
+# compilador portatil (Zig/MinGW) elas tem o nome da DLL
+if(MSVC)
+  set(BS_LIB_XINPUT xinput)
+  set(BS_LIB_XAUDIO2 xaudio2)
+else()
+  set(BS_LIB_XINPUT xinput1_4)
+  set(BS_LIB_XAUDIO2 xaudio2_9)
+endif()
 
 if(MSVC)
   add_compile_options(/W4 /permissive- /utf-8)

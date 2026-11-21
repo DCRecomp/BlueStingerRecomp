@@ -52,6 +52,9 @@ ErrorKind error_kind_of(const std::error_code& ec, ErrorKind otherwise);
 // Cache de compilacao: chave da pasta de saida, pastas candidatas na ordem (a ultima e `work`) e a mensagem sem nenhuma.
 uint32_t                           cache_key(const std::filesystem::path& out);
 std::vector<std::filesystem::path> cache_roots(const std::filesystem::path& work);
+// Raizes so deste usuario (BS_BUILDER_CACHE e o cache do perfil; nunca uma pasta compartilhada como o ProgramData): o
+// compilador portatil do Windows (compilador_portatil.h) fica nelas. Linux: vazio (o compilador vem no pacote).
+std::vector<std::filesystem::path> cache_roots_privadas();
 const char*                        cache_hint();
 const char*                        example_out_dir();
 // O caminho serve ao compilador e ao Ninja (Windows: pagina ANSI e limite de 260; Linux: sempre).

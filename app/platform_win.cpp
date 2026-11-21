@@ -6,6 +6,9 @@
 #include <shlobj.h>
 #pragma comment(lib, "shell32.lib")  // SHGetKnownFolderPath (pasta dos saves)
 #pragma comment(lib, "ole32.lib")    // CoTaskMemFree
+// (o compilador portatil, Zig/MinGW, ignora o #pragma comment: as duas tambem vao no app/CMakeLists.txt)
+
+#include <share.h>  // _SH_DENYNO (o MSVC o inclui por outro cabecalho; o MinGW nao)
 
 #include <cstdlib>
 

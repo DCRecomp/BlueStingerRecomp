@@ -11,6 +11,11 @@
 #include <initguid.h>  // so para os GUIDs do codecapi.h abaixo (os do MF vem do mfuuid)
 #include <codecapi.h>
 #include <strmif.h>
+#if defined(__MINGW32__)
+// o compilador portatil (Zig/MinGW): o codecapi.h do mingw-w64 nao associa o IID ao ICodecAPI para o __uuidof (o IID e
+// o documentado pela Microsoft para a interface)
+__CRT_UUID_DECL(ICodecAPI, 0x901db4c7, 0x31ce, 0x41a2, 0x85, 0xdc, 0x8f, 0xa0, 0xbf, 0x41, 0xb8, 0xda)
+#endif
 
 #include <cstring>
 #include <mutex>

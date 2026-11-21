@@ -94,6 +94,30 @@ execução) · **P** = processo externo · **F** = ferramenta de build · **T** 
 | Segoe UI | do Windows | fonte das legendas no Windows | Microsoft, fonte do sistema | sistema | D (pelo DirectWrite) | não | não copiar a fonte | — | compatível | — |
 | Carregador Vulkan (`vulkan-1.dll`) e driver | do driver | Vulkan | do fabricante | sistema | D | não | — | — | compatível | — |
 
+### 3.3.1 Windows: compilador portátil (v0.9.7-5, mantenedor 2026-11-20)
+
+Sem o Visual Studio, o Builder **baixa, com a confirmação do usuário**, as peças oficiais abaixo para o cache do usuário
+(`%LOCALAPPDATA%\BlueStingerRecomp\compilador\zig-0.13.0`; nunca o `ProgramData`). **O projeto não as redistribui**: o
+pacote do Builder só traz as URLs e os SHA-256 (`builder/compilador_portatil.h`). Os textos das licenças vão junto da pasta
+montada (`licencas/`), e os do que o Zig liga **dentro do jogo** vão para o `licencas/` da instalação.
+
+| Componente | Versão | Finalidade | Licença | Origem | Integ. | Redistr. | Obrigações | Patentes e distribuição | Situação | Alternativa |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Zig (com LLVM, Clang, LLD) | 0.13.0 | compila o jogo para `x86_64-windows-gnu` | MIT; LLVM Apache-2.0 WITH LLVM-exception | ziglang.org, `d8599947…3c158` | F | não (baixado pelo usuário) | — | — | compatível | MSVC (instalado pelo usuário) |
+| mingw-w64 (CRT de partida, bibliotecas de importação, cabeçalhos) | do Zig 0.13 | ligação com o UCRT e as DLLs do Windows | ZPL-2.1; partes em domínio público | Zig `lib/libc/mingw` | E (código de partida no jogo) | não | **ZPL 2.1: o aviso nos binários** (`mingw-w64-COPYING.txt` vai para o `licencas/` do jogo) | — | compatível | — |
+| libc++, libc++abi, libunwind | 18 (do Zig) | C++ estático no jogo | Apache-2.0 WITH LLVM-exception | Zig `lib/` | E | não | a exceção dispensa o aviso; o texto vai junto (`libcxx-LICENSE.txt`) | — | compatível | — |
+| CMake (só `bin/cmake.exe` e `share/cmake-3.30`) | 3.30.5 | configuração do build | BSD-3-Clause (e os embutidos da 3.2) | github.com/Kitware, `5ab6e1fa…0004b` | F | não | texto (`CMake-Copyright.txt`) | — | compatível | — |
+| Ninja | 1.12.1 | execução do build | Apache-2.0 | github.com/ninja-build, `f550fec7…8467a` (medido; a release não publica soma) e o `COPYING` da tag (`eb7e9ab9…f7ea`) | F | não | texto | — | compatível | — |
+
+**Poda (mantenedor, 2026-11-20):** do zip do Zig não são extraídos `lib/libc/musl`, `wasi`, `glibc`, `darwin`, os
+cabeçalhos de outros sistemas em `lib/libc/include` (só o `any-windows-any` fica), `lib/tsan` e `lib/docs`. Assim, os
+cabeçalhos do kernel Linux (GPL-2.0 com a syscall-note), da glibc (LGPL) e do macOS (APSL) e o ThreadSanitizer nem chegam
+à máquina do usuário montados; ficam só dentro do zip oficial baixado (`<pasta>.downloads`).
+
+**Equivalência:** o jogo compilado com o Zig no Windows chama o mesmo UCRT do Windows que o do MSVC. A única diferença
+encontrada foi o texto dos diagnósticos: o `printf` do mingw-w64 chama o UCRT sem a opção de arredondamento padrão do MSVC
+(`app/stdio_ucrt_mingw.cpp` a acrescenta). Provas no `STATUS.md` (A3).
+
 ### 3.4 Linux: componentes do sistema (abertos em execução, não distribuídos)
 
 | Componente | Licença | Integ. | Situação |

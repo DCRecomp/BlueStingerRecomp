@@ -9,6 +9,7 @@
 #include <filesystem>
 #include <functional>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace bs::builder {
@@ -25,6 +26,9 @@ struct Toolchain {
     std::vector<std::wstring> cmakeArgs;    // escolha do compilador para o CMake
     std::string               stamp;        // muda quando o compilador muda (descarta o build incremental)
     std::string               description;  // linhas "Compilador: ..." do VERSAO.txt do jogo
+    // v0.9.7-5: licencas do que o compilador liga dentro do jogo (Windows portatil: o mingw-w64, ZPL 2.1, pede o aviso nos
+    // binarios; a libc++), copiadas para <instalacao>/licencas: (origem, nome no pacote)
+    std::vector<std::pair<std::filesystem::path, std::wstring>> licenses;
 };
 
 struct ToolchainOptions {

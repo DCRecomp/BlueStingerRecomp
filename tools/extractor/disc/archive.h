@@ -38,4 +38,15 @@ std::filesystem::path archive_extract_image(const std::filesystem::path& archive
 void archive_extract_all(const std::filesystem::path& archive, const std::filesystem::path& dir,
                          const std::function<void(double)>& progress = {}, const std::atomic<bool>* cancel = nullptr);
 
+// Compilador portatil do Windows (Zig, CMake e Ninja oficiais, baixados pelo Builder e conferidos pelo SHA-256): so .zip,
+// so as entradas que `keep` aceita, com os limites de quantidade e de bytes dados (os nomes inseguros sao recusados igual).
+struct ArchiveSelection {
+    std::function<bool(const std::string& name)> keep;  // nulo = todas
+    size_t                                       maxEntries = 256;
+    uint64_t                                     maxBytes   = 8ull << 30;
+};
+void archive_extract_selected(const std::filesystem::path& archive, const std::filesystem::path& dir,
+                              const ArchiveSelection& sel, const std::function<void(double)>& progress = {},
+                              const std::atomic<bool>* cancel = nullptr);
+
 } // namespace bs::disc

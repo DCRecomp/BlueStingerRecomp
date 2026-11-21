@@ -57,8 +57,16 @@ disco sai da sua máquina):
 bs-builder --disc <seu_disco.cdi> --out <pasta> --kit . --sdl3 build/msvc-release/_deps/sdl3-src
 ```
 
-`BlueStinger-Recompiler.exe` faz o mesmo com uma janela simples (idioma, modo portátil). Ferramentas de linha de
-comando para quem desenvolve:
+`BlueStinger-Recompiler.exe` faz o mesmo com uma janela simples (idioma, modo portátil).
+
+O Builder compila o jogo na sua máquina, então precisa de um compilador C++. Com o Visual Studio (ou os Build Tools)
+instalado, ele o usa. Sem ele, o instalador oferece um **compilador portátil**: baixa o Zig, o CMake e o Ninja oficiais
+(cerca de 125 MB, cada arquivo conferido pelo SHA-256), guardados só no seu perfil
+(`%LOCALAPPDATA%\BlueStingerRecomp\compilador`), sem instalar nada no sistema. Na linha de comando:
+`bs-builder ... --compilador-portatil`. O jogo compilado assim é o mesmo: as referências de fidelidade (A3) batem com
+as do Visual Studio.
+
+Ferramentas de linha de comando para quem desenvolve:
 
 ```
 bs-extract <seu_disco.cdi> game-data             # extrai e valida o hash
@@ -81,7 +89,8 @@ resultado como não verificado.
 
 ## Compilar
 
-Requisitos: Visual Studio 2022+ (ou Build Tools) com CMake e Ninja, ou Clang.
+Requisitos (desenvolvimento): Visual Studio 2022+ (ou Build Tools) com CMake e Ninja, ou Clang. O jogo também compila
+com o Zig no alvo `x86_64-windows-gnu` (o compilador portátil do Builder, `builder/compilador_portatil.h`).
 Abra um *Developer PowerShell* e rode:
 
 ```

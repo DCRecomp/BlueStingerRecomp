@@ -55,6 +55,9 @@ struct Request {
     // N9-L (L5), Linux: pasta do compilador portatil (vazio = <Builder>/toolchain) ou, a pedido, o do sistema
     std::filesystem::path toolchainDir;
     bool                  systemToolchain = false;
+    // v0.9.7-5, Windows: usar o compilador portatil (Zig, CMake e Ninja oficiais; compilador_portatil.h), baixando-o se
+    // preciso. So com a confirmacao do usuario (o instalador sem o Visual Studio; o CLI --compilador-portatil).
+    bool                  portableCompiler = false;
     unsigned              verifyVblanks = 120;  // boot headless na verificacao
     bool                  clean         = false;  // apaga o build incremental antes
     // N5: converte os filmes do disco (SFD) em data\video\*.mp4 + manifest.toml. Sem eles o jogo
@@ -86,6 +89,7 @@ struct Request {
 // O download de um arquivo grande (hoje so os filmes widescreen): filme `index` de `count`, bytes deste arquivo
 // (`size` 0 = desconhecido) e o total recebido na execucao (`session`, a base da velocidade). `done`: acabou.
 struct DownloadProgress {
+    enum class Kind { WidescreenMovies, PortableCompiler } kind = Kind::WidescreenMovies;  // o texto da tela
     size_t      index = 0, count = 0;
     std::string file;
     uint64_t    received = 0, size = 0, session = 0;

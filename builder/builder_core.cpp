@@ -12,6 +12,7 @@
 #include "disc/archive.h"
 #include "disc/disc_open.h"
 #include "runtime_data.h"
+#include "compilador_portatil.h"
 #include "toolchain.h"
 #include "util/hash.h"
 #include "video/movie_build.h"
@@ -574,10 +575,33 @@ Result build(const Request& req, const Callbacks& cb) {
 
         // 2. compilador
         if (!req.exportOnly) enter(Step::Toolchain);
+        std::shared_ptr<void> usoDoCompilador;  // v0.9.7-5: a trava do compilador portatil, viva ate o fim da compilacao
         Toolchain tc = req.exportOnly ? Toolchain{} : [&] {
             try {
-                return find_toolchain({req.vswhere, req.vcvars, req.toolchainDir, req.systemToolchain}, log);
+                fs::path dir = req.toolchainDir;
+#ifdef _WIN32
+                // v0.9.7-5: o compilador portatil (confirmado pelo usuario), baixado e montado no cache dele se preciso
+                if (req.portableCompiler && dir.empty()) {
+                    dir = portatil::pasta_padrao();
+                    if (dir.empty()) throw std::runtime_error(std::string("compilador portatil: ") + plat::cache_hint());
+                    portatil::Pedido pp;
+                    pp.pasta     = dir;
+                    pp.fetch     = plat::http_download;
+                    pp.cancel    = cb.cancel;
+                    pp.log       = log;
+                    pp.progresso = [&](double f, const std::string& m) { progress(f, m); };
+                    pp.andamento = [&](const widescreen::Andamento& a) {
+                        if (cb.download)
+                            cb.download({DownloadProgress::Kind::PortableCompiler, a.atual, a.quantos, a.arquivo, a.recebidos,
+                                         a.tamanho, a.sessao, a.fim});
+                    };
+                    usoDoCompilador = portatil::preparar(pp);
+                    if (cb.cancel && cb.cancel->load()) throw Cancelled{};
+                }
+#endif
+                return find_toolchain({req.vswhere, req.vcvars, dir, req.systemToolchain}, log);
             } catch (const std::runtime_error& e) {
+                if (cb.cancel && cb.cancel->load()) throw Cancelled{};
                 throw StepError(ErrorKind::Toolchain, e.what());
             }
         }();
@@ -1008,6 +1032,13 @@ Result build(const Request& req, const Callbacks& cb) {
             fs::copy_file(toml / L"LICENSE", stage / L"licencas" / L"tomlplusplus-MIT.txt");
         for (const auto& [from, name] : plat::extra_licenses(kit, sdl3))  // Linux: FreeType, Noto Sans, pl_mpeg...
             if (fs::is_regular_file(from, ec)) fs::copy_file(from, stage / L"licencas" / name);
+        // v0.9.7-5: o que o compilador portatil liga no jogo (mingw-w64, ZPL 2.1: o aviso vai com o binario; libc++). Sem
+        // elas o pacote nao sai (revisao Codex 20261120-194725)
+        for (const auto& [from, name] : tc.licenses) {
+            std::error_code lec;
+            if (!fs::is_regular_file(from, lec) || !fs::copy_file(from, stage / L"licencas" / name, fs::copy_options::overwrite_existing, lec) || lec)
+                throw StepError(ErrorKind::Install, "licenca do compilador ausente ou nao copiada: " + path_text(from));
+        }
         // edicao e local dos saves escolhidos (sem escolha: o instalacao.toml anterior fica, como
         // arquivo do usuario). Nao faz parte da lista do pacote: nunca e apagado por uma troca.
         for (const auto& [from, name] : req.extraPackageFiles) {  // N9.1: o desinstalador do instalador
@@ -1163,7 +1194,8 @@ Result build(const Request& req, const Callbacks& cb) {
                     [&](double f) { progress(0.5 + 0.5 * f, "filmes widescreen"); }, widescreen::kBaseUrl,
                     [&](const widescreen::Andamento& a) {
                         if (cb.download)
-                            cb.download({a.atual, a.quantos, a.arquivo, a.recebidos, a.tamanho, a.sessao, a.fim});
+                            cb.download({DownloadProgress::Kind::WidescreenMovies, a.atual, a.quantos, a.arquivo, a.recebidos,
+                                         a.tamanho, a.sessao, a.fim});
                     });
                 res.widescreenDownloaded = wr.baixados, res.widescreenPresent = wr.presentes;
                 if (!wr.aviso.empty()) res.warning += (res.warning.empty() ? "" : "\n") + wr.aviso;

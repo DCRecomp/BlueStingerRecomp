@@ -15,6 +15,8 @@
 #   I7  instalacao limpa da Original (--auto --integrar) e desinstalacao sem nada do jogador, com & % ^ e Unicode no nome da
 #       pasta: a pasta some
 #   I8  falha fatal (BS_INSTALADOR_TESTE_FALHA=1, so teste): o arquivo <exe>-erro.txt com o codigo e o modulo
+#   I9  sem o Visual Studio (vswhere inexistente): clique pendente na sondagem, caixa do compilador portatil obrigatoria e a
+#       Original instalada com o Zig (baixado no cache do teste)
 # O kit de fontes e o HEAD exportado (git archive). Codigo de saida 0 = todos os casos passaram. Leva de 20 a 40 minutos
 # (duas compilacoes completas).
 param(
@@ -223,6 +225,19 @@ $env:BS_INSTALADOR_TESTE_FALHA = "seletor"
 $r = Run $rec $aux 60000
 Remove-Item Env:BS_INSTALADOR_TESTE_FALHA
 Check "I8 seletor auxiliar: a falha fica no auxiliar (codigo para o instalador)" ($r.Code -eq [int]0xC0000005 -and -not $r.Out.Trim()) "codigo $($r.Code)"
+
+# --- I9 (v0.9.7-5): a maquina sem o Visual Studio (vswhere inexistente), so pelo teclado: o "Instalar" durante a sondagem
+# (atrasada por BS_INSTALADOR_TESTE_SONDA_MS, so teste) espera; a tela mostra o compilador portatil e nao instala sem a
+# caixa; marcada, baixa o Zig, o CMake e o Ninja oficiais (cache do teste) e instala a Original com eles ---
+$pastaC = Join-Path $Work "Jogo sem VS"
+$rotC = Roteiro "instalar-sem-vs.txt" @{ "@CDI@" = $Disc; "@PASTA@" = $pastaC }
+$env:BS_INSTALADOR_TESTE_SONDA_MS = "3000"
+$r = Run $rec (@("--teclas", $rotC, "--captura", (Join-Path $Work "capturas-I9"), "--idioma", "pt-BR", "--sem-filmes", "--vswhere",
+                 (Join-Path $Work "nao existe\vswhere.exe")) + $kit)
+Remove-Item Env:BS_INSTALADOR_TESTE_SONDA_MS
+[IO.File]::WriteAllText((Join-Path $Work "I9.saida.txt"), $r.Out)
+$verC = if (Test-Path -LiteralPath (Join-Path $pastaC "BlueStinger\VERSAO.txt")) { [IO.File]::ReadAllText((Join-Path $pastaC "BlueStinger\VERSAO.txt")) } else { "" }
+Check "I9 sem o Visual Studio: clique pendente, caixa obrigatoria e o jogo instalado com o Zig ($($r.Secs) s)" ($r.Code -eq 0 -and $verC -match "portatil do Builder \(Zig 0\.13\.0\)" -and (Responde (Join-Path $pastaC "BlueStinger"))) ($r.Out -split "`n" | Select-Object -Last 3)
 
 if (Test-Path $regTeste) { Remove-Item -Recurse -Force $regTeste }
 $falhas = @($results | Where-Object { -not $_.Ok }).Count

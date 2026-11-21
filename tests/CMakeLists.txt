@@ -52,6 +52,7 @@ target_compile_definitions(bs_unit_tests PRIVATE BS_TEST_DATA_DIR="${CMAKE_CURRE
 if(WIN32)
   enable_language(ASM_MASM)
   target_sources(bs_unit_tests PRIVATE unit/test_builder.cpp unit/test_n1.cpp unit/test_filmes_widescreen.cpp unit/test_directors_cut.cpp
+                 unit/test_compilador_portatil.cpp
                  unit/xmm_probe.asm)   # XMM6-XMM15 atraves de trocas de fibra (MASM)
   target_link_libraries(bs_unit_tests PRIVATE bs_builder_core)
 endif()

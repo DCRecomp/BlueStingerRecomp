@@ -3,6 +3,8 @@
 #include "boot/disc_boot.h"
 #include "boot_identity.h"
 #include "builder_platform.h"
+#include "compilador_portatil.h"
+#include "toolchain.h"
 #include "disc/archive.h"
 #include "child_process.h"
 #include "instalador/gui/arte.h"
@@ -15,6 +17,8 @@
 #include <toml++/toml.hpp>
 
 #include <algorithm>
+#include <cstdlib>
+#include <thread>
 #include <chrono>
 #include <cmath>
 #include <cwctype>
@@ -173,6 +177,7 @@ struct Instalador::Impl {
     // v0.9.7-4: o download dos filmes widescreen (o motivo da demora): filme, MB, velocidade e tempo restante
     struct Download {
         bool                                   ativo = false;
+        bool                                   compilador = false;  // v0.9.7-5: o compilador portatil, nao os filmes
         size_t                                 i = 0, n = 0;
         std::string                            arquivo;
         uint64_t                               recebidos = 0, tamanho = 0;
@@ -180,6 +185,13 @@ struct Instalador::Impl {
         double                                 velocidadeFixa = 0;  // so a captura (--captura)
     } dl;
     std::optional<Edition> edicaoSim;  // so as capturas (simular)
+    // v0.9.7-5: o Visual Studio existe? (sondado ao abrir; sem ele, a tela da pasta oferece o compilador portatil)
+    enum class Msvc { Procurando, Sim, Nao } msvc = Msvc::Procurando;
+    bool                      instalarPendente = false;  // "Instalar" durante a sondagem: segue quando ela terminar
+    // as callbacks das threads (sondagens) so tocam no instalador se ele ainda existe (revisao Codex 20261120-194725)
+    std::shared_ptr<int>      vida = std::make_shared<int>(0);
+    std::thread               msvcThread;
+    bool                      compiladorPortatil = false;  // a confirmacao do download (ou --compilador-portatil)
     std::atomic<bool>         cancelar{false};
     // resultado
     std::optional<Result>     res;
@@ -241,6 +253,7 @@ Instalador::~Instalador() {
     s_->cancelar = true;
     if (thread_.joinable()) thread_.join();
     if (s_->cdiThread.joinable()) s_->cdiThread.join();
+    if (s_->msvcThread.joinable()) s_->msvcThread.join();
 }
 
 void Instalador::juntar() {
@@ -249,6 +262,35 @@ void Instalador::juntar() {
 
 void Instalador::iniciar() {
     h_.titulo(tr(c_.modo == Config::Modo::Desinstalar ? "des.window" : "ins.window"));
+    s_->compiladorPortatil = c_.compiladorPortatil;
+    if (c_.modo == Config::Modo::Instalar && !c_.automatico && !c_.linux_) {
+        // o vswhere e o vcvars levam alguns segundos: fora da tela, o resultado vem pela fila
+        s_->msvcThread = std::thread([this, vida = std::weak_ptr<int>(s_->vida)] {
+            bool tem = false;
+            // so testes (test_instalador I9): a sondagem demora, para o clique em "Instalar" durante ela ser exercitado
+            if (const char* v = std::getenv("BS_INSTALADOR_TESTE_SONDA_MS"))
+                std::this_thread::sleep_for(std::chrono::milliseconds(std::clamp(std::atoi(v), 0, 60000)));
+            try {
+                ToolchainOptions o;
+                o.vswhere = c_.vswhere;
+                find_toolchain(o, nullptr);
+                tem = true;
+            } catch (const std::exception&) {
+            }
+            h_.postar([this, tem, vida] {
+                if (vida.expired()) return;
+                s_->msvc = tem ? Impl::Msvc::Sim : Impl::Msvc::Nao;
+                if (s_->instalarPendente) {  // o "Instalar" ja foi apertado: com o Visual Studio segue; sem, a tela mostra a opcao
+                    s_->instalarPendente = false;
+                    if (tem && tela_ == Tela::Pasta) instalar();
+                    else if (!tem) ui_.focar(id("tc.confirm"));  // a caixa que falta marcar
+                }
+                h_.redesenhar();
+            });
+        });
+    } else {
+        s_->msvc = Impl::Msvc::Sim;  // --auto: a linha de comando decide (--compilador-portatil); Linux: o do pacote
+    }
     if (!c_.automatico) return;
     if (c_.modo == Config::Modo::Desinstalar) {
         comecar_desinstalacao();
@@ -268,6 +310,7 @@ void Instalador::ir(Tela t) {
     entrouEm_ = ui_.agora();
     s_->rolagem = 0;
     s_->confirmarCancelar = false;
+    s_->instalarPendente  = false;
     ui_.focar(id("nav.next"));
     if (t == Tela::Cdi) conferir_cdi();
     if (t == Tela::Pasta) avaliar_pasta();
@@ -315,7 +358,7 @@ void Instalador::conferir_cdi() {
     const unsigned g = ++s.cdiGeracao;
     if (s.cdiThread.joinable()) s.cdiThread.join();
     const fs::path arq = s.cdi;
-    s.cdiThread = std::thread([this, g, arq] {
+    s.cdiThread = std::thread([this, g, arq, vida = std::weak_ptr<int>(s.vida)] {
         std::wstring info;
         bool         ok = false;
         int          versao = -1;
@@ -335,8 +378,8 @@ void Instalador::conferir_cdi() {
             info = widen(e.what());
         }
         const bool pacote = disc::archive_supported(arq);
-        h_.postar([this, g, ok, info, versao, pacote] {
-            if (g != s_->cdiGeracao) return;
+        h_.postar([this, g, ok, info, versao, pacote, vida] {
+            if (vida.expired() || g != s_->cdiGeracao) return;
             s_->cdiEstado = ok ? Impl::Cdi::Ok : Impl::Cdi::Erro;
             s_->cdiInfo   = info;
             s_->cdiVersao = versao;
@@ -368,6 +411,9 @@ void Instalador::instalar() {
     req.kitDir = c_.kit;
     req.sdl3Dir = c_.sdl3;
     req.movies = s.filmes;
+    req.vswhere = c_.vswhere;
+    // v0.9.7-5: o compilador portatil so com a confirmacao (a caixa da tela da pasta, sem o Visual Studio, ou a linha de comando)
+    req.portableCompiler = c_.compiladorPortatil || (s.compiladorPortatil && s.msvc == Impl::Msvc::Nao);
     if (c_.automatico) {
         // as escolhas da linha de comando; sem elas a instalacao anterior fica (contrato do N9.0)
         if (c_.portatil) req.portableSaves = *c_.portatil;
@@ -426,6 +472,7 @@ void Instalador::instalar() {
                     dl = {};
                 } else {
                     dl.ativo = true, dl.i = d.index, dl.n = d.count, dl.arquivo = d.file;
+                    dl.compilador = d.kind == DownloadProgress::Kind::PortableCompiler;
                     dl.recebidos = d.received, dl.tamanho = d.size;
                     const double t = ui_.agora();
                     dl.amostras.emplace_back(t, d.session);
@@ -1046,12 +1093,37 @@ void Instalador::pasta(const Ret& r) {
         }
         ui_.rotulo(tr("pasta.saves", {tr(s.portatil ? "loc.portable" : "loc.documents")}), est(tema::kPequeno), {r.x, y, r.w, 20},
                    tema::kTextoSuave);
+        y += 32;
+    }
+    // v0.9.7-5: sem o Visual Studio, o compilador portatil (Zig, CMake e Ninja oficiais), so com a confirmacao
+    if (s.msvc == Impl::Msvc::Procurando && !c_.compiladorPortatil) {
+        ui_.rotulo(tr(s.instalarPendente ? "tc.checking.wait" : "tc.checking"), est(tema::kPequeno), {r.x, y, r.w, 20}, tema::kTextoSuave);
+    } else if (s.msvc == Impl::Msvc::Nao && !c_.compiladorPortatil) {
+        ui_.rotulo(tr("tc.title"), est(tema::kCorpo, Peso::SemiNegrito), {r.x, y, r.w, 22}, tema::kTexto);
+        y += 28;
+        std::wstring lista = tr("tc.text");
+        for (const portatil::Peca& pc : portatil::kPecas) {
+            const std::wstring tam = pc.bytes >= 1000000 ? tr("size.mb", {std::to_wstring((pc.bytes + 999999) / 1000000)})
+                                                         : std::to_wstring((pc.bytes + 999) / 1000) + L" KB";
+            lista += L"\n• " + tr("tc.item", {widen(pc.nome), widen(pc.licenca), tam, widen(pc.url)});
+        }
+        const float lh = ui_.altura_texto(lista, est(tema::kPequeno), r.w);
+        ui_.rotulo(lista, est(tema::kPequeno), {r.x, y, r.w, lh}, tema::kTextoSuave);
+        y += lh + 8;
+        ui_.caixa(id("tc.confirm"), tr("tc.confirm"), {}, {r.x, y, r.w, 26}, s.compiladorPortatil);
+        y += 34;
+        pode = pode && s.compiladorPortatil;
     }
     if (ui_.botao(id("nav.back"), tr("nav.back"), {r.x, rodapeY, 120, tema::kBotaoAltura}) || ui_.escape()) ir(Tela::Componentes);
     const bool atualiza = s.info.exists && s.info.ours;
     if (ui_.botao(id("nav.next"), tr(atualiza ? "nav.update" : "nav.install"), {r.dir() - 180, rodapeY, 180, tema::kBotaoAltura},
                   TipoBotao::Primario, pode, true))
-        instalar();
+    {
+        // durante a sondagem do Visual Studio o clique fica pendente (revisao Codex 20261120-194725): com ele, a instalacao
+        // segue quando a sondagem terminar; sem ele, a tela mostra o compilador portatil para confirmar
+        if (s.msvc == Impl::Msvc::Procurando && !c_.compiladorPortatil) s.instalarPendente = true;
+        else instalar();
+    }
 }
 
 void Instalador::progresso(const Ret& r) {
@@ -1087,7 +1159,7 @@ void Instalador::progresso(const Ret& r) {
     y += 34;
     if (s.dl.ativo) {  // v0.9.7-4: o motivo da demora (o download dos filmes widescreen), com velocidade e tempo restante
         const auto& d = s.dl;
-        ui_.rotulo(tr("dl.file", {widen(d.arquivo), std::to_wstring(d.i), std::to_wstring(d.n)}),
+        ui_.rotulo(tr(d.compilador ? "dl.file.compiler" : "dl.file", {widen(d.arquivo), std::to_wstring(d.i), std::to_wstring(d.n)}),
                    est(tema::kCorpo, Peso::SemiNegrito, false), {r.x, y, r.w, 22}, tema::kTexto);
         y += 26;
         double vel = d.velocidadeFixa;
@@ -1105,13 +1177,14 @@ void Instalador::progresso(const Ret& r) {
             linha += L" · " + tr("dl.stalled", {std::to_wstring(int(parado))});
         } else if (vel > 0) {
             linha += L" · " + velocidade(vel);
-            if (d.tamanho > d.recebidos) linha += L" · " + tr("dl.eta", {restante(double(d.tamanho - d.recebidos) / vel)});
+            if (d.tamanho > d.recebidos)
+                linha += L" · " + tr(d.compilador ? "dl.eta.compiler" : "dl.eta", {restante(double(d.tamanho - d.recebidos) / vel)});
         } else {
             linha += L" · " + tr("dl.eta.calc");
         }
         ui_.rotulo(linha, est(tema::kCorpo, Peso::Normal, false), {r.x, y, r.w, 22}, tema::kTextoSuave);
         y += 28;
-        const std::wstring nota = tr("dl.note");
+        const std::wstring nota = tr(d.compilador ? "dl.note.compiler" : "dl.note");
         const float        nh   = ui_.altura_texto(nota, est(tema::kPequeno), r.w);
         ui_.rotulo(nota, est(tema::kPequeno), {r.x, y, r.w, nh}, tema::kAmbar);
         y += nh + 14;
@@ -1137,7 +1210,7 @@ void Instalador::progresso(const Ret& r) {
         p.soltar_recorte();
     }
     if (s.confirmarCancelar) {
-        const std::wstring t = tr(s.dl.ativo ? "prog.cancel.ask.dl" : "prog.cancel.ask");
+        const std::wstring t = tr(s.dl.ativo && !s.dl.compilador ? "prog.cancel.ask.dl" : "prog.cancel.ask");
         ui_.rotulo(t, est(tema::kCorpo), {r.x, rodapeY - 34, r.w, 24}, tema::kTexto);
         if (ui_.botao(id("prog.cancel.yes"), tr("prog.cancel.yes"), {r.dir() - 180, rodapeY, 180, tema::kBotaoAltura}, TipoBotao::Perigo))
             s.cancelar = true, s.cancelando = true, s.confirmarCancelar = false;
@@ -1347,6 +1420,9 @@ std::string Instalador::estado(const std::string& k) const {
     if (k == "atalhos") return std::to_string(s.atalhosFeitos.size());
     if (k == "steam") return std::to_string(s.steamFeitos);  // v0.9.7-1
     if (k == "encontradas") return std::to_string(s.encontradas.size());
+    if (k == "msvc") return s.msvc == Impl::Msvc::Procurando ? "procurando" : s.msvc == Impl::Msvc::Sim ? "sim" : "nao";  // v0.9.7-5
+    if (k == "compilador") return s.compiladorPortatil ? "1" : "0";
+    if (k == "pendente") return s.instalarPendente ? "1" : "0";
     if (k == "recuos") return std::to_string(s.prog.recuos()) + (s.prog.recuos() ? " (" + s.prog.primeiro_recuo() + ")" : "");
     if (k == "cdi") {
         switch (s.cdiEstado) {
@@ -1397,7 +1473,17 @@ void Instalador::simular(Tela t, Simulacao sim) {
         b.edicao = Edition::Original, b.versao = "Blue Stinger v0.8.0 (22396c1d5a)", b.instante = 1;
         s.encontradas = {a, b};
     }
+    s.msvc = sim == Simulacao::SemCompilador ? Impl::Msvc::Nao : Impl::Msvc::Sim;
+    s.compiladorPortatil = sim == Simulacao::SemCompilador;
     s.dl = {};
+    if (sim == Simulacao::CompiladorDownload) {  // v0.9.7-5: o compilador portatil sendo baixado
+        s.prog = {};
+        s.prog.avancar(Step::Toolchain, 0.5);
+        s.inicio            = -(1 * 60 + 12);
+        s.dl.ativo          = true, s.dl.compilador = true, s.dl.i = 1, s.dl.n = 4, s.dl.arquivo = "Zig 0.13.0";
+        s.dl.recebidos      = uint64_t(41) << 20, s.dl.tamanho = 79163968;
+        s.dl.velocidadeFixa = 2.4 * 1024 * 1024;
+    }
     if (sim == Simulacao::Download) {  // v0.9.7-4: o download dos filmes widescreen, ja com a velocidade medida
         s.prog = {};
         s.prog.avancar(Step::Install, 0.92);

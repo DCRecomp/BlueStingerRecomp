@@ -70,6 +70,9 @@ int main(int argc, char** argv) {
         else if (a == L"--disco-ocidental" && more) req.westernDisc = P(args[++i]);
         else if (a == L"--confirmar-download") req.directorsCutConfirmed = true;
         else if (a == L"--tipo" && more) req.buildType = narrow(args[++i]);
+#ifdef _WIN32
+        else if (a == L"--compilador-portatil") req.portableCompiler = true;  // v0.9.7-5: baixa o Zig, o CMake e o Ninja (a opcao e a confirmacao)
+#endif
         else if (plat::cli_toolchain_options() && a == L"--compilador" && more) req.toolchainDir = P(args[++i]);  // so Linux
         else if (plat::cli_toolchain_options() && a == L"--compilador-sistema") req.systemToolchain = true;
         else {
@@ -79,6 +82,9 @@ int main(int argc, char** argv) {
                          "                [--edicao original|remastered] [--filmes-widescreen]\n"
                          "                [--directors-cut en|fr --disco-ocidental <imagem> --confirmar-download]\n"
                          "                (disco japones v1.006 em --disc; baixa o patcher de terceiros, GPL-3.0)\n"
+#ifdef _WIN32
+                         "                [--compilador-portatil]  (sem o Visual Studio: baixa o Zig, o CMake e o Ninja oficiais)\n"
+#endif
                          "                [--projeto <pasta>]      exporta o projeto C++ editavel\n"
                          "  bs-builder --de-projeto <pasta> --out <pasta> [--disc <cdi>]   compila o projeto (mods)\n"
                          "                [--verify-vblanks N] [--sem-filmes] [--tipo Release|Debug]\n"

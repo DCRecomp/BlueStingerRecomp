@@ -24,6 +24,7 @@ endif()
 
 add_library(bs_builder_core STATIC builder_core.cpp builder_platform_${BS_PLAT}.cpp toolchain_${BS_PLAT}.cpp
             child_process_${BS_PLAT}.cpp project_export.cpp resource_inspect.cpp filmes_widescreen.cpp
+            compilador_portatil.cpp
             directors_cut.cpp)
 target_include_directories(bs_builder_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(bs_builder_core PUBLIC bs_recomp_lib bs_runtime bs_runtime_cdi bs_native PRIVATE bs_video_convert bs_native_video tomlplusplus::tomlplusplus)

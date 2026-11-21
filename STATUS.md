@@ -4874,6 +4874,128 @@ Pedido do mantenedor: "Faça as 5 coisas e pode publicar uma nova versão".
 - **Publicação** (pedido do mantenedor, "Faça as 5 coisas e pode publicar uma nova versão"): pre-release só para Windows.
   A tag aponta para o commit deste registro.
 
+### v0.9.7-5 (em andamento): compilador portátil no Windows, o Zig (2026-11-20, pedido do mantenedor)
+
+Pedido: "começa o ZIG" (issue #3: "não quero instalar o Visual Studio"). Escolha do mantenedor: o Zig, o mesmo do Linux;
+a v0.9.7-4 saiu antes, sem ele. **Sem commit** (nenhum pedido de commit nem de publicação desta etapa).
+- **O que o usuário vê:** sem o Visual Studio, a tela da pasta mostra "Compilador" com a lista do que será baixado (Zig
+  0.13.0, CMake 3.30.5, Ninja 1.12.1 e a licença do Ninja, ~125 MB, de ziglang.org e github.com) e a caixa "Baixar o
+  compilador portátil"; "Instalar" só com ela marcada. Na instalação, o download aparece como o dos filmes (peça, MB,
+  velocidade, tempo restante). Com o Visual Studio instalado, nada muda. CLI: `bs-builder ... --compilador-portatil`;
+  instalador: `--compilador-portatil` (e `--vswhere`, para testes).
+- **Como funciona** (`builder/compilador_portatil.{h,cpp}`):
+  - cada download conferido pelo SHA-256 fixado (Ninja: o medido, a release não publica soma);
+  - extração com filtro e limites (`disc::archive_extract_selected`: nomes inseguros recusados; do CMake só
+    `bin/cmake.exe`, `share/cmake-3.30` e o `Copyright.txt`) numa pasta temporária;
+  - a pasta inteira (18 786 arquivos) tem o hash fixado no Builder (`kArvoreSha256`), conferido depois de montar e a cada
+    uso (1 a 2 s); diferente = montada de novo dos zips guardados (também conferidos);
+  - trava entre processos (`plat::DirLock`) e troca recuperável (a antiga vira backup; se a nova não entrar, volta);
+  - a pasta fica em `%LOCALAPPDATA%\BlueStingerRecomp\compilador\zig-0.13.0` (ou `BS_BUILDER_CACHE`), **nunca** no
+    `ProgramData`; o cache do Zig vai para o cache de compilação (`plat::toolchain_env`), não para `%LOCALAPPDATA%\zig`;
+  - `find_toolchain` do Windows com a pasta portátil: o mesmo formato do `toolchain/` do Linux (cada peça roda uma vez).
+- **O jogo compila com o alvo `x86_64-windows-gnu`.** Ajustes no código, todos só para o MinGW (o MSVC não muda: o build
+  `msvc-release` não teve nada a recompilar):
+  - `std::execution::par` não existe na libc++: o rasterizador em software usa o pool de threads padrão
+    (`soft_parallel_posix.cpp`) fora do MSVC;
+  - `<share.h>` (`_SH_DENYNO`) explícito; `shell32`/`ole32` no CMake (o clang ignora `#pragma comment(lib)`);
+  - as bibliotecas de importação com o nome da DLL: `xinput1_4` e `xaudio2_9` (`BS_LIB_XINPUT`, `BS_LIB_XAUDIO2`);
+  - o IID do `ICodecAPI` declarado para o `__uuidof` do mingw-w64 (`mf_movie.cpp`);
+  - **`app/stdio_ucrt_mingw.cpp`**: o `printf` do mingw-w64 chama o mesmo `__stdio_common_vfprintf` do UCRT, mas com as
+    opções 0, e o do MSVC liga `_CRT_INTERNAL_PRINTF_STANDARD_ROUNDING`, que respeita o modo de arredondamento corrente.
+    Na thread do jogo o modo é o do FPSCR (para zero): `711,9` com `%.4f` sai `711.8999` no MSVC e `711.9000` no Zig.
+    **O estado do jogo era idêntico** (o hash de cada passo igual); só o texto dos diagnósticos (`estado.tsv`,
+    `musica.tsv`) diferia. As definições do arquivo chamam o UCRT com as opções do MSVC (`0x24`).
+- **Como a causa foi achada:** a primeira A3 com o Zig acusou 4 rotas no passo 1051 (`y` 91.999 contra 92.000); o
+  build MSVC de controle das mesmas fontes deu igual; a tabela FSCA (131 072 valores) e a tabela de afinação do áudio
+  saíram idênticas nos dois compiladores; trocar a matemática transcendental pela do UCRT não mudou nada (descartado);
+  o `fesetround` do mingw-w64 aplica o modo ao SSE; a comparação dos registros mostrou o hash igual e só o texto
+  diferente; um programa de teste provou que só a opção `0x20` do `printf` do UCRT reproduz o MSVC.
+- **Provas:**
+  - **A3 com o Zig** (executável do teste, dados da Preview, `disc.manifest` `24fa3cb0…8524`): **N8.7 12/12 iguais** e
+    **N8.0 12/12 iguais** (só exceções de SPC já registradas). As 4 sessões gravadas
+    (`sessao-20261021-140145`/`145006`, `_experimental`/`_nativo`) **não rodaram**: as gravações não existem mais nesta
+    máquina (`%LOCALAPPDATA%\BlueStingerRecomp\gravacoes` sumiu). O save `g1` veio de `tmp/sessao-20261108/g1`, com o
+    SHA-256 da referência (`1644836c…`);
+  - executável do Zig: só DLLs do Windows e do UCRT (nenhuma do MinGW nem o runtime do MSVC);
+  - de ponta a ponta, num ambiente sem nada do Visual Studio no `PATH`: `bs-builder --compilador-portatil` baixou as
+    quatro peças, montou, compilou e instalou; o jogo confere os dados e dá o boot sem janela; o `VERSAO.txt` traz o
+    compilador e os hashes;
+  - a montagem conferida de forma independente (Python): o mesmo hash da árvore, e os 18 776 arquivos vindos dos zips
+    idênticos às entradas oficiais; os únicos extras são os 10 gerados pelo Builder;
+  - unitários `compilador_portatil_*` (6: montagem, qualquer adulteração, a anterior mantida, hash errado e
+    cancelamento, nome inseguro, lista oficial); `bs_unit_tests` 386/0; `ctest` com o CDI 26 aprovados, 1 pulado;
+  - capturas: 160 imagens, 0 cortes, com `pasta-sem-compilador` e `progresso-compilador`.
+- **Revisão Codex** (`reviews/codex-20261120-194725.md`): 5 achados, todos aceitos.
+  - **[ALTA]** o manifesto de integridade ficava na pasta que ele protegia e só cobria 7 arquivos. **Corrigido:** o hash da
+    árvore inteira fixado no Builder;
+  - **[MÉDIA]** troca não atômica e sem exclusão. **Corrigido:** trava e troca recuperável;
+  - **[ALTA]** a callback da sondagem do Visual Studio poderia rodar depois do instalador. Hoje as callbacks só rodam no
+    laço de mensagens, que já terminou; mesmo assim, **corrigido** com uma guarda de vida (`weak_ptr`) nas duas sondagens;
+  - **[MÉDIA]** instalar antes de a sondagem terminar falharia sem o Visual Studio. **Corrigido:** o clique fica pendente
+    e segue quando ela terminar (com o Visual Studio) ou a tela mostra a confirmação (sem ele);
+  - **[MÉDIA]** as licenças do mingw-w64 e da libc++ podiam faltar em silêncio. **Corrigido:** falta ou cópia falha é
+    erro de empacotamento, e elas entram no hash da árvore.
+- **Licenças:** `docs/N9-L-LICENCAS.md` seção 3.3.1 (o projeto não redistribui as peças; o jogo leva os avisos do mingw-w64,
+  ZPL 2.1, e da libc++).
+- **`test_builder` 27/0** sobre o pacote com as correções da primeira revisão: os 3 casos novos do compilador portátil
+  (download real e jogo instalado, 273 s; sem o runtime do MSVC e com as licenças; a segunda compilação não baixa, 135 s).
+- **Segunda revisão Codex** (`reviews/codex-20261120-214554.md`, só as correções): confirmou os 5 achados anteriores
+  resolvidos e trouxe 7, todos aceitos (dois em parte):
+  - **[ALTA]** a trava protegia só a montagem: outra instalação podia remontar a pasta durante uma compilação.
+    **Corrigido:** `preparar()` devolve a trava e o Builder a mantém até o fim da compilação (`usoDoCompilador`); uma
+    segunda instalação com o compilador portátil espera;
+  - **[ALTA]** a troca apagava a antiga antes da validação final e uma interrupção perdia a cópia boa. **Corrigido:** sob a
+    trava, uma `.antiga` íntegra com a pasta ausente ou ruim volta ao lugar; a antiga só sai depois de a nova conferir no
+    lugar (senão a nova vai para `.quarentena` e a antiga volta);
+  - **[ALTA]** a falha da restauração era ignorada e a mensagem dizia "a anterior foi mantida". **Corrigido:** códigos de
+    erro separados e a mensagem diz onde a anterior ficou;
+  - **[MÉDIA]** `.montando` sobrava em erro ou cancelamento. **Corrigido:** guarda que a remove em qualquer saída sem
+    sucesso;
+  - **[MÉDIA]** o hash ignorava entradas que não fossem arquivos. **Corrigido em parte:** qualquer entrada que não seja
+    arquivo comum ou pasta (ligação, junction, ponto de reparse) invalida a pasta; as permissões ficam fora do hash, e a
+    executabilidade continua provada rodando o Zig, o CMake e o Ninja, agora sob a trava;
+  - **[MÉDIA]** faltavam testes de corrida e de troca. **Corrigido em parte:** unitários
+    `compilador_portatil_recupera_troca_interrompida`, `_duas_ao_mesmo_tempo` (duas threads, o Zig baixado uma vez) e
+    `_troca_bloqueada_mantem_a_antiga` (um arquivo aberto dentro da pasta antiga: o Windows recusa o rename, conferido);
+    a limpeza da `.montando` conferida nos testes de falha. A falha dupla (troca e restauração) fica só pela leitura do
+    código (exigiria um sistema de arquivos falso);
+  - **[BAIXA]** o hash oficial não era provado fora do Builder. **Corrigido:** `tools/dev/conferir_compilador_portatil.py`
+    (outra implementação do hash e cada arquivo contra os zips), rodado pelo `test_builder` sobre a pasta que o caso do
+    Zig montou.
+- **`test_instalador` I9 (novo):** máquina sem o Visual Studio (`--vswhere` inexistente), só pelo teclado: o "Instalar"
+  durante a sondagem (atrasada por `BS_INSTALADOR_TESTE_SONDA_MS`, só teste) fica pendente; sem o Visual Studio a tela
+  mostra o compilador portátil com o foco na caixa e não instala sem ela; marcada, instala a Original com o Zig. Rodado
+  sozinho (154 s), com o kit do pacote de desenvolvimento: na suíte, o kit é o HEAD exportado, que só terá os ajustes do
+  MinGW depois do commit. Capturas `pasta-procurando` e `pasta-sem-vs`.
+- **Poda (mantenedor, "enxugar a pasta"):** do zip do Zig não se extraem as libc e os cabeçalhos de outros sistemas, o
+  ThreadSanitizer nem a documentação (`podado()`; o mesmo filtro na ferramenta de conferência). A pasta: 18 786 → 10 594
+  arquivos, 350 → 307 MB; a conferência por uso, 1,0 → 0,7 s. Hash novo `c8d78208…6c410f`, conferido fora do Builder;
+  o jogo compila inteiro com ela (com os filmes); unitários 389/0.
+- **Terceira revisão Codex** (`reviews/codex-20261120-220357.md`, as correções da segunda, a poda e a ferramenta): confirmou
+  a trava viva até o fim da compilação, a guarda da `.montando`, a troca validada no lugar e o filtro da poda idêntico no
+  C++ e no Python; 3 achados, todos aceitos:
+  - **[MÉDIA]** a recuperação da `.antiga` ignorava as falhas dos renames e a `trocar()` podia apagar a única cópia boa.
+    **Corrigido:** cada passo conferido, o "recuperado" só depois de a pasta conferir, a `.quarentena` velha sai antes, e
+    sem conseguir afastar a pasta ruim a montagem para com a `.antiga` preservada; a `trocar()` recusa apagar uma
+    `.antiga` válida. Unitário `compilador_portatil_recupera_com_pasta_ruim_e_quarentena` (o cenário da revisão);
+  - **[BAIXA]** a ferramenta Python não recusava ligações como o C++. **Corrigido:** ligação, junction ou entrada que não
+    seja arquivo comum invalida a pasta;
+  - **[BAIXA]** os unitários não exercitavam a poda nem a trava durante o uso. **Corrigido:** o zip falso tem arquivos em
+    cada prefixo podado e nas famílias que ficam; `compilador_portatil_trava_cobre_o_uso` segura o primeiro token e
+    prova que a segunda chamada espera até ele sair. `bs_unit_tests` 391/0.
+  - Não verificado pelo Codex: se a poda tira algo de que o Zig precisa no Windows. Provado na prática: o jogo compila
+    inteiro com a pasta enxugada, e a A3 curta abaixo.
+- **A3 curta com o compilador enxugado** (o jogo que o `bs-builder` gerou com a pasta podada e o kit do pacote de
+  desenvolvimento, já com o `stdio_ucrt_mingw.cpp`): N8.7, 4 rotas (`passo_cgate_experimental`, `passo_combate_nativo`,
+  `passo_load_slot1_experimental` com o `g1`, `passo_newgame_area1_nativo`): **4/4 iguais**.
+- **`test_instalador` sobre o pacote com as correções da primeira revisão:** 29 de 31; o I1 inteiro passou (7 249 s, o
+  download dos filmes do Internet Archive). As 2 falhas (I1 "entrada de desinstalação" e I6 "atalho, entrada e lista
+  removidos") foram interferência minha: o I9 avulso rodou ao mesmo tempo e registrou a entrada dele na mesma chave de
+  teste do registro (`HKCU\Software\BlueStingerRecomp\Teste\Uninstall`) às 21:45; o I1 conferiu às 22:24 e achou duas. **Não contam como aprovados:** a suíte
+  inteira roda de novo, isolada, depois do commit (com o I9 dentro).
+- **Pendente:** a suíte inteira (`test_builder` e `test_instalador`, isolados) depois do commit; o
+  `BlueStinger-Developer` (projeto editável) continua só com o MSVC.
+
 ### v0.9.7-2: o instalador baixa o mod "filmes widescreen" (2026-11-18, pedido do mantenedor)
 
 Pedido: "Publica no github uma nova versão que já faz o download dos vídeos". Worktree `tmp/wt-0972`, branch `v0.9.7-2`

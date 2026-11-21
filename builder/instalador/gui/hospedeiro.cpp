@@ -83,11 +83,11 @@ int capturar(const Config& base, const fs::path& pasta, const std::vector<int>& 
     using S = Instalador::Simulacao;
     const std::pair<Tela, S> casos[] = {
         {Tela::BoasVindas, S::Nada},     {Tela::BoasVindas, S::Sucesso},  {Tela::Edicao, S::Nada},
-        {Tela::Cdi, S::Nada},            {Tela::Cdi, S::DirectorsCut},    {Tela::Componentes, S::Nada},    {Tela::Componentes, S::Remastered},    {Tela::Pasta, S::Nada},
-        {Tela::Pasta, S::AvisoPasta},    {Tela::Progresso, S::Progresso}, {Tela::Progresso, S::Download}, {Tela::Conclusao, S::Sucesso},
+        {Tela::Cdi, S::Nada},            {Tela::Cdi, S::DirectorsCut},    {Tela::Componentes, S::Nada},    {Tela::Componentes, S::Remastered},    {Tela::Pasta, S::Nada},    {Tela::Pasta, S::SemCompilador},
+        {Tela::Pasta, S::AvisoPasta},    {Tela::Progresso, S::Progresso}, {Tela::Progresso, S::Download},    {Tela::Progresso, S::CompiladorDownload}, {Tela::Conclusao, S::Sucesso},
         {Tela::Conclusao, S::Erro},      {Tela::Conclusao, S::Cancelado}, {Tela::Verificar, S::Verificado},
         {Tela::Verificar, S::Erro},      {Tela::Desinstalar, S::Nada},    {Tela::DesinstalarFim, S::Desinstalado}};
-    const char* nomesSim[] = {"", "progresso", "sucesso", "erro", "cancelado", "verificado", "desinstalado", "aviso", "directors-cut", "download", "remastered"};
+    const char* nomesSim[] = {"", "progresso", "sucesso", "erro", "cancelado", "verificado", "desinstalado", "aviso", "directors-cut", "download", "remastered", "sem-compilador", "compilador"};
     std::error_code ec;
     fs::create_directories(pasta, ec);
     std::ofstream rel(pasta / "cortes.txt", std::ios::binary | std::ios::trunc);
@@ -229,8 +229,8 @@ int roteiro_teclas(const Config& c, const fs::path& roteiro, const fs::path& cap
             ss >> chave >> valor >> seg;
             const double fim = relogio() + seg;
             while (app.estado(chave) != valor) {
-                const std::string v = app.estado(chave);  // valor final diferente: falha ja (so "-" e "conferindo" esperam)
-                if (v != "-" && v != "conferindo" && !app.trabalhando()) return falha("estado " + chave + " = " + v + ", esperado " + valor);
+                const std::string v = app.estado(chave);  // valor final diferente: falha ja (so "-", "conferindo" e "procurando" esperam)
+                if (v != "-" && v != "conferindo" && v != "procurando" && !app.trabalhando()) return falha("estado " + chave + " = " + v + ", esperado " + valor);
                 if (relogio() > fim) return falha("estado " + chave + " = " + app.estado(chave) + ", esperado " + valor);
                 passo({});
                 std::this_thread::sleep_for(std::chrono::milliseconds(50));
@@ -282,6 +282,8 @@ bool ler_linha(const std::vector<std::wstring>& args, Linha& l) {
             l.c.directorsCut = args[++i] == L"en" ? dc::Language::En : dc::Language::Fr;
         else if (a == L"--disco-ocidental" && more) l.c.discoOcidental = fs::path(args[++i]);
         else if (a == L"--confirmar-download") l.c.confirmarDownload = true;
+        else if (a == L"--compilador-portatil") l.c.compiladorPortatil = true;  // v0.9.7-5
+        else if (a == L"--vswhere" && more) l.c.vswhere = fs::path(args[++i]);  // testes: sem o Visual Studio
         else if (a == L"--pasta" && more) l.c.pastaDesinstalar = fs::path(args[++i]);
         else if (a == L"--captura" && more) l.captura = fs::path(args[++i]);
         else if (a == L"--teclas" && more) l.teclas = fs::path(args[++i]);

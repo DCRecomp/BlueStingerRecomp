@@ -1,9 +1,14 @@
 #include "toolchain.h"
 
+#include "builder_platform.h"
+#include "compilador_portatil.h"
+
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h>
 
+#include <fstream>
+#include <sstream>
 #include <stdexcept>
 
 namespace fs = std::filesystem;
@@ -16,7 +21,9 @@ const char* const kToolchainHelp =
     "https://visualstudio.microsoft.com/downloads/ (Ferramentas para Visual Studio)\n"
     "e marque a carga de trabalho \"Desenvolvimento para desktop com C++\"\n"
     "(inclui o MSVC x64, o SDK do Windows e as ferramentas CMake do C++).\n"
-    "Um Visual Studio 2022 ou mais novo com essa carga de trabalho tambem serve.";
+    "Um Visual Studio 2022 ou mais novo com essa carga de trabalho tambem serve.\n"
+    "Ou use o compilador portatil (Zig, CMake e Ninja oficiais, ~125 MB, nada instalado no sistema): no instalador, marque\n"
+    "\"Baixar o compilador portatil\" na tela da pasta; no bs-builder, --compilador-portatil.";
 
 namespace {
 
@@ -47,6 +54,44 @@ std::string trim(std::string s) {
     return s;
 }
 
+// v0.9.7-5: o compilador portatil (compilador_portatil.h), montado pelo Builder: o mesmo formato do toolchain/ do Linux.
+// Cada peca roda uma vez (--version): arquivo corrompido ou bloqueado aparece aqui, com o nome, e nao no meio da compilacao.
+Toolchain portable_toolchain(const fs::path& dir, const std::function<void(const std::string&)>& say) {
+    Toolchain   tc;
+    std::string motivo;
+    if (!portatil::pronta(dir, &motivo))
+        throw std::runtime_error("compilador portatil incompleto em " + path_text(dir) + " (" + motivo +
+                                 "): o Builder o monta de novo na proxima instalacao com o compilador portatil.");
+    tc.env = current_env();
+    // nada do ambiente de um Visual Studio aberto: o Zig usa so o que traz
+    for (const wchar_t* v : {L"INCLUDE", L"LIB", L"LIBPATH", L"CL", L"_CL_"}) tc.env.erase(v);
+    tc.installRoot = dir;
+    tc.cmake       = dir / L"cmake" / L"bin" / L"cmake.exe";
+    tc.ninja       = dir / L"bin" / L"ninja.exe";
+    auto primeira  = [&](const std::vector<std::wstring>& argv) {
+        std::string first;
+        const auto  r = run_process_argv(argv, {}, tc.env, [&](const std::string& l) {
+            if (first.empty() && !l.empty()) first = l;
+        }, nullptr, 60000);
+        return r.started && r.exitCode == 0 ? first : std::string();
+    };
+    const std::string cm = primeira({tc.cmake.native(), L"--version"}), nj = primeira({tc.ninja.native(), L"--version"});
+    const std::string zg = primeira({(dir / L"zig" / L"zig.exe").native(), L"version"});
+    if (cm.empty() || nj.empty() || zg.empty())
+        throw std::runtime_error("o compilador portatil nao executa (" + std::string(cm.empty() ? "CMake" : nj.empty() ? "Ninja" : "Zig") +
+                                 "): um antivirus pode estar bloqueando " + path_text(dir));
+    std::ifstream      in(dir / L"VERSAO.txt", std::ios::binary);
+    std::ostringstream versao;
+    versao << in.rdbuf();
+    tc.cmakeArgs   = {L"-DCMAKE_TOOLCHAIN_FILE=" + plat::cmake_path(dir / L"bs-toolchain.cmake")};
+    tc.licenses    = {{dir / L"licencas" / L"mingw-w64-COPYING.txt", L"mingw-w64-COPYING.txt"},
+                      {dir / L"licencas" / L"libcxx-LICENSE.txt", L"libcxx-LICENSE.txt"}};
+    tc.stamp       = path_text(dir) + "\n" + versao.str();
+    tc.description = "Compilador: portatil do Builder (Zig " + zg + ")\n" + versao.str() + "CMake: " + cm + "\nNinja: " + nj + "\n";
+    say("compilador portatil: " + path_text(dir) + " (Zig " + zg + ")");
+    say("cmake: " + cm + "; ninja " + nj);
+    return tc;  // sem runtime do MSVC: o jogo do Zig so usa DLLs do Windows (UCRT)
+}
 } // namespace
 
 Toolchain find_toolchain(const ToolchainOptions& opt, const std::function<void(const std::string&)>& log) {
@@ -54,6 +99,7 @@ Toolchain find_toolchain(const ToolchainOptions& opt, const std::function<void(c
     auto      say = [&](const std::string& s) {
         if (log) log(s);
     };
+    if (!opt.toolchainDir.empty()) return portable_toolchain(opt.toolchainDir, say);
     std::error_code ec;
     if (!opt.vcvars.empty()) {
         tc.vcvars = opt.vcvars;

@@ -220,6 +220,61 @@ void archive_extract_all(const fs::path& archive, const fs::path& dir, const std
     extract_impl(archive, dir, progress, cancel, false);
 }
 
+void archive_extract_selected(const fs::path& archive, const fs::path& dir, const ArchiveSelection& sel,
+                              const std::function<void(double)>& progress, const std::atomic<bool>* cancel) {
+    if (lowerExt(pathText(archive.filename())) != ".zip") throw DiscError("so .zip: " + pathText(archive.filename()));
+    std::error_code ec;
+    fs::create_directories(dir, ec);
+    if (ec) throw DiscError("nao foi possivel criar " + pathText(dir));
+    Zip                 z(archive);
+    const auto          all = z.list();
+    std::vector<mz_uint> pick;
+    uint64_t            total = 0;
+    for (mz_uint i = 0; i < mz_uint(all.size()); ++i) {
+        const auto& en = all[i];
+        if (!safeName(en.name)) throw DiscError("pacote com nome de arquivo inseguro: " + en.name);
+        if (en.dir || (sel.keep && !sel.keep(en.name))) continue;
+        pick.push_back(i);
+        if (pick.size() > sel.maxEntries) throw DiscError("pacote com arquivos demais (" + std::to_string(pick.size()) + "+)");
+        if (en.size > sel.maxBytes || total + en.size > sel.maxBytes) throw DiscError("pacote grande demais");
+        total += en.size;
+    }
+    uint64_t done = 0;
+    struct Out {
+        std::ofstream*                      o;
+        uint64_t*                           done;
+        uint64_t                            total;
+        const std::function<void(double)>*  say;
+        const std::atomic<bool>*            cancel;
+    };
+    for (const mz_uint i : pick) {
+        checkCancel(cancel);
+        const fs::path dst = dir / u8(all[i].name);
+        fs::create_directories(dst.parent_path(), ec);
+        std::ofstream o(dst, std::ios::binary | std::ios::trunc);
+        if (!o) throw DiscError("nao foi possivel criar " + pathText(dst));
+        Out        ctx{&o, &done, total, &progress, cancel};
+        const bool ok = mz_zip_reader_extract_to_callback(
+            &z.z, i,
+            [](void* op, mz_uint64, const void* buf, size_t n) -> size_t {
+                auto* c = static_cast<Out*>(op);
+                if (c->cancel && c->cancel->load()) return 0;
+                c->o->write(static_cast<const char*>(buf), std::streamsize(n));
+                if (!*c->o) return 0;
+                *c->done += n;
+                if (c->total && *c->say) (*c->say)(std::clamp(double(*c->done) / double(c->total), 0.0, 1.0));
+                return n;
+            },
+            &ctx, 0);
+        o.close();
+        checkCancel(cancel);
+        if (!ok || !o)
+            throw DiscError("ZIP: falha ao extrair " + all[i].name + " (" + mz_zip_get_error_string(mz_zip_get_last_error(&z.z)) +
+                            "; espaco em disco?)");
+    }
+    if (progress) progress(1.0);
+}
+
 namespace {
 fs::path extract_impl(const fs::path& archive, const fs::path& dir, const std::function<void(double)>& progress,
                       const std::atomic<bool>* cancel, bool needImage) {
