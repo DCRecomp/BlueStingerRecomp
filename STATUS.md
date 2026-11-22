@@ -3531,6 +3531,8 @@ somente leitura está em `docs/N8-7-DIAGNOSTICO.md`. A regressão parou nas refe
 
 ### Roadmap N0–N10 (decisão do mantenedor, 2026-10-22)
 
+**Redução do escopo da 1.0 e nova numeração (mantenedor, 2026-11-22):** N9.4 e N9.9–N9.11 saem do N9 e viram N10.0–N10.3, depois da 1.0; os mods (antigo N10) viram N11. O N9 fica N9.0 edições, N9.1 instalador, N9.2 interface, N9.3 widescreen e HUD (antigo N9.5, com os filmes widescreen), N9.4 luz e sombras (antigo N9.6), N9.5 água (antigo N9.7), N9.6 texturas e AA (antigo N9.8) e N9.7 estabilização (antigo N9.12). A 1.0 é N0–N9 mais o gate de campanha. Equivalência completa em `docs/N9-PLANO.md` seção 17; os registros abaixo desta data usam os números antigos.
+
 A etapa **N9 — Remasterização** entrou antes dos mods. O antigo escopo de mods e a elevação dos sistemas do jogo
 viraram a **N10**. N0–N8 mantêm os objetivos e a ordem. Ordem de execução:
 1. N7 permanece **funcional, 95%**, com AMD e fidelidade de fog/volumes abertas; isso não bloqueia N8.0–N8.6, mas
@@ -3554,9 +3556,12 @@ Plano: `docs/PLANO-PORT-NATIVO.md`, seções 4 e 4.2.
 | N7 Vulkan | **funcional, em fechamento técnico**: Vulkan padrão da janela com recuo seguro para o software; N7a, N7b e N7c validadas. Os dois bloqueios ganharam evidência no N8.7 (2026-10-28). **AMD:** a causa do `Invalid Read` foi demonstrada e corrigida (descritor não reescrito no realloc de `tris_`; 0/90 depois). **Fog e volumes:** implementados no software e no Vulkan, iguais em 32 bits, com a sombra conferida com o Flycast; falta um quadro de fog pareado. O N7 fica em 95% até o mantenedor encerrar formalmente esses bloqueios. SSAO, 16:9 real e MSAA permanecem no N9 (`docs/N7-PLANO.md` seção 25) | 95 |
 | N8 Sem legado | **iniciada** em 2026-10-24 (D-N8-1 a D-N8-4). N8.0 **concluído** em 2026-10-25 (regressão nível 3, correções, 16 referências validadas e reproduzidas, fixação do áudio nas suítes históricas); N8.1 **concluído** em 2026-10-26 (cadência B, TMU, CCN, cabo e ponte de interrupções no tempo lógico); N8.2 **concluído** em 2026-10-26 (produto × validação: papéis, `BS_VALIDACAO`, catraca do mapa); N8.3 **concluído** em 2026-10-26 (serviço nativo das syscalls; BIOS, drive e flash simulados fora do produto); N8.4 **concluído** em 2026-10-27 (barramento sem dispositivos; Maple, `--controles/--saves legado` fora do produto); N8.5 **concluído** em 2026-10-27 (filme legado e conversor YUV fora do produto); N8.6 **concluído** em 2026-10-27 (área de som nativa; AICA, áudio legado e DMA do G2 fora do produto); N8.7 **concluído** em 2026-10-30: AMD corrigida, fog e volumes nos dois renderizadores, o caminho gráfico do legado (TA, PVR, VRAM, vídeo, interrupções, DMAC, system block, rasterizador de referência) fora do produto e em sombra na validação; a fronteira guest fica no contrato do jogo (D-K1 a); N8.8 com **fechamento técnico em 2026-11-02, com ressalvas**: regressão nível 3 por composição, H9 e campanha completa abertos (`docs/N8-8-FECHAMENTO.md`) | 95 |
 | N9 Remasterização | **iniciada** em 2026-11-02 (`docs/N9-PLANO.md`): duas edições, Original e Remastered, do mesmo núcleo. N9.0 fechado (2026-11-02). N9-L L0–L5 e a v0.8.0 Preview publicados (validação no Bazzite com o mantenedor). **N9.1 (instalador) e N9.2 (interface da Remastered) com fechamento técnico aceito** (2026-11-04 e 2026-11-05), com as conferências visuais manuais pendentes com o mantenedor. **N9.3 (saves de PC) cancelado em 2026-11-05** por decisão do mantenedor. **N9.5 (widescreen e HUD) com fases 0–5 concluídas tecnicamente** (fases 1–3 publicadas como v0.9.5-1..3; fases 4 e 5 em commits locais, bateria final de 2026-11-10 sem falhas; visual na janela com o mantenedor). N9.6 autorizado em 2026-11-10: fase 0 (investigação) e fase 1 (oclusão ambiente opcional, desligada por padrão, com meia resolução e qualidades), fase 2a (a marca de cena medida, alarme de validação), fase 2b (o catálogo de materiais por `TextureId` e o AO sob as translúcidas), fase 3 (a luz das fontes), fase 4 (as sombras aprimoradas) e fase 5 (o menu e a matriz) em commits locais, com a bateria final de 2026-11-11 sem falhas (o visual e o preset "Alto" com o mantenedor); N9.12 (estabilização no final do N9, com a do N9.5) registrado. Ordem gráfica N9.5 → N9.8 e depois N9.4, N9.9–N9.11. A campanha completa continua sendo o gate obrigatório depois do N9 | 27 |
-| N10 Mods e elevação | não iniciada (extensões preparadas: mídia do N5/N6, texturas HD por conteúdo e shaders validados do N7) | 0 |
+| N10 Depois da 1.0 | não iniciada: N10.0 controles e PC (antigo N9.4), N10.1 cinemáticas, áudio e acessibilidade (antigo N9.9), N10.2 refinamentos (antigo N9.10), N10.3 desempenho e compatibilidade (antigo N9.11) | 0 |
+| N11 Mods e elevação (antigo N10) | não iniciada (extensões preparadas: mídia do N5/N6, texturas HD por conteúdo e shaders validados do N7) | 0 |
 
 Progresso geral: ~81 % (onze etapas de peso igual; N8 em 95 % é estimativa, com campanha e H9 abertos).
+
+Rumo à 1.0 (escopo de 2026-11-22): ~88 %, com as 11 etapas da 1.0 (N0–N9 e o gate de campanha) de peso igual; N7 e N8 em 95 %, N9 em 6 de 8 subetapas com fechamento técnico (75 %) e a campanha em 0 %.
 
 ### N7c: câmera livre e segundo analógico (2026-10-22; worktree n7-vulkan)
 
@@ -6954,3 +6959,9 @@ Depois das correções: todos os testes passam, análise idêntica (3 883 funç�
 - Campanha completa (D-N8-4): obrigatória, não aprovada, no gate pós-N9.
 - `tools/dev/regressao.ps1`: limite de 3 h do `n6_h` menor que a duração real (6,1 h); corrigir antes de uma futura integral.
 - clang-cl não está instalado nesta máquina. Por enquanto só o MSVC é testado.
+
+### Verificação da issue #1 com o pacote publicado (2026-11-21)
+
+- No ZIP da v0.9.7-5, a navegação com `--teclas` inseriu o caminho no campo do disco e chegou à tela de componentes com `cdi = ok` em seis casos: GDI americano e japonês, CUE/BIN americano, CDI americano e CHD americano e japonês.
+- Na janela real, o seletor do Windows abriu em outro processo e devolveu os caminhos de um CHD japonês e de um CDI americano. Em ambos, a janela principal permaneceu aberta e mostrou “Imagem válida” com o identificador correto.
+- O fechamento relatado não foi reproduzido. Os testes usaram imagens locais. CUE/BIN japonês, CDI japonês e o ambiente do autor do relato seguem sem validação. Roteiros, saídas e capturas em `tmp/issue1-v0975` na raiz do repositório.

@@ -1,5 +1,7 @@
 # N9 — Blue Stinger Remastered: planejamento
 
+> **Nova numeração (2026-11-22):** o escopo da 1.0 foi reduzido e o N9 foi renumerado. N9.4 e N9.9–N9.11 viraram N10.0–N10.3, e os mods (antigo N10) viraram N11. A equivalência está na seção 17; as seções anteriores a ela usam os números antigos.
+
 **Situação: N9 autorizado e iniciado em 2026-11-02. O mantenedor considerou o fechamento técnico do N8 suficiente para abrir o N9; as ressalvas do N8 e a campanha completa (seção 14) continuam abertas. N9.0 com fechamento técnico confirmado pelo mantenedor (`docs/N9-0-EDICOES.md`). N9-L (`docs/N9-L-PLANO.md`) L0–L5 e a v0.8.0 Preview publicados, com a validação no Bazzite pelo mantenedor, que não bloqueia a remasterização (2026-11-04). N9.1 (instalador, `docs/N9-1-INSTALADOR.md`) com fechamento técnico aceito pelo mantenedor em 2026-11-04, com ressalvas (janela real do Windows e Bazzite pendentes com ele). N9.2 (interface da Remastered, `docs/N9-2-INTERFACE.md`) com fechamento técnico aceito pelo mantenedor em 2026-11-05, com as conferências visuais manuais (Windows e Bazzite) pendentes com ele. **N9.3 (saves de PC) cancelado em 2026-11-05 por decisão do mantenedor: o sistema de saves do jogo original fica como está (seção 15). Próximo: N9.5, widescreen e HUD; a remasterização gráfica (N9.5–N9.8) vem antes do N9.4 (seção 15).** Planejamento aprovado em
 2026-10-23 e atualizado com as lições do N8 em 2026-10-28 (seção 13). Este documento registra o escopo, a arquitetura e os critérios. A ordem N0–N10 não muda (`docs/PLANO-PORT-NATIVO.md`, seções 4 e 4.2).
 
@@ -221,7 +223,7 @@ recomendada, **O** = opcional) com complexidade (**P**, **M**, **G**, **GG**).
   original animado com o menu antigo trocado. "Salvar" na pausa fica desativado ("nos pontos de gravação do jogo"): o
   jogo salva só nos pontos de save, como o original (N9.3 cancelado, seção 15).
 
-### N9.3 — Saves nativos de PC — **CANCELADO** (2026-11-05)
+### N9.3 antigo — Saves nativos de PC — **CANCELADO** (2026-11-05; o número N9.3 passou para o widescreen, seção 17)
 
 Cancelado por decisão do mantenedor em 2026-11-05, para preservar a fidelidade ao jogo original: nada de autosave,
 salvamento livre, checkpoints automáticos nem gerenciador de saves. Os pontos de save, as restrições e o fluxo de
@@ -243,7 +245,7 @@ só como histórico:
 >   na Remastered e vice-versa onde o formato permitir; corrupção simulada recuperada do backup; nenhum save original
 >   alterado pela migração (hash); o oráculo do Flycast continua aceitando os `.vms` exportados.
 
-### N9.4 — Controles e experiência de PC (E, M)
+### N10.0 (antigo N9.4) — Controles e experiência de PC (E, M) — movido para depois da 1.0 (seção 17)
 
 - Remapeamento por ação no menu; teclado, mouse, Xbox e PlayStation, com ícones pelo dispositivo; sensibilidade e
   zonas mortas; inversão; vibração configurável; vários monitores; janela, tela cheia e sem bordas; cursor e foco
@@ -252,7 +254,7 @@ só como histórico:
 - **Aceitação:** cada ação remapeável e persistida; troca de dispositivo troca os ícones na hora; estado por passo
   igual ao do mapa padrão com o mesmo roteiro lógico; testes em 1 e 2 monitores.
 
-### N9.5 — Widescreen verdadeiro e HUD (E, G)
+### N9.3 (antigo N9.5) — Widescreen verdadeiro e HUD (E, G)
 
 - 16:9 verdadeiro (21:9 avaliado), sem esticar o 4:3: projeção do SDK (`njSetScreen` ou equivalente) e campo de visão,
   enquadramento da câmera, HUD independente da resolução, legendas e menus em áreas seguras.
@@ -296,7 +298,7 @@ só como histórico:
   21:9 avaliado e não habilitado (as bandas ficam 20–80 % vazias nas salas medidas). Bateria final de 2026-11-10 sem
   falhas (seção 16.5 da auditoria). A visualização na janela real fica com o mantenedor; C8 continua bloqueado.
 
-### N9.6 — Iluminação, sombras e materiais (R, GG)
+### N9.4 (antigo N9.6) — Iluminação, sombras e materiais (R, GG)
 
 - Um pipeline integrado à geometria 3D, não só filtros de imagem: investigar profundidade e normais disponíveis,
   transformações e câmera, materiais e luzes originais; luzes dinâmicas, sombras em tempo real, emissivos, metal,
@@ -335,7 +337,7 @@ só como histórico:
   desligados nos três. As sombras aprimoradas, a luz e o SSAO ficam na escolha manual (menu e `graficos.toml`, só na
   Remastered com o Vulkan). Na AMD integrada em 1080, as sombras aprimoradas dobram o custo da GPU.
 
-### N9.7 — Água e reflexos (R, G)
+### N9.5 (antigo N9.7) — Água e reflexos (R, G)
 
 - Ondulação, reflexos em superfícies molhadas, SSR quando viável, alternativa para o que está fora da tela,
   transparência e refração quando apropriadas, qualidade ajustável.
@@ -355,7 +357,7 @@ só como histórico:
   imagens sob demanda, VRAM, widescreen, SSAO, Original), o plano incremental A0–A7 com os gates e as decisões pendentes (os
   padrões da água, a unificação no catálogo, a variante do shader). A implementação oficial espera a autorização.
 
-### N9.8 — Texturas HD, antialiasing e pós-processamento (E para texturas e AA; R para o resto; G)
+### N9.6 (antigo N9.8) — Texturas HD, antialiasing e pós-processamento (E para texturas e AA; R para o resto; G)
 
 - Substituição de texturas sem alterar os dados originais: identificação estável por conteúdo (contrato do N7),
   manifestos, pacotes HD opcionais, cache, mipmaps, anisotrópica, UVs e transparência preservados.
@@ -364,7 +366,7 @@ só como histórico:
 - **Aceitação:** pacote HD de teste carregado, com recuo ao original por textura ausente; uso de VRAM medido por área;
   AA escolhido com comparação de custo e qualidade documentada; HUD e legendas fora dos filtros.
 
-### N9.9 — Cinemáticas, áudio e acessibilidade (E para acessibilidade; R para os recursos; M)
+### N10.1 (antigo N9.9) — Cinemáticas, áudio e acessibilidade (E para acessibilidade; R para os recursos; M) — movido para depois da 1.0 (seção 17)
 
 - Filmes substituíveis (upscale) com a mesma duração, proporção, eventos e sincronia de áudio e legendas (contrato do
   N5).
@@ -375,13 +377,13 @@ só como histórico:
 - **Aceitação:** os 17 filmes com a mesma duração e eventos com pacote de teste; música e fala substituídas sem mudar o
   estado por passo; cada opção de acessibilidade persistida e aplicada nos menus, no HUD e nas legendas.
 
-### N9.10 — Refinamentos e recursos de PC (O/R, ver tabela 8)
+### N10.2 (antigo N9.10) — Refinamentos e recursos de PC (O/R, ver tabela 8) — movido para depois da 1.0 (seção 17)
 
 Inventário moderno, mapa das áreas visitadas, diário opcional de objetivos, tempo de jogo, estatísticas, capturas,
 modo foto, conquistas locais, perfis de jogador, detecção de atualização e erros melhores. Inventário, mapa e
 objetivos preservam a descoberta e as regras do jogo, sem revelar conteúdo antes da hora.
 
-### N9.11 — Desempenho, compatibilidade e qualidade (E, G)
+### N10.3 (antigo N9.11) — Desempenho, compatibilidade e qualidade (E, G) — movido para depois da 1.0 (seção 17)
 
 - Perfis de qualidade; VRAM e recursos Vulkan otimizados; menos esperas entre CPU e GPU; frame time e memória
   monitorados; NVIDIA, AMD e Intel; recuperação segura de falha do dispositivo; 1080p, 1440p e 4K; saves antigos;
@@ -394,7 +396,7 @@ objetivos preservam a descoberta e as regras do jogo, sem revelar conteúdo ante
   rotas; percentil 99 do tempo de quadro dentro do orçamento do perfil; 0 faltas de áudio no H9 em cada perfil; campanha
   completa nas duas edições, com **uma única gravação** (gate pós-N9, seção 14).
 
-### N9.12 — Estabilização (E, M) — registrada em 2026-11-10
+### N9.7 (antigo N9.12) — Estabilização (E, M) — registrada em 2026-11-10
 
 Etapa no final do N9, depois do N9.11 e antes do gate de campanha (seção 14), para tratar a instabilidade acumulada
 pelas subetapas (decisão do mantenedor, 2026-11-10). Não começa sem autorização. Inclui:
@@ -515,7 +517,7 @@ marcos 3–5, já que só depende do perfil.
 | GPU AMD integrada (pendência do N7) | recuperação do dispositivo; a matriz do N9.11 inclui AMD |
 | Escopo grande | prioridades E/R/O; marcos verificáveis; O só depois dos E |
 
-## 11. Preparação para o N10
+## 11. Preparação para o N10 (agora N11, mods; seção 17)
 
 - Os contratos de substituição usados no N9 (texturas por conteúdo, filmes por ID, músicas e falas por ID, shaders,
   legendas) são os mesmos que o N10 vai expor aos mods, com manifestos versionados.
@@ -672,3 +674,36 @@ Decisões do mantenedor, em 2026-11-10, depois da bateria final do N9.5:
 - **Uma etapa no final do N9 para a instabilidade:** o N9.12 (seção 5), depois do N9.11 e antes do gate de campanha.
 - **Registrado:** "estabilização do N9.5 para corrigir o cálculo de VRAM, testar a árvore integrada e conferir os riscos
   identificados." Fica dentro do N9.12.
+
+## 17. Redução do escopo da 1.0 e nova numeração (2026-11-22)
+
+Decisão do mantenedor, em 2026-11-22: reduzir o escopo do N9. Os itens de controles, acessibilidade, recursos extras e
+otimização saem do N9 e vão para o N10, depois da 1.0. O N9 é renumerado sem lacunas, e os mods passam para o N11.
+Os documentos, commits e versões anteriores (por exemplo `docs/N9-5-AUDITORIA.md` e as versões v0.9.5-x) mantêm os
+números antigos; esta tabela faz a equivalência.
+
+| Número novo | Número antigo | Subetapa | Fase |
+|---|---|---|---|
+| N9.0 | N9.0 | Edições e perfis | 1.0 |
+| N9.1 | N9.1 | Instalador | 1.0 |
+| N9.2 | N9.2 | Interface da Remastered | 1.0 |
+| — | N9.3 | Saves de PC (cancelado em 2026-11-05) | — |
+| N9.3 | N9.5 | Widescreen e HUD, incluindo os filmes widescreen | 1.0 |
+| N9.4 | N9.6 | Iluminação, sombras e materiais | 1.0 |
+| N9.5 | N9.7 | Água e reflexos | 1.0 |
+| N9.6 | N9.8 | Texturas HD, antialiasing e pós-processamento | 1.0 |
+| N9.7 | N9.12 | Estabilização | 1.0 |
+| N10.0 | N9.4 | Controles e experiência de PC | depois da 1.0 |
+| N10.1 | N9.9 | Cinemáticas, áudio e acessibilidade | depois da 1.0 |
+| N10.2 | N9.10 | Refinamentos e recursos de PC | depois da 1.0 |
+| N10.3 | N9.11 | Desempenho, compatibilidade e qualidade | depois da 1.0 |
+| N11 | N10 | Mods e elevação dos sistemas do jogo | depois da 1.0 |
+
+Consequências:
+- **Ordem da 1.0:** N9.3 → N9.4 → N9.5 → N9.6 → N9.7 (estabilização) → gate de campanha (seção 14) → 1.0. A
+  estabilização vem logo depois do N9.6, sem esperar os itens movidos.
+- **Gate de campanha:** continua obrigatório antes da 1.0, nas duas edições, com uma única gravação. Ele saiu do critério
+  de aceitação do antigo N9.11 (agora N10.3) e fica só na seção 14.
+- **H9 (faltas de áudio):** continua pendente para a 1.0, tratado no N9.7.
+- **N10.3:** leva o diagnóstico do desempenho no Linux (P-L1) e a L6 do N9-L. O N9-L L0–L5 segue como está.
+- Nas seções anteriores a esta, os números são os antigos.
