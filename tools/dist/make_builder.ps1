@@ -74,6 +74,8 @@ Copy-Item (Join-Path $build "builder\BlueStinger-Recompiler.exe") $stage
 Copy-Item (Join-Path $build "builder\BlueStinger-Desinstalar.exe") $stage
 Copy-Item (Join-Path $build "builder\BlueStinger-Developer.exe") $stage
 Copy-Item (Join-Path $build "builder\bs-builder.exe") $stage
+# RecompLauncher (SDK, "Releases that install cleanly"): o recomplauncher.json no topo do pacote, ao lado do bs-builder.exe
+Copy-Item (Join-Path $repo "tools\dist\recomplauncher.json") $stage
 $crt = Get-ChildItem -Directory (Join-Path $env:VCToolsRedistDir "x64") -Filter "Microsoft.VC*.CRT" | Select-Object -First 1
 if (-not $crt) { Fail "runtime do MSVC (Microsoft.VC*.CRT) nao encontrado" }
 Copy-Item (Join-Path $crt.FullName "*.dll") $stage

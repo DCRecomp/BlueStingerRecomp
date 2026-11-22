@@ -1,0 +1,85 @@
+{
+  "$schema": "https://recomplauncher.com/schema/recomplauncher.json",
+  "format": 1,
+  "name": "Blue Stinger Recompiled",
+  "repo": "DCRecomp/BlueStingerRecomp",
+  "inputs": [
+    {
+      "id": "disc",
+      "label": "Your Blue Stinger disc: USA (T13001N), Europe PAL (German, English or French) or Japan (HDR-0003), as GDI, CUE/BIN, CHD or CDI, also inside .zip or .7z.",
+      "role": "game",
+      "formats": [
+        {
+          "type": "file",
+          "extensions": [
+            "gdi",
+            "cue",
+            "chd",
+            "cdi",
+            "zip",
+            "7z"
+          ]
+        }
+      ]
+    }
+  ],
+  "prepare": {
+    "program": [
+      "bs-builder.exe"
+    ],
+    "args": [
+      "--disc",
+      "{input:disc}",
+      "--out",
+      "{install}/jogo",
+      "--progresso-launcher"
+    ],
+    "label": "Building the native game from your disc",
+    "timeout": 3600,
+    "done": [
+      "{install}/jogo/BlueStinger/BlueStinger.exe"
+    ],
+    "version": "1",
+    "options": [
+      {
+        "id": "portable_compiler",
+        "label": "Use the portable compiler",
+        "note": "Downloads the official Zig, CMake and Ninja (about 125 MB). Untick it if Visual Studio 2022 or its Build Tools are installed.",
+        "args": [
+          "--compilador-portatil"
+        ],
+        "os": [
+          "windows"
+        ],
+        "default": true
+      },
+      {
+        "id": "remastered",
+        "label": "Remastered edition",
+        "note": "Widescreen, free camera and modern menus. USA disc only: untick it for the PAL and Japanese discs, which install the Original edition.",
+        "args": [
+          "--edicao",
+          "remastered"
+        ],
+        "default": true
+      },
+      {
+        "id": "widescreen_movies",
+        "label": "Widescreen movies (Remastered)",
+        "note": "Downloads the 16:9 movies mod from archive.org. Remastered edition only.",
+        "args": [
+          "--filmes-widescreen"
+        ],
+        "default": false
+      }
+    ]
+  },
+  "start": {
+    "program": [
+      "jogo/BlueStinger/BlueStinger.exe"
+    ]
+  },
+  "saves": [
+    "{documents}/DC-Recomp/Blue Stinger/saves"
+  ]
+}

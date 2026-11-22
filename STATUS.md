@@ -3529,6 +3529,18 @@ somente leitura está em `docs/N8-7-DIAGNOSTICO.md`. A regressão parou nas refe
     N8.0 16/16 (179 exceções) e N8.7 16/16 com o exe `2d393379…`;
   - N7 permanece em 95% (falta o quadro de fog pareado e o encerramento formal). Próximo: N8.8.
 
+### RecompLauncher (2026-11-22)
+
+Pedido do mantenedor: suporte ao RecompLauncher pelo guia do SDK e o selo no README (`docs/RECOMPLAUNCHER.md`).
+
+| Data | Item | Como foi verificado |
+|---|---|---|
+| 2026-11-22 | `tools/dist/recomplauncher.json` válido | `jsonschema` (Python) contra o esquema oficial do SDK: 0 erros; um arquivo errado de propósito foi recusado |
+| 2026-11-22 | `bs-builder --progresso-launcher` | instalação completa com o CHD americano e `--edicao remastered`: código 0, `BlueStinger.exe` instalado e verificado, 73 linhas `progress`, sempre crescentes, até 1.00 (logs em `tmp/rl-check/teste`) |
+| 2026-11-22 | Sem a opção, nada muda | o caminho `[progresso] N%` não foi alterado; `bs-builder` sem argumentos responde com o código 2 |
+
+Não verificado: a aba *Developer* do launcher e um pacote do `make_builder.ps1` com o manifesto (próximo release).
+
 ### Roadmap N0–N10 (decisão do mantenedor, 2026-10-22)
 
 **Redução do escopo da 1.0 e nova numeração (mantenedor, 2026-11-22):** N9.4 e N9.9–N9.11 saem do N9 e viram N10.0–N10.3, depois da 1.0; os mods (antigo N10) viram N11. O N9 fica N9.0 edições, N9.1 instalador, N9.2 interface, N9.3 widescreen e HUD (antigo N9.5, com os filmes widescreen), N9.4 luz e sombras (antigo N9.6), N9.5 água (antigo N9.7), N9.6 texturas e AA (antigo N9.8) e N9.7 estabilização (antigo N9.12). A 1.0 é N0–N9 mais o gate de campanha. Equivalência completa em `docs/N9-PLANO.md` seção 17; os registros abaixo desta data usam os números antigos.

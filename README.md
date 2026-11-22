@@ -1,5 +1,13 @@
 # Blue Stinger Recompiled
 
+<a href="https://recomplauncher.com/game/bluestingerrecomp"><picture><source media="(prefers-color-scheme: dark)" srcset="https://recomplauncher.com/assets/press/launcher/badge-light.svg"><img alt="Get it on RecompLauncher" src="https://recomplauncher.com/assets/press/launcher/badge-dark.svg" height="48"></picture></a>
+
+Também disponível no [RecompLauncher](https://recomplauncher.com/game/bluestingerrecomp), que instala e atualiza o jogo
+direto deste repositório.
+
+*Also available on [RecompLauncher](https://recomplauncher.com/game/bluestingerrecomp), which installs and updates the
+game straight from this repository.*
+
 Recompilação estática (AOT) de **Blue Stinger** (Sega Dreamcast, 1999) para um executável nativo de **Windows x64**, em
 C++20. O código do jogo é traduzido instrução por instrução para C++, e as partes do console (arquivos, tempo, controles,
 saves, filmes, áudio e vídeo) foram trocadas, uma por vez, por versões nativas de PC, sempre comparadas com o jogo
