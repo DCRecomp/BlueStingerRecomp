@@ -3,6 +3,7 @@
 //              [--vcvars <vcvars64.bat> | --vswhere <vswhere.exe>] [--clean] [--verify-vblanks N] [--sem-filmes]
 //              [--name <subpasta>]   (padrao BlueStinger; o jogo instalado nao precisa do CDI)
 //              [--projeto <pasta>]   exporta tambem o projeto C++ editavel (project_export.h)
+//              [--progresso-launcher]  o progresso como "progress <0..1> <passo>" (passo prepare do RecompLauncher)
 //   bs-builder --de-projeto <pasta> --out <pasta> [--disc <cdi>]   compila um projeto editado
 //   bs-builder --disc <cdi> --out <recursos> --projeto <pasta> --somente-exportar
 //              so exporta (sem compilador, compilacao nem instalacao); [--tipo Release|Debug] no build
@@ -14,6 +15,7 @@
 #include "builder_platform.h"
 #include "child_process.h"
 
+#include <algorithm>
 #include <atomic>
 #include <cstdio>
 #include <string>
@@ -46,6 +48,7 @@ int main(int argc, char** argv) {
 
     Request req;
     req.kitDir = plat::exe_dir() / L"kit";
+    bool launcherProgress = false;  // --progresso-launcher: o passo "prepare" do RecompLauncher ("progress <0..1> <texto>")
     for (size_t i = 1; i < args.size(); ++i) {
         const std::wstring& a    = args[i];
         const bool          more = i + 1 < args.size();
@@ -64,6 +67,7 @@ int main(int argc, char** argv) {
         else if (a == L"--sem-filmes") req.movies = false;
         else if (a == L"--edicao" && more && parseEdition(args[i + 1], req)) ++i;
         else if (a == L"--somente-exportar") req.exportOnly = true;
+        else if (a == L"--progresso-launcher") launcherProgress = true;
         else if (a == L"--filmes-widescreen") req.widescreenMovies = true;  // v0.9.7-2: baixa o mod (so a Remastered)
         else if (a == L"--directors-cut" && more && (args[i + 1] == L"en" || args[i + 1] == L"fr"))  // directors_cut.h (fr: recusado no Builder)
             req.directorsCut = args[++i] == L"en" ? dc::Language::En : dc::Language::Fr;
@@ -80,6 +84,7 @@ int main(int argc, char** argv) {
                          "uso: bs-builder --disc <imagem.cdi> --out <pasta> [--kit <pasta>] [--sdl3 <pasta>]\n"
                          "                [--vcvars <vcvars64.bat> | --vswhere <vswhere.exe>] [--clean] [--name <subpasta>]\n"
                          "                [--edicao original|remastered] [--filmes-widescreen]\n"
+                         "                [--progresso-launcher]  (o progresso para o RecompLauncher)\n"
                          "                [--directors-cut en|fr --disco-ocidental <imagem> --confirmar-download]\n"
                          "                (disco japones v1.006 em --disc; baixa o patcher de terceiros, GPL-3.0)\n"
 #ifdef _WIN32
@@ -104,7 +109,18 @@ int main(int argc, char** argv) {
     cb.cancel   = &g_cancel;
     int lastPct = -1;
     Step lastStep = Step::Done;
+    double launcherShown = -1;  // --progresso-launcher: o numero so avanca (as subfases de um passo recomecam a fracao)
     cb.progress = [&](Step s, double f, const std::string&) {
+        if (launcherProgress) {  // SDK do RecompLauncher: "progress 0.40 <passo>" por avanco, sem janela
+            const double v = std::clamp(f, 0.0, 1.0);
+            if (v < launcherShown + 0.01 && s == lastStep) return;
+            launcherShown = (std::max)(launcherShown, v);
+            lastStep      = s;
+            char f2[16];
+            std::snprintf(f2, sizeof f2, "%.2f", launcherShown);
+            out(std::string("progress ") + f2 + " " + step_name(s) + "\n");
+            return;
+        }
         const int pct = int(f * 100);
         if (pct != lastPct || s != lastStep) {
             out("[progresso] " + std::to_string(pct) + "% " + step_name(s) + "\n");
