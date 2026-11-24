@@ -22,9 +22,12 @@ Blue Stinger recebe os botoes, nada de entrada global nem captura da area de tra
   P7 v0.9.7-1, Remastered com o graficos.toml que o menu de uma versao anterior gravou (o cabecalho do jogo, 4:3, sem a
      marca): recebe os padroes uma vez; numa mudanca pelo menu (Proporcao, Direita: 4:3) a escolha fica e a marca tambem; na
      execucao seguinte, 4:3 e nada reaplicado.
+  P8 N9.8 (D2 b, mantenedor 2026-11-14): o graficos.toml do menu da v0.9.7-1 (o cabecalho, a marca [padroes] remastered, sem
+     [imagem] antialiasing) recebe o antialiasing por area uma vez, com a marca [padroes] antialiasing, e o resto igual; na
+     execucao seguinte nada muda. O mesmo arquivo escrito a mao (sem o cabecalho) e a Original nunca migram.
 
   python tools/dev/n95_persistencia.py --exe build/msvc-release/app/bluestinger.exe --data <data> --saida tmp/<pasta>
-         [--casos P1,P2,P3,P4,P5,P6,P7] [--exe-validacao build/msvc-validacao/app/bluestinger.exe]
+         [--casos P1,P2,P3,P4,P5,P6,P7,P8] [--exe-validacao build/msvc-validacao/app/bluestinger.exe]
 Saida 1 se algum criterio falhar. A janela do jogo abre por ~45 s em cada execucao.
 """
 import argparse
@@ -159,6 +162,30 @@ def p7(a, ok):
        toml2 == toml, "rc=%d" % rc)
 
 
+MIGRA_AA = "[menu] Remastered: antialiasing por area"
+
+
+def p8(a, ok):
+    base = GRAFICOS.format(prop="16:9", rend="vulkan") + "\n[padroes]\nremastered = 1\n"
+    d = preparar(a, "P8", "remastered", CABECALHO + base)
+    rc, t, toml = rodar(a, d, "1", [], 0, 30000)
+    ok("P8 rodou (rc=0)", rc == 0, "rc=%d" % rc)
+    ok("P8 a migracao unica do antialiasing no arquivo da v0.9.7-1", MIGRA_AA in t and MELHORES not in t)
+    ok("P8 o arquivo com a area, as duas marcas e a proporcao de antes",
+       'antialiasing = "area"' in toml and "antialiasing = 1" in toml and "remastered = 1" in toml and
+       'proporcao = "16:9"' in toml, toml.replace("\n", " | ")[:300])
+    rc, t2, toml2 = rodar(a, d, "2", [], 0, 25000)
+    ok("P8 na execucao seguinte nada migra e o arquivo fica igual", rc == 0 and MIGRA_AA not in t2 and toml2 == toml, "rc=%d" % rc)
+    m = preparar(a, "P8m", "remastered", base)
+    rc, t3, toml3 = rodar(a, m, "1", [], 0, 25000)
+    ok("P8 escrito a mao (sem o cabecalho): nao migra", rc == 0 and MIGRA_AA not in t3 and "antialiasing" not in toml3,
+       "rc=%d" % rc)
+    o = preparar(a, "P8o", "original", CABECALHO + base)
+    rc, t4, toml4 = rodar(a, o, "1", [], 0, 25000)
+    ok("P8 a Original: nao migra e o arquivo nao muda", rc == 0 and MIGRA_AA not in t4 and toml4 == CABECALHO + base,
+       "rc=%d" % rc)
+
+
 def p2(a, ok):
     d = preparar(a, "P2", "remastered", GRAFICOS.format(prop="automatico", rend="vulkan"))
     rc, t, toml = rodar(a, d, "1", ATE_GRAFICOS + PROPORCAO + ["dpright"] + SAIR_MENU, REM_INICIO)
@@ -232,7 +259,7 @@ def main():
     ap.add_argument("--exe", required=True)
     ap.add_argument("--data", required=True)
     ap.add_argument("--saida", required=True, help="pasta dos casos (dentro de tmp/)")
-    ap.add_argument("--casos", default="P1,P2,P3,P4,P5,P6,P7")
+    ap.add_argument("--casos", default="P1,P2,P3,P4,P5,P6,P7,P8")
     ap.add_argument("--exe-validacao", help="exe de validacao (para o P5)")
     a = ap.parse_args()
     a.exe, a.data, a.saida = os.path.abspath(a.exe), os.path.abspath(a.data), os.path.abspath(a.saida)
@@ -247,7 +274,7 @@ def main():
             falhas.append(nome)
 
     for n in a.casos.split(","):
-        {"P1": p1, "P2": p2, "P3": p3, "P4": p4, "P5": p5, "P6": p6, "P7": p7}[n](a, ok)
+        {"P1": p1, "P2": p2, "P3": p3, "P4": p4, "P5": p5, "P6": p6, "P7": p7, "P8": p8}[n](a, ok)
     print("\n%d falha(s) (%s)" % (len(falhas), a.saida))
     return 1 if falhas else 0
 

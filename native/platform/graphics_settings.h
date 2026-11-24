@@ -78,6 +78,9 @@ struct GraphicsSettings {
     // v0.9.7-1: a versao dos padroes da Remastered ja aplicada a este arquivo ([padroes] remastered; 0 = nenhuma). Fora dos
     // presets e da classificacao
     uint32_t   remaster_defaults = 0;
+    // N9.8 (D2, mantenedor 2026-11-14): a versao da migracao unica do antialiasing ja aplicada ([padroes] antialiasing; 0 =
+    // nenhuma). Fora dos presets e da classificacao
+    uint32_t   aa_defaults = 0;
     bool       operator==(const GraphicsSettings&) const = default;
 };
 
@@ -121,6 +124,12 @@ GraphicsSettings preset(Preset p);                   // o preset (Custom = Origi
 // kRemasterDefaults e a versao desses padroes: um graficos.toml com uma versao menor recebe os novos uma vez.
 inline constexpr uint32_t kRemasterDefaults = 1;
 GraphicsSettings remastered_best(const GraphicsSettings& base);
+// N9.8 (D2 b, mantenedor 2026-11-14): migracao unica do antialiasing. Um graficos.toml gravado pelo menu de uma versao anterior
+// a fase 8.3 (o cabecalho do jogo, sem [imagem] antialiasing e sem a marca [padroes] antialiasing) recebe a reducao por area
+// (a do Alto), uma vez, so na Remastered fora do --headless; um arquivo escrito a mao, a Original e o --antialiasing (que so
+// vale na execucao) nunca mudam o arquivo.
+inline constexpr uint32_t kAntialiasingDefaults = 1;
+bool antialiasing_migration_due(const std::string& text);
 // O texto que o menu grava no comeco do arquivo (to_toml): distingue um graficos.toml gravado pelo jogo de um escrito a mao
 inline constexpr const char* kGraphicsHeader = "# Blue Stinger Native PC: configuracoes graficas";
 Preset           classify(const GraphicsSettings& s);  // qual preset a configuracao e (ou Custom)

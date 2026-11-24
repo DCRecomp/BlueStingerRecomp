@@ -25,7 +25,7 @@ teste interrompido, pulado ou sem evidência não conta como aprovado; nenhum pu
 | R1 | Original × `analysis/n8/referencias_n87`, os 10 casos (`n8_referencias.py conferir`, layout `tmp/sessao-20261109/layout-fase4`) [P] | 10 iguais, 0 diferentes |
 | R2 | `n95_headless.py` H1–H7 [P][V] | 0 falhas |
 | R3 | `tools/dist/test_remaster.ps1` R1–R4 [V] | 0 falhas |
-| R4 | `n95_persistencia.py` P1–P5 [P][J] | 0 falhas |
+| R4 | `n95_persistencia.py` P1–P8 [P][J] (P6–P7: os padrões da v0.9.7-1; P8: a migração D2 do antialiasing) | 0 falhas |
 | R5 | `tools/dist/test_edicao.ps1` [P] | 0 falhas |
 | R6 | `n95_janela.py` J1–J7 [P][J] | 0 falhas |
 | R7 | `n95_proveniencia.py` e `n95_bordas.py` (H6) [V] | 0 falhas |
@@ -60,7 +60,7 @@ teste interrompido, pulado ou sem evidência não conta como aprovado; nenhum pu
 | B1 | `tools/dist/test_builder.ps1 -Disc ISO\Blue Stinger.cdi` | 0 falhas |
 | B2 | `tools/dist/test_instalador.ps1 -Disc …` (a integração desviada por `BS_INSTALADOR_TESTE_RAIZ`) | 0 falhas |
 | B3 | `tools/dist/test_projeto.ps1 -Disc …` (o projeto editável e os mods; um pacote de texturas sintético em `mods`) | 0 falhas |
-| B4 | Instalação nova da Remastered e atualização de um `graficos.toml` da v0.9.7-1 (os padrões aplicados uma vez; a decisão da seção 11.3 de `docs/N9-8-AUDITORIA.md` aplicada se aprovada) | como no critério |
+| B4 | Instalação nova da Remastered e atualização de um `graficos.toml` da v0.9.7-1 (os padrões aplicados uma vez; a migração D2 do antialiasing aplicada uma vez, aprovada pelo mantenedor em 2026-11-14) | como no critério |
 
 ## 6. Conferência de publicação (sem publicar, ≈ 15 min)
 
@@ -93,3 +93,26 @@ aprovação técnica, registrados: a conferência visual (mantenedor), o `boot_t
 - `kHudInvW` empírico (duas rotas medidas).
 - Mipmaps sem alfa pré-multiplicado (8.1); o cache de texturas HD sem descarte por orçamento além do limite residente (8.2).
 - A AMD integrada em 1440 abaixo do tempo real com os efeitos.
+
+## 10. Cronograma proposto (2026-11-15, para aprovação; nada começa sem a confirmação do mantenedor)
+
+Pré-requisitos (todos obrigatórios): os 16 filmes do N9.13 concluídos; as correções D8/D12 (E016, E107, E200A) feitas e
+revalidadas; a D2 compilada e testada; a confirmação do mantenedor de que a GPU e a RAM estão livres.
+
+| Bloco | O quê | Duração | Janela | Quando (estimado) |
+|---|---|---|---|---|
+| 0 | Fim da fila dos filmes (NEWGAME) | — | não | ter 17/11 ~10h a qua 18/11 ~05h |
+| 1 | Correções D8/D12 e revalidação v5 (GPU) | 1 a 2 h 30 | não | logo depois do bloco 0 |
+| 2 | D2: build incremental dos três presets, `bs_unit_tests` (o novo `graphics_antialiasing_migration_d2`), ctest | ≈ 1 h | não | depois do bloco 1 |
+| 3 | D2: `n95_persistencia.py --casos P6,P7,P8` | ≈ 15 min | **sim** (aviso antes) | depois do bloco 2 |
+| 4 | Revisão Codex da D2 e o commit (só com o pedido do mantenedor) | ≈ 30 min | não | depois do bloco 3 |
+| — | **Confirmação do mantenedor: recursos livres** | — | — | — |
+| 5 | Seção 1 (antes da bateria) | ≈ 40 min | não | dia 1, manhã |
+| 6 | Seção 2 (regressão histórica) | ≈ 3 h | R4, R6, R10 | dia 1 |
+| 7 | Seção 3 (o N9.8) | ≈ 2 h 30 | T3–T7 | dia 1, tarde |
+| 8 | Seção 4 (desempenho e memória; RTX e AMD) | ≈ 1 h 30 | sim | dia 2, manhã |
+| 9 | Seção 5 (Builder, instalador, projeto; CDI) | ≈ 1 h 30 | não | dia 2 |
+| 10 | Seção 6 (conferência de publicação e Codex) | ≈ 45 min | não | dia 2 |
+
+Total da bateria: 9 a 11 h de máquina, em dois dias de trabalho, uma tarefa pesada por vez. As aberturas de janela são
+avisadas antes de cada bloco. Uma falha para o bloco, preserva a evidência e volta para o mantenedor antes de repetir.

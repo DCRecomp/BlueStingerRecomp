@@ -1488,6 +1488,12 @@ int runWindow(bs::GameHost& host, ni::InputSystem& input, const Args& a, SDL_Win
     if (const char* v = std::getenv("BS_CONTROLE_VIRTUAL"); v && *v) virtualPad = std::make_unique<VirtualPad>(readFile(v));
     bs::CursorWhy cursorWhy    = bs::CursorWhy::Fullscreen;  // o estado inicial do SDL: visivel
     bool          cursorHidden = false;
+    // RecompLauncher (SDK, "Controllers and Big Picture mode"): Play no modo Big Picture (controle, sofa, Steam Deck)
+    // abre em tela cheia; no modo desktop e sem o launcher, a janela de sempre. F11 continua alternando.
+    if (const char* m = std::getenv("RECOMPLAUNCHER_MODE"); m && std::string(m) == "bigpicture") {
+        fullscreen = true;
+        SDL_SetWindowFullscreen(window, true);
+    }
     while (!quit) {
         if (virtualPad && virtualPad->step()) quit = true;
         SDL_Event e;
@@ -2349,10 +2355,32 @@ int mainWindow(Args& a) {
                              exists ? "graficos.toml de uma versao anterior" : "instalacao nova", st::kRemasterDefaults);
             }
         }
+        // N9.8 (D2 b, mantenedor 2026-11-14): migracao unica do antialiasing. O graficos.toml que o menu gravou antes da fase
+        // 8.3 (sem [imagem] antialiasing e sem a marca [padroes] antialiasing) recebe a reducao por area, uma vez; o resto do
+        // arquivo nao muda. Arquivo escrito a mao, a Original e o --headless nunca migram; o --antialiasing so vale na execucao.
+        if (editionProfile().edition == bs::native::edition::Edition::Remastered && !a.headless &&
+            prefs.graphics.aa_defaults < st::kAntialiasingDefaults) {
+            std::error_code ec;
+            if (fs::exists(prefsDir / st::kGraphicsFile, ec)) {
+                std::ifstream     in(prefsDir / st::kGraphicsFile, std::ios::binary);
+                std::stringstream ss;
+                ss << in.rdbuf();
+                if (st::antialiasing_migration_due(ss.str())) {
+                    prefs.graphics.antialiasing = st::Antialiasing::Area;
+                    prefs.graphics.aa_defaults  = st::kAntialiasingDefaults;
+                    std::string err;
+                    if (!st::write_graphics(prefsDir, prefs.graphics, &err)) std::fprintf(stderr, "[menu] %s\n", err.c_str());
+                    std::fprintf(stderr, "[menu] Remastered: antialiasing por area no graficos.toml de uma versao anterior "
+                                         "(migracao unica, versao %u)\n", st::kAntialiasingDefaults);
+                }
+            }
+        }
         // a marca acompanha toda gravacao do menu na Remastered (um arquivo gravado por esta versao nunca e tratado como de
         // uma anterior); o arquivo so muda quando o jogador muda algo
-        if (editionProfile().edition == bs::native::edition::Edition::Remastered)
+        if (editionProfile().edition == bs::native::edition::Edition::Remastered) {
             prefs.graphics.remaster_defaults = (std::max)(prefs.graphics.remaster_defaults, st::kRemasterDefaults);
+            prefs.graphics.aa_defaults       = (std::max)(prefs.graphics.aa_defaults, st::kAntialiasingDefaults);  // N9.8 (D2)
+        }
         persisted        = prefs;
         // O perfil fornece o padrao sem reescrever a preferencia compartilhada entre edicoes. Um arquivo existente
         // sempre vence (fora a vez unica dos padroes da Remastered, acima).

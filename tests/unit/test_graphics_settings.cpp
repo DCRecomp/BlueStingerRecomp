@@ -425,3 +425,46 @@ BS_TEST(graphics_remastered_best_defaults) {
     BS_CHECK(st::from_toml(st::to_toml(st::GraphicsSettings{})).remaster_defaults == 0);
     BS_CHECK(st::to_toml(st::GraphicsSettings{}).find("[padroes]") == std::string::npos);
 }
+
+// N9.8 (D2 b, mantenedor 2026-11-14): a migracao unica do antialiasing
+BS_TEST(graphics_antialiasing_migration_d2) {
+    // os padroes novos da Remastered ja trazem a area e a marca
+    const st::GraphicsSettings b = st::remastered_best(st::GraphicsSettings{});
+    BS_CHECK(b.antialiasing == st::Antialiasing::Area && b.aa_defaults == st::kAntialiasingDefaults);
+    const std::string novo = st::to_toml(b);
+    BS_CHECK(novo.find("antialiasing = 1") != std::string::npos && st::from_toml(novo).aa_defaults == st::kAntialiasingDefaults);
+    BS_CHECK(!st::antialiasing_migration_due(novo));  // gravado por esta versao: nunca migra
+    // o arquivo do menu da v0.9.7-1: o cabecalho, a marca [padroes] remastered, sem [imagem] antialiasing
+    st::GraphicsSettings velho = b;
+    velho.antialiasing = st::Antialiasing::Original, velho.aa_defaults = 0;
+    std::string t = st::to_toml(velho);
+    const size_t k = t.find("antialiasing = \"");
+    BS_CHECK(k != std::string::npos);
+    t.erase(k, t.find('\n', k) - k + 1);
+    BS_CHECK(t.find("antialiasing") == std::string::npos && t.find("remastered = 1") != std::string::npos);
+    BS_CHECK(st::antialiasing_migration_due(t));
+    const st::GraphicsSettings lido = st::from_toml(t);
+    BS_CHECK(lido.antialiasing == st::Antialiasing::Original && lido.aa_defaults == 0 && lido.remaster_defaults == 1);
+    // depois da migracao (o que o jogo grava): area e a marca; uma segunda leitura nao migra de novo
+    st::GraphicsSettings m = lido;
+    m.antialiasing = st::Antialiasing::Area, m.aa_defaults = st::kAntialiasingDefaults;
+    const st::GraphicsSettings m2 = st::from_toml(st::to_toml(m));
+    BS_CHECK(m2.antialiasing == st::Antialiasing::Area && !st::antialiasing_migration_due(st::to_toml(m)));
+    BS_CHECK(m2.resolution == lido.resolution && m2.aspect == lido.aspect && m2.ssao == lido.ssao);  // o resto nao muda
+    // o jogador que desligou o antialiasing depois da migracao: a marca fica, o "original" escolhido vale
+    m.antialiasing = st::Antialiasing::Original;
+    BS_CHECK(!st::antialiasing_migration_due(st::to_toml(m)));
+    // escrito a mao (sem o cabecalho do jogo), ilegivel, ou com a chave explicita: nunca migra
+    BS_CHECK(!st::antialiasing_migration_due("[imagem]\nresolucao = \"1080p\"\n"));
+    BS_CHECK(!st::antialiasing_migration_due(std::string(st::kGraphicsHeader) + "\n[imagem\n"));
+    BS_CHECK(!st::antialiasing_migration_due(std::string(st::kGraphicsHeader) + "\n[imagem]\nantialiasing = \"original\"\n"));
+    // a marca so com o antialiasing (sem a da Remastered) tambem vai e volta
+    st::GraphicsSettings so;
+    so.aa_defaults = st::kAntialiasingDefaults;
+    BS_CHECK(st::from_toml(st::to_toml(so)).aa_defaults == st::kAntialiasingDefaults &&
+             st::from_toml(st::to_toml(so)).remaster_defaults == 0);
+    // fora dos presets: a marca nao muda a classificacao
+    st::GraphicsSettings alto = st::preset(st::Preset::High);
+    alto.aa_defaults = st::kAntialiasingDefaults;
+    BS_CHECK(st::classify(alto) == st::Preset::High);
+}

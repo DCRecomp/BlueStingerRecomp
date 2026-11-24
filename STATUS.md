@@ -4361,7 +4361,20 @@ O mantenedor testou a v0.9.7 e pediu três correções, numa worktree própria (
   - **ZIP:** `BlueStinger-Builder-v0.9.7-1-win-x64.zip`, 14 737 379 B, `c63eb13f…3ab2e8`. Extraído, os 2 927 arquivos são iguais aos do pacote.
   - **`test_builder`:** não rodou, por pedido do mantenedor.
 
-### N9.8 fase 8.4: a máscara do HUD na nitidez e no bloom, os presets revistos (2026-11-14, worktree `tmp/wt-n97` branch `n9-8`, sem commit)
+### N9.8 D2: a migração única do antialiasing (2026-11-15, worktree `tmp/wt-n97` branch `n9-8`, sem commit, **não compilada**)
+
+Decisão D2 (b), aprovada pelo mantenedor em 2026-11-14. Código escrito durante a produção dos filmes, com a GPU ocupada: sem build e sem
+testes, que ficam para depois da fila (cronograma em `docs/N9-8-TESTES-FINAIS.md`, seção 10).
+- `GraphicsSettings::aa_defaults` e a marca `[padroes] antialiasing`; `kAntialiasingDefaults = 1`;
+  `antialiasing_migration_due(text)`, que só vale para um arquivo com o cabeçalho do jogo, sem `[imagem] antialiasing` e sem a marca;
+  `remastered_best` já traz a marca.
+- `app/main_sdl.cpp`: só na Remastered fora do `--headless`, o arquivo da v0.9.7-1 recebe `antialiasing = "area"` e a marca, uma vez.
+  A Original, um arquivo escrito à mão e o `--antialiasing`, que só vale na execução, nunca mudam o arquivo.
+- Testes escritos e **não executados**:
+  - unitário `graphics_antialiasing_migration_d2`;
+  - caso P8 do `n95_persistencia.py`: a migração, a segunda execução sem mudança, o arquivo escrito à mão e a Original.
+
+### N9.8 fase 8.4: a máscara do HUD na nitidez e no bloom, os presets revistos (2026-11-14, worktree `tmp/wt-n97` branch `n9-8`, commit local `6cad2d6`)
 
 Pedido do mantenedor: fechar a 8.3 com commit local (`f0f56ab`) e executar a 8.4, sem a 8.5. Detalhes em
 `docs/N9-8-AUDITORIA.md` seção 11; plano da 8.5 (não executado, espera autorização) em `docs/N9-8-TESTES-FINAIS.md`.

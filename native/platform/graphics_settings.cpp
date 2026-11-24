@@ -97,7 +97,19 @@ GraphicsSettings remastered_best(const GraphicsSettings& base) {
     s.window = base.window, s.window_w = base.window_w, s.window_h = base.window_h, s.vsync = base.vsync;
     s.vulkan = base.vulkan, s.shader = base.shader, s.shader_params = base.shader_params;
     s.remaster_defaults = kRemasterDefaults;
+    s.aa_defaults = kAntialiasingDefaults;  // N9.8 (D2): o Alto ja traz a reducao por area
     return s;
+}
+
+bool antialiasing_migration_due(const std::string& text) {
+    if (text.rfind(kGraphicsHeader, 0) != 0) return false;  // escrito a mao: vale como esta
+    toml::table doc;
+    try {
+        doc = toml::parse(text);
+    } catch (const toml::parse_error&) {
+        return false;
+    }
+    return !doc["imagem"]["antialiasing"] && !doc["padroes"]["antialiasing"];
 }
 
 Preset classify(const GraphicsSettings& s) {
@@ -300,7 +312,11 @@ std::string to_toml(const GraphicsSettings& s) {
       << "proporcao = \"" << name(s.aspect) << "\"\n"
       << "vsync = " << (s.vsync ? "true" : "false") << "\n"
       << "renderizador = \"" << (s.vulkan ? "vulkan" : "software") << "\"\n";
-    if (s.remaster_defaults) o << "\n[padroes]\nremastered = " << s.remaster_defaults << "\n";  // v0.9.7-1
+    if (s.remaster_defaults || s.aa_defaults) {  // v0.9.7-1; N9.8 (D2)
+        o << "\n[padroes]\n";
+        if (s.remaster_defaults) o << "remastered = " << s.remaster_defaults << "\n";
+        if (s.aa_defaults) o << "antialiasing = " << s.aa_defaults << "\n";
+    }
     if (!s.shader_params.empty()) {
         o << "\n[shader_parametros]\n";
         for (const auto& [k, v] : s.shader_params) o << "\"" << k << "\" = " << v << "\n";
@@ -356,6 +372,7 @@ GraphicsSettings from_toml(const std::string& text, std::string* warning) {
             if (auto d = v.value<double>(); d && std::isfinite(*d)) s.shader_params[std::string(k.str())] = float(*d);
     str("tela", "modo", s.window), bln("tela", "vsync", s.vsync);
     num("padroes", "remastered", s.remaster_defaults);  // v0.9.7-1
+    num("padroes", "antialiasing", s.aa_defaults);       // N9.8 (D2)
     // N9.5 fase 5 (D5-1): "auto" (o nome gravado ate a fase 4) e "automatico" valem 4:3, com aviso; a proxima gravacao
     // escreve "4:3"
     std::string oldAspect;
