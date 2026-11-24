@@ -290,6 +290,89 @@ BS_TEST(post_sharpen_gpu) {
     BS_CHECK(nr::vulkan_live_objects() == 0);
 }
 
+// N9.8 fase 8.4: os internos no modo da mascara do HUD (PostPass::hud_mask; o alfa da entrada e a mascara de hudmask.comp).
+// Uma imagem com degraus de cinza no HUD (alfa 0, x < 16) e na cena (alfa 255): a nitidez deixa o HUD bit a bit e na cena
+// da o mesmo que sem a mascara; um ponto claro no HUD nao brilha, um na cena brilha; a cor e o tonemapping valem nos dois e
+// repassam o alfa. Sem o modo, o alfa sai 255 como antes.
+BS_TEST(post_hud_mask_gpu) {
+    std::string err;
+    {
+        auto d = nr::VulkanDevice::create(&err);
+        if (!d) BS_SKIP("dispositivo Vulkan");
+        const uint32_t        w = 64, h = 16;
+        std::vector<uint32_t> img(size_t(w) * h), plain, masked;
+        for (uint32_t y = 0; y < h; ++y)
+            for (uint32_t x = 0; x < w; ++x) {
+                const uint32_t g = (x >= 4 && x < 16) || x >= 32 ? 0xA0u : 0x50u;  // degraus em x = 4 (HUD) e 32 (cena)
+                img[size_t(y) * w + x] = (x < 16 ? 0u : 0xFF000000u) | g << 16 | g << 8 | g;
+            }
+        nr::PostPass s;
+        s.shader = d->post_builtin(nr::PostBuiltin::Sharpen), s.params[0] = 1;
+        BS_CHECK(d->post_run(img, w, h, {&s, 1}, plain).ok() && plain.size() == img.size());
+        s.hud_mask = true;
+        BS_CHECK(d->post_run(img, w, h, {&s, 1}, masked).ok() && masked.size() == img.size());
+        if (plain.size() != img.size() || masked.size() != img.size()) return;
+        uint32_t hudDiff = 0, sceneDiff = 0, sceneSharp = 0, alphaPlain = 0;
+        for (uint32_t y = 0; y < h; ++y)
+            for (uint32_t x = 0; x < w; ++x) {
+                const size_t i = size_t(y) * w + x;
+                if (x < 16) hudDiff += masked[i] != img[i];  // RGB e alfa (0) iguais
+                else sceneDiff += (masked[i] & 0xFFFFFF) != (plain[i] & 0xFFFFFF) || (masked[i] >> 24) != 0xFF;
+                sceneSharp += x >= 16 && (plain[i] & 0xFFFFFF) != (img[i] & 0xFFFFFF);
+                alphaPlain += (plain[i] >> 24) != 0xFF;
+            }
+        std::fprintf(stderr, "  mascara/nitidez: HUD %u diferentes, cena %u diferentes da sem mascara (%u realcados), alfa sem o modo %u\n",
+                     hudDiff, sceneDiff, sceneSharp, alphaPlain);
+        BS_CHECK(hudDiff == 0 && sceneDiff == 0 && sceneSharp > 0 && alphaPlain == 0);
+        // sem o modo, o degrau do HUD e realcado como antes (a mascara e que o protege)
+        BS_CHECK((plain[size_t(8) * w + 3] & 0xFF) < 0x50);
+
+        // bloom: um ponto claro no HUD e outro na cena
+        const uint32_t bw = 128, bh = 96;
+        std::vector<uint32_t> b(size_t(bw) * bh), bout;
+        for (uint32_t y = 0; y < bh; ++y)
+            for (uint32_t x = 0; x < bw; ++x) b[size_t(y) * bw + x] = (x < 64 ? 0u : 0xFF000000u) | 0x101010u;
+        auto spot = [&](uint32_t cx) {
+            for (uint32_t y = 44; y < 52; ++y)
+                for (uint32_t x = cx; x < cx + 8; ++x) b[size_t(y) * bw + x] = (b[size_t(y) * bw + x] & 0xFF000000u) | 0xFFFFFFu;
+        };
+        spot(20);  // no HUD
+        nr::PostPass h1, v1;
+        h1.shader = d->post_builtin(nr::PostBuiltin::BloomBlurH), v1.shader = d->post_builtin(nr::PostBuiltin::BloomBlurV);
+        h1.params[0] = 0.7f, h1.params[1] = v1.params[1] = 0.05f, v1.params[2] = 1.0f, v1.original = 0;
+        h1.hud_mask = v1.hud_mask = true;
+        const nr::PostPass two[2] = {h1, v1};
+        BS_CHECK(d->post_run(b, bw, bh, two, bout).ok() && bout == b);  // o brilho do HUD nao se espalha; o alfa passa
+        spot(96);  // na cena
+        BS_CHECK(d->post_run(b, bw, bh, two, bout).ok() && bout.size() == b.size());
+        if (bout.size() == b.size()) {
+            const int nearScene = int(bout[size_t(48) * bw + 105] & 0xFF), nearHud = int(bout[size_t(48) * bw + 29] & 0xFF);
+            std::fprintf(stderr, "  mascara/bloom: perto do ponto da cena %d, perto do ponto do HUD %d (antes 16)\n", nearScene, nearHud);
+            BS_CHECK(nearScene >= 24 && nearHud == 16);
+            BS_CHECK((bout[size_t(48) * bw + 29] >> 24) == 0 && (bout[size_t(48) * bw + 105] >> 24) == 0xFF);
+        }
+
+        // cor e tonemapping: valem nos dois lados e repassam o alfa no modo; sem ele, alfa 255
+        nr::PostPass c, t;
+        c.shader = d->post_builtin_color(), c.params[0] = 0.05f, c.params[1] = 1.1f, c.params[2] = 1, c.params[3] = 1.2f;
+        t.shader = d->post_builtin(nr::PostBuiltin::Tonemap), t.params[0] = 0.5f, t.params[1] = 0.5f;
+        std::vector<uint32_t> ct0, ct1;
+        nr::PostPass pair0[2] = {c, t};
+        BS_CHECK(d->post_run(img, w, h, pair0, ct0).ok());
+        c.hud_mask = t.hud_mask = true;
+        nr::PostPass pair1[2] = {c, t};
+        BS_CHECK(d->post_run(img, w, h, pair1, ct1).ok() && ct1.size() == ct0.size() && ct0.size() == img.size());
+        uint32_t rgbDiff = 0, alphaKept = 0, alphaOne = 0, changed = 0;
+        for (size_t i = 0; i < ct0.size() && ct1.size() == ct0.size(); ++i) {
+            rgbDiff += (ct0[i] & 0xFFFFFF) != (ct1[i] & 0xFFFFFF);
+            alphaKept += (ct1[i] >> 24) == (img[i] >> 24), alphaOne += (ct0[i] >> 24) == 0xFF;
+            changed += (ct0[i] & 0xFFFFFF) != (img[i] & 0xFFFFFF);
+        }
+        BS_CHECK(rgbDiff == 0 && alphaKept == img.size() && alphaOne == img.size() && changed == img.size());
+    }
+    BS_CHECK(nr::vulkan_live_objects() == 0);
+}
+
 // N7c: bloom (dois passes, o vertical com o binding 1 na imagem de antes do primeiro). Um ponto claro num fundo escuro:
 // em volta dele a imagem clareia (o brilho), longe nao muda; com o limiar em 1 (nada passa) a imagem fica igual; o
 // bloom depois de outro passe compoe sobre a saida dele (a referencia ao passe anterior, nao a original).

@@ -36,6 +36,9 @@ template <> struct Names<Water> {
 template <> struct Names<SsaoQuality> {
     static constexpr const char* v[] = {"baixa", "media", "alta"};
 };
+template <> struct Names<Antialiasing> {
+    static constexpr const char* v[] = {"original", "area", "bordas"};
+};
 
 template <class E> const char* name(E e) { return Names<E>::v[size_t(e)]; }
 template <class E> bool parse(const std::string& s, E& out) {
@@ -51,6 +54,7 @@ template <class E> bool parse(const std::string& s, E& out) {
 bool same_quality(const GraphicsSettings& a, const GraphicsSettings& b) {
     return a.resolution == b.resolution && a.scale_pct == b.scale_pct && a.filter == b.filter &&
            (a.filter != Filter::Anisotropic || a.anisotropy == b.anisotropy) && a.msaa == b.msaa &&
+           a.antialiasing == b.antialiasing &&
            a.hd_textures == b.hd_textures && a.lighting == b.lighting && a.shadows == b.shadows && a.water == b.water &&
            a.shader == b.shader &&
            a.bloom == b.bloom && a.ssao == b.ssao && (!a.ssao || a.ssao_quality == b.ssao_quality) && a.tonemap == b.tonemap &&
@@ -68,14 +72,16 @@ GraphicsSettings preset(Preset p) {
     GraphicsSettings s;  // Original Dreamcast: o padrao da estrutura
     switch (p) {
     case Preset::Balanced:
-        s.resolution = Resolution::P1080, s.filter = Filter::Bilinear, s.msaa = 2, s.hd_textures = true;
+        // N9.8 (D8-5, mantenedor 2026-11-12): as texturas HD so pela escolha manual, em nenhum preset
+        s.resolution = Resolution::P1080, s.filter = Filter::Bilinear, s.msaa = 2;
         s.color = true, s.contrast = 1.05f, s.saturation = 1.10f;  // aprimorado: um pouco mais de contraste e cor
         break;
     case Preset::High:
         s.resolution = Resolution::P1440, s.filter = Filter::Anisotropic, s.anisotropy = 16, s.msaa = 4;
+        s.antialiasing = Antialiasing::Area;  // N9.8 fase 8.3 (D8-5): a reducao por area no Alto; as bordas so na escolha manual
         // N9.6 (mantenedor, 2026-11-11): as sombras originais tambem no Alto; as aprimoradas (borda suave e sombras de contato),
         // a luz das fontes e o SSAO ficam so na escolha manual (na GPU integrada em 1080, as aprimoradas dobram o custo)
-        s.hd_textures = true, s.sharpen = 0.25f;
+        s.sharpen = 0.25f;  // N9.8 (D8-5): sem as texturas HD
         // N9.7 (D7-1, mantenedor 2026-11-11): a agua original em todos os presets; a aprimorada so pela escolha manual
         s.color = true, s.contrast = 1.10f, s.saturation = 1.15f;
         break;
@@ -91,7 +97,19 @@ GraphicsSettings remastered_best(const GraphicsSettings& base) {
     s.window = base.window, s.window_w = base.window_w, s.window_h = base.window_h, s.vsync = base.vsync;
     s.vulkan = base.vulkan, s.shader = base.shader, s.shader_params = base.shader_params;
     s.remaster_defaults = kRemasterDefaults;
+    s.aa_defaults = kAntialiasingDefaults;  // N9.8 (D2): o Alto ja traz a reducao por area
     return s;
+}
+
+bool antialiasing_migration_due(const std::string& text) {
+    if (text.rfind(kGraphicsHeader, 0) != 0) return false;  // escrito a mao: vale como esta
+    toml::table doc;
+    try {
+        doc = toml::parse(text);
+    } catch (const toml::parse_error&) {
+        return false;
+    }
+    return !doc["imagem"]["antialiasing"] && !doc["padroes"]["antialiasing"];
 }
 
 Preset classify(const GraphicsSettings& s) {
@@ -159,7 +177,8 @@ GraphicsSettings clamp_to(const GraphicsSettings& in, const Capabilities& caps, 
     };
     off(f.scaling, s.resolution != o.resolution || s.scale_pct != o.scale_pct,
         [&] { s.resolution = o.resolution, s.scale_pct = o.scale_pct; }, "resolucao interna");
-    off(f.msaa, s.msaa != 1, [&] { s.msaa = 1; }, "antialiasing");
+    off(f.msaa, s.msaa != 1, [&] { s.msaa = 1; }, "MSAA");
+    off(f.antialiasing, s.antialiasing != Antialiasing::Original, [&] { s.antialiasing = Antialiasing::Original; }, "antialiasing");
     off(f.filtering, s.filter != o.filter, [&] { s.filter = o.filter; }, "filtragem");
     off(f.window_modes, s.window != WindowMode::Windowed, [&] { s.window = WindowMode::Windowed; }, "modo de tela");
     off(f.vsync, !s.vsync, [&] { s.vsync = true; }, "V-Sync");
@@ -261,6 +280,7 @@ std::string to_toml(const GraphicsSettings& s) {
       << "filtragem = \"" << name(s.filter) << "\"\n"
       << "anisotropia = " << s.anisotropy << "\n"
       << "msaa = " << s.msaa << "\n"
+      << "antialiasing = \"" << name(s.antialiasing) << "\"\n"
       << "texturas_hd = " << (s.hd_textures ? "true" : "false") << "\n"
       << "iluminacao = " << (s.lighting ? "true" : "false") << "\n"
       << "sombras = \"" << name(s.shadows) << "\"\n"
@@ -292,7 +312,11 @@ std::string to_toml(const GraphicsSettings& s) {
       << "proporcao = \"" << name(s.aspect) << "\"\n"
       << "vsync = " << (s.vsync ? "true" : "false") << "\n"
       << "renderizador = \"" << (s.vulkan ? "vulkan" : "software") << "\"\n";
-    if (s.remaster_defaults) o << "\n[padroes]\nremastered = " << s.remaster_defaults << "\n";  // v0.9.7-1
+    if (s.remaster_defaults || s.aa_defaults) {  // v0.9.7-1; N9.8 (D2)
+        o << "\n[padroes]\n";
+        if (s.remaster_defaults) o << "remastered = " << s.remaster_defaults << "\n";
+        if (s.aa_defaults) o << "antialiasing = " << s.aa_defaults << "\n";
+    }
     if (!s.shader_params.empty()) {
         o << "\n[shader_parametros]\n";
         for (const auto& [k, v] : s.shader_params) o << "\"" << k << "\" = " << v << "\n";
@@ -331,6 +355,7 @@ GraphicsSettings from_toml(const std::string& text, std::string* warning) {
     }
     str("imagem", "resolucao", s.resolution), num("imagem", "escala", s.scale_pct), str("imagem", "filtragem", s.filter);
     num("imagem", "anisotropia", s.anisotropy), num("imagem", "msaa", s.msaa), bln("imagem", "texturas_hd", s.hd_textures);
+    str("imagem", "antialiasing", s.antialiasing);  // N9.8 fase 8.3
     bln("imagem", "iluminacao", s.lighting), str("imagem", "sombras", s.shadows), str("imagem", "agua", s.water);
     if (auto v = doc["imagem"]["shader"].value<std::string>()) s.shader = *v;
     bln("efeitos", "bloom", s.bloom), bln("efeitos", "ssao", s.ssao), bln("efeitos", "tonemap", s.tonemap);
@@ -347,6 +372,7 @@ GraphicsSettings from_toml(const std::string& text, std::string* warning) {
             if (auto d = v.value<double>(); d && std::isfinite(*d)) s.shader_params[std::string(k.str())] = float(*d);
     str("tela", "modo", s.window), bln("tela", "vsync", s.vsync);
     num("padroes", "remastered", s.remaster_defaults);  // v0.9.7-1
+    num("padroes", "antialiasing", s.aa_defaults);       // N9.8 (D2)
     // N9.5 fase 5 (D5-1): "auto" (o nome gravado ate a fase 4) e "automatico" valem 4:3, com aviso; a proxima gravacao
     // escreve "4:3"
     std::string oldAspect;

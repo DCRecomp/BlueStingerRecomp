@@ -36,6 +36,13 @@ $jobs = @(
     @("pvr_frag_autosort_fc_water.h", "pvr.frag", "kPvrFragAutosortFcWater", @("-DAUTOSORT", "-DFLOAT_CONTROLS", "-DWATER")),
     @("pvr_frag_fcd_water.h", "pvr.frag", "kPvrFragFcdWater", @("-DFLOAT_CONTROLS", "-DDENORM_PRESERVE", "-DWATER")),
     @("pvr_frag_autosort_fcd_water.h", "pvr.frag", "kPvrFragAutosortFcdWater", @("-DAUTOSORT", "-DFLOAT_CONTROLS", "-DDENORM_PRESERVE", "-DWATER")),
+    # N9.8 fase 8.1: a filtragem (mipmaps, trilinear e anisotropica) da Remastered; o fiel continua com o mesmo SPIR-V
+    @("pvr_frag_filtered.h", "pvr.frag", "kPvrFragFiltered", @("-DFILTERED")),
+    @("pvr_frag_autosort_filtered.h", "pvr.frag", "kPvrFragAutosortFiltered", @("-DAUTOSORT", "-DFILTERED")),
+    @("pvr_frag_fc_filtered.h", "pvr.frag", "kPvrFragFcFiltered", @("-DFLOAT_CONTROLS", "-DFILTERED")),
+    @("pvr_frag_autosort_fc_filtered.h", "pvr.frag", "kPvrFragAutosortFcFiltered", @("-DAUTOSORT", "-DFLOAT_CONTROLS", "-DFILTERED")),
+    @("pvr_frag_fcd_filtered.h", "pvr.frag", "kPvrFragFcdFiltered", @("-DFLOAT_CONTROLS", "-DDENORM_PRESERVE", "-DFILTERED")),
+    @("pvr_frag_autosort_fcd_filtered.h", "pvr.frag", "kPvrFragAutosortFcdFiltered", @("-DAUTOSORT", "-DFLOAT_CONTROLS", "-DDENORM_PRESERVE", "-DFILTERED")),
     @("resolve_comp_fcd.h", "resolve.comp", "kResolveCompFcd", @("-DFLOAT_CONTROLS", "-DDENORM_PRESERVE")),
     # N8.7: volumes modificadores (sombra por intensidade), com as tres variantes do ambiente FP
     @("volumes_comp.h", "volumes.comp", "kVolumesComp", @()),
@@ -57,6 +64,10 @@ $jobs = @(
     @("volumes_mask_comp_fc.h", "volumes.comp", "kVolumesMaskCompFc", @("-DMASK", "-DFLOAT_CONTROLS")),
     @("volumes_mask_comp_fcd.h", "volumes.comp", "kVolumesMaskCompFcd", @("-DMASK", "-DFLOAT_CONTROLS", "-DDENORM_PRESERVE")),
     @("soft_shadows_comp.h", "soft_shadows.comp", "kSoftShadowsComp", @()),
+    # N9.8 fase 8.3 (A2): o antialiasing das bordas da cena 3D
+    @("aa_comp.h", "aa.comp", "kAaComp", @()),
+    # N9.8 fase 8.4: a mascara do HUD no alfa do slot (a nitidez e o bloom so na cena 3D)
+    @("hudmask_comp.h", "hudmask.comp", "kHudMaskComp", @()),
     # N7c: apresentacao direta e reducao da resolucao interna
     @("present_vert.h", "present.vert", "kPresentVert", @()),
     @("present_frag.h", "present.frag", "kPresentFrag", @()),

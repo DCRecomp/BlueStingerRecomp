@@ -146,12 +146,11 @@ std::vector<SettingsMenu::Entry> SettingsMenu::entries() const {
         e.push_back({"V-Sync", soon(f.vsync, onoff(g.vsync)), f.vsync, [](Preferences& p, int) { p.graphics.vsync = !p.graphics.vsync; }});
         e.push_back({L("Filtragem de texturas", "Texture filtering"), soon(f.filtering, flt[size_t(g.filter)]), f.filtering,
                      [](Preferences& p, int d) { p.graphics.filter = cycle(p.graphics.filter, d, 3); }});
-        e.push_back({"Antialiasing (MSAA)", soon(f.msaa, g.msaa == 1 ? onoff(false) : std::to_string(g.msaa) + "x"), f.msaa,
-                     [](Preferences& p, int d) {
-                         const uint32_t v[] = {1, 2, 4, 8};
-                         int            i   = int(std::find(v, v + 4, p.graphics.msaa) - v);
-                         p.graphics.msaa    = v[std::clamp(i + d, 0, 3)];
-                     }});
+        // N9.8 fase 8.3 (D8-4): a linha do MSAA (avaliado e nao feito) virou a do antialiasing: a reducao por area na
+        // apresentacao e as bordas da cena 3D (o HUD e as telas do jogo fora), so na Remastered com o Vulkan
+        const char* aa[] = {"original", L("redução por área", "area downscale"), L("área e bordas", "area and edges")};
+        e.push_back({"Antialiasing", soon(f.antialiasing, aa[size_t(g.antialiasing)]), f.antialiasing,
+                     [](Preferences& p, int d) { p.graphics.antialiasing = cycle(p.graphics.antialiasing, d, 3); }});
         // N9.6 fase 5: as sombras aprimoradas (fase 4: a borda suave dos volumes e as sombras de contato) e a luz das fontes
         // (fase 3), so na Remastered com o Vulkan (Features::shadows e ::lighting); sem o recurso, "em breve"
         e.push_back({L("Sombras", "Shadows"), soon(f.shadows, g.shadows == st::Shadows::Original ? "original" : L("aprimoradas", "enhanced")),

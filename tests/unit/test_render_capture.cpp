@@ -495,6 +495,58 @@ BS_TEST(render_capture_native_vulkan_and_hd_replacement) {
     rc::set_texture_replacements(nullptr);
 }
 
+// N9.8 fase 8.2: uma substituicao adiada pelo limite do quadro (ITextureReplacements::deferred) fica no original nesse
+// render e chega no seguinte, sem os bytes da textura mudarem; begin_frame a cada render do Vulkan.
+BS_TEST(render_capture_hd_replacement_deferred) {
+    {
+        std::string err;
+        if (!nr::VulkanDevice::create(&err)) BS_SKIP("dispositivo Vulkan");
+    }
+    struct Provider : nr::ITextureReplacements {
+        nr::TextureId          want;
+        nr::ReplacementTexture tex;
+        bool                   wait = true;
+        int                    frames = 0;
+        const nr::ReplacementTexture* find(const nr::TextureId& id) override { return id == want && !wait ? &tex : nullptr; }
+        bool deferred(const nr::TextureId& id) const override { return id == want && wait; }
+        void begin_frame() override { ++frames; }
+    };
+    Provider p;
+    p.want = nr::texture_id(8, 8, std::vector<uint32_t>(64, 0xFFFF0000u));
+    p.tex  = {16, 16, std::vector<uint32_t>(16 * 16, 0xFF00FF00u)};
+    rc::set_texture_replacements(&p);
+    {
+        CaptureScene s(rc::Mode::Native);
+        auto frame = [&] {
+            for (uint32_t i = 0; i < 64; ++i) {  // 8x8 RGB565 vermelho (os mesmos bytes nos dois renders)
+                const uint16_t red = 0xF800;
+                std::memcpy(texture_memory() + vram_offset64(kTexA + 2 * i), &red, 2);
+            }
+            s.ta({0x8000000Au, kIspAlways, kTspOpaque, (1u << 27) | (kTexA >> 3)});
+            s.vtx(0, 0, 1, fb(0), fb(0), 0xFFFFFFFF);
+            s.vtx(32, 0, 1, fb(1), fb(0), 0xFFFFFFFF);
+            s.vtx(0, 32, 1, fb(0), fb(1), 0xFFFFFFFF);
+            s.vtx(32, 32, 1, fb(1), fb(1), 0xFFFFFFFF, true);
+            s.endList();
+            s.render();
+            uint16_t px;
+            std::memcpy(&px, texture_memory() + 0x100000 + 16 * 64 + 16 * 2, 2);
+            return px;
+        };
+        BS_CHECK(frame() == 0xF800);  // adiada: o original
+        BS_CHECK(rc::stats().tex_replace_deferred == 1 && rc::stats().tex_replaced == 0);
+        BS_CHECK(frame() == 0xF800);  // ainda adiada: pergunta de novo
+        BS_CHECK(rc::stats().tex_replace_deferred == 2);
+        p.wait = false;
+        BS_CHECK(frame() == 0x07E0);  // chegou
+        BS_CHECK(rc::stats().tex_replaced == 1 && rc::stats().tex_replace_deferred == 2);
+        const uint64_t uploads = rc::stats().tex_uploads;
+        BS_CHECK(frame() == 0x07E0 && rc::stats().tex_uploads == uploads);  // depois, o cache (sem reenviar)
+        BS_CHECK(p.frames == 4);
+    }
+    rc::set_texture_replacements(nullptr);
+}
+
 // N9.5 fase 1: o quadro largo (set_wide) no Vulkan, num framebuffer 640x480. Um quad de x = -100 a 740 (alem do 4:3): o
 // framebuffer recebe o recorte central (o 4:3 do jogo), a apresentacao acha o slot largo (854 de largura) e as faixas
 // tem o quad. Sem o quadro largo, nenhum slot na escala 1; numa falha do dispositivo, o software segue em 4:3 (sem slot
@@ -569,6 +621,18 @@ BS_TEST(render_capture_wide_frame_on_vulkan) {
         const rc::HiresImage h = rc::hires_for(exibido(), 640, 480);
         BS_CHECK(h.seq != 0 && h.width == 854 && h.height == 480);
         rc::set_wide(0);
+    }
+    {  // N9.8 fase 8.3 (revisao Codex 20261113-135423): perda transitoria com o antialiasing das bordas ligado: o dispositivo
+       // novo recebe a opcao de novo e o render sai pelo Vulkan com ela
+        CaptureScene s(rc::Mode::Native);
+        tela640(s);
+        rc::set_edge_antialiasing(true);
+        rc::inject_fault(rc::Fault::DeviceOnce);
+        quad(s);
+        rc::inject_fault(rc::Fault::None);
+        BS_CHECK(rc::stats().vk_recoveries == 1 && rc::stats().vk_frames == 1 && rc::stats().vk_error.empty());
+        BS_CHECK(rc::stats().vk_aa_frames == 1);
+        rc::set_edge_antialiasing(false);
     }
     {  // perda que se repete: software ate o fim da sessao, em 4:3 (sem slot largo), e o framebuffer continua certo
         CaptureScene s(rc::Mode::Native);

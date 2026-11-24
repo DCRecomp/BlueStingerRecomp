@@ -126,11 +126,15 @@ add_library(bs_native_render STATIC render/texture_convert.cpp render/render_ir.
             render/wide_frame.cpp           # N9.5 fase 1: o quadro largo (hor+) por translacao da IR
             render/water.cpp                # N9.7: ondulacao so nas superficies de agua identificadas
             render/material_catalog.cpp     # N9.6 fase 2b: o catalogo de materiais por TextureId (Remastered)
+            render/texture_packs.cpp        # N9.8 fase 8.2: o provedor das texturas HD (mods/<pacote>/texturas, PNG)
+            render/png_write.cpp            # N9.8 fase 8.2: PNG sem compressao (a exportacao de validacao e os testes)
             render/soft/soft_raster.cpp     # N8.7: rasterizador de referencia em software (o recuo do Vulkan)
             render/soft/soft_parallel_${BS_PARALELO}.cpp  # N9-L: linhas em paralelo (backend de plataforma)
             render/soft/soft_device.cpp)    # N8.7: o renderizador em software sobre a IR
 # (N8.8: o contrato do Kamui com os enderecos do guest saiu daqui para runtime/kamui, a biblioteca bs_kamui)
-target_link_libraries(bs_native_render PUBLIC bs_native_api PRIVATE tomlplusplus::tomlplusplus)
+# N9.8 fase 8.2: so o texture_packs.cpp inclui o stb_image (third_party/stb, dominio publico); os pacotes pelo mod.toml
+target_include_directories(bs_native_render PRIVATE ${PROJECT_SOURCE_DIR}/third_party/stb)
+target_link_libraries(bs_native_render PUBLIC bs_native_api PRIVATE tomlplusplus::tomlplusplus bs_native_localization)
 
 # N7b: backend Vulkan (offscreen; o Vulkan e carregado em tempo de execucao, sem SDK; cabecalhos Khronos em
 # third_party/vulkan, Apache-2.0; SPIR-V versionado em render/vulkan/spirv, gerado por tools/dev/gera_spirv.ps1)

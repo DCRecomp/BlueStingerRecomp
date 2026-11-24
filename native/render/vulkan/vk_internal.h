@@ -57,7 +57,7 @@ inline constexpr uint32_t kNone = 0xFFFFFFFFu;
     X(vkCmdBindPipeline) X(vkCmdNextSubpass) X(vkCmdBindVertexBuffers) X(vkCmdDraw) X(vkCmdDispatch) X(vkCmdPushConstants)          \
     X(vkCmdSetViewport) X(vkCmdSetScissor) X(vkCreateDescriptorSetLayout) X(vkDestroyDescriptorSetLayout)       \
     X(vkCreateDescriptorPool) X(vkDestroyDescriptorPool) X(vkAllocateDescriptorSets) X(vkFreeDescriptorSets)    \
-    X(vkUpdateDescriptorSets) X(vkCmdBindDescriptorSets) X(vkCreateSampler) X(vkDestroySampler)
+    X(vkUpdateDescriptorSets) X(vkCmdBindDescriptorSets) X(vkCreateSampler) X(vkDestroySampler) X(vkCmdBlitImage)
 
 struct Fn {
     PFN_vkGetInstanceProcAddr gipa = nullptr;
@@ -277,11 +277,12 @@ struct VkBase {
         return b.buf != VK_NULL_HANDLE && b.map;
     }
 
-    Image makeImage(uint32_t w, uint32_t h, VkFormat fmt, VkImageUsageFlags usage, VkImageAspectFlags aspect) {
+    // levels: os niveis de mipmap (N9.8 fase 8.1: as texturas da filtragem); a vista cobre todos
+    Image makeImage(uint32_t w, uint32_t h, VkFormat fmt, VkImageUsageFlags usage, VkImageAspectFlags aspect, uint32_t levels = 1) {
         Image             im;
         VkImageCreateInfo ii{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
         ii.imageType = VK_IMAGE_TYPE_2D, ii.format = fmt, ii.extent = {w, h, 1};
-        ii.mipLevels = 1, ii.arrayLayers = 1, ii.samples = VK_SAMPLE_COUNT_1_BIT, ii.tiling = VK_IMAGE_TILING_OPTIMAL;
+        ii.mipLevels = levels, ii.arrayLayers = 1, ii.samples = VK_SAMPLE_COUNT_1_BIT, ii.tiling = VK_IMAGE_TILING_OPTIMAL;
         ii.usage = usage, ii.sharingMode = VK_SHARING_MODE_EXCLUSIVE, ii.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         if (f_.vkCreateImage(dev_, &ii, nullptr, &im.img) != VK_SUCCESS) return {};
         ++g_live;
@@ -295,7 +296,7 @@ struct VkBase {
         }
         ++g_live;
         VkImageViewCreateInfo vi{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
-        vi.image = im.img, vi.viewType = VK_IMAGE_VIEW_TYPE_2D, vi.format = fmt, vi.subresourceRange = {aspect, 0, 1, 0, 1};
+        vi.image = im.img, vi.viewType = VK_IMAGE_VIEW_TYPE_2D, vi.format = fmt, vi.subresourceRange = {aspect, 0, levels, 0, 1};
         if (f_.vkBindImageMemory(dev_, im.img, im.mem, 0) != VK_SUCCESS ||
             f_.vkCreateImageView(dev_, &vi, nullptr, &im.view) != VK_SUCCESS) {
             im.view = VK_NULL_HANDLE;
@@ -347,6 +348,8 @@ struct SlotSource {
     virtual bool pin(uint64_t seq, VkImage& img, VkImageView& view, uint32_t& w, uint32_t& h, int& idx, VkSemaphore& wait,
                      uint64_t& version) = 0;
     virtual void unpin(int idx) = 0;
+    // N9.8 fase 8.4: o slot fixado (idx) tem a mascara do HUD no alfa (so enquanto fixado: a escrita seguinte e outra)
+    virtual bool slot_masked(int idx) = 0;
     virtual class PostChain* post_chain() = 0;  // a cadeia de pos-processamento do dispositivo (nullptr = indisponivel)
 
 protected:

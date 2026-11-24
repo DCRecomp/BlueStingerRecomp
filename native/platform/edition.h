@@ -23,6 +23,10 @@ struct EditionProfile {
     bool    wide_frame           = false;  // N9.5 fase 1: o quadro largo (16:9 hor+) pode ser ligado (graficos.toml, so Vulkan)
     bool    enhanced_water       = false;  // N9.7: a Original nunca recebe a ondulacao nova
     bool    lighting_effects     = false;  // N9.6: iluminacao aprimorada (AO; graficos.toml, so Vulkan); a Original nunca
+    bool    texture_filtering    = false;  // N9.8 fase 8.1: mipmaps, trilinear e anisotropica (so Vulkan); a Original nunca
+    bool    hd_textures          = false;  // N9.8 fase 8.2: as texturas HD de mods\<pacote>\texturas (so Vulkan); a Original nunca
+    bool    antialiasing         = false;  // N9.8 fase 8.3: a reducao por area e as bordas da cena 3D (so Vulkan); a Original nunca
+    bool    post_hud_mask        = false;  // N9.8 fase 8.4: a nitidez e o bloom so na cena 3D (so Vulkan); a Original como antes
     bool    operator==(const EditionProfile&) const = default;
 };
 

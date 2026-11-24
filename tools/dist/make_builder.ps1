@@ -87,7 +87,8 @@ $kit = Join-Path $stage "kit"
 # O que o .gitignore exclui (game-data, generated, ISO, ...) nunca entra (revisao Codex).
 $kitEntries = @("CMakeLists.txt", "LICENSE", "app", "runtime", "tools/extractor", "tools/dist/LEIA-ME.txt", "config",
                 "tools/dcmap", "native", "legacy", "transitional", "tools/build", "third_party/dr_libs", "third_party/xiph",
-                "third_party/vulkan", "mods-padrao", "third_party/fonts")  # N9.2: Noto Sans (OFL 1.1) da interface
+                "third_party/vulkan", "mods-padrao", "third_party/fonts",  # N9.2: Noto Sans (OFL 1.1) da interface
+                "third_party/stb")  # N9.8 fase 8.2: stb_image (dominio publico), o PNG das texturas HD de mods
 # release (-Versao): so os arquivos do commit (rastreados); um arquivo solto na arvore de trabalho nunca entra
 if ($Versao) { $kitList = @(git -C $repo -c core.quotepath=off ls-files --cached -- @kitEntries) }
 else { $kitList = @(git -C $repo -c core.quotepath=off ls-files --cached --others --exclude-standard -- @kitEntries) }
@@ -177,6 +178,7 @@ Copy-Item -LiteralPath (Join-Path $ftSrc "docs\FTL.TXT") -Destination "$stage\li
 Copy-Item -LiteralPath (Join-Path $repo "third_party\fonts\noto-sans\OFL.txt") -Destination "$stage\licencas\NotoSans-OFL-1.1.txt"
 Copy-Item -LiteralPath (Join-Path $repo "third_party\pl_mpeg\LICENSE") -Destination "$stage\licencas\pl_mpeg-MIT.txt"  # N5: decodificador MPEG-1 do conversor de filmes
 Copy-Item -LiteralPath (Join-Path $repo "third_party\dr_libs\LICENSE") -Destination "$stage\licencas\dr_flac-MIT0.txt"  # N6: FLAC de mods
+Copy-Item -LiteralPath (Join-Path $repo "third_party\stb\LICENSE") -Destination "$stage\licencas\stb_image-dominio-publico-ou-MIT.txt"  # N9.8 fase 8.2
 Copy-Item -LiteralPath (Join-Path $repo "third_party\xiph\libogg\COPYING") -Destination "$stage\licencas\libogg-BSD.txt"  # N6: OGG de mods
 Copy-Item -LiteralPath (Join-Path $repo "third_party\xiph\libvorbis\COPYING") -Destination "$stage\licencas\libvorbis-BSD.txt"
 Copy-Item -LiteralPath (Join-Path $repo "third_party\vulkan\Apache-2.0.txt") -Destination "$stage\licencas\Vulkan-Headers-Apache-2.0.txt"  # N7b

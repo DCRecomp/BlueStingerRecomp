@@ -1,0 +1,95 @@
+#version 450
+// N9.8 fase 8.3 (docs/N9-8-AUDITORIA.md secao 10): antialiasing das bordas da cena 3D, entre o passe A (opacas e
+// punch-through) e as translucidas. So os pixels com o bit 1 do anexo de sombra (a cena 3D: 1/w variando no desenho, o
+// mesmo criterio do AO) mudam; o HUD, os textos e as telas 2D do jogo (1/w constante) e tudo o que vem depois (as
+// translucidas, os volumes, a agua) ficam como estao.
+//
+// O metodo e a ideia conhecida de antialiasing por pos-processamento (borda pela luminancia, direcao pelo gradiente,
+// procura das pontas da borda e mistura com o vizinho do outro lado), escrita aqui de forma independente sobre imageLoad
+// (sem amostrador): le a copia da cor feita antes (`src`) e escreve na cor so os pixels misturados; os outros nem sao
+// escritos (ficam iguais bit a bit).
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(set = 0, binding = 0) uniform usampler2D stencilTex;     // bit 0 sombra, bit 1 cena 3D
+layout(set = 0, binding = 1, rgba8) uniform readonly image2D src;     // a copia da cor (antes deste passe)
+layout(set = 0, binding = 2, rgba8) uniform writeonly image2D color;  // a cor do alvo
+
+layout(push_constant) uniform Aa {
+    uvec2 size;
+    float threshold;     // contraste minimo (relativo ao maior luma da vizinhanca)
+    float thresholdMin;  // contraste minimo absoluto (os escuros)
+    float subpix;        // peso da mistura do serrilhado de um pixel (0 a 1)
+    uint  debug;         // so validacao: 1 = os pixels misturados em magenta
+} pc;
+
+const int kSearch = 12;  // passos da procura das pontas, para cada lado
+
+ivec2 clampi(ivec2 q) { return clamp(q, ivec2(0), ivec2(pc.size) - 1); }
+vec4  rgba(ivec2 q) { return imageLoad(src, clampi(q)); }
+float luma(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
+float lumaAt(ivec2 q) { return luma(rgba(q).rgb); }
+bool  scene(ivec2 q) { return (texelFetch(stencilTex, clampi(q), 0).r & 2u) != 0u; }
+
+void main() {
+    const ivec2 p = ivec2(gl_GlobalInvocationID.xy);
+    if (any(greaterThanEqual(uvec2(p), pc.size))) return;
+    if (!scene(p)) return;
+    const vec4 c = rgba(p);
+    const float lc = luma(c.rgb);
+    const float ln = lumaAt(p + ivec2(0, -1)), ls = lumaAt(p + ivec2(0, 1));
+    const float lw = lumaAt(p + ivec2(-1, 0)), le = lumaAt(p + ivec2(1, 0));
+    const float lmax = max(lc, max(max(ln, ls), max(lw, le)));
+    const float lmin = min(lc, min(min(ln, ls), min(lw, le)));
+    const float range = lmax - lmin;
+    if (range < max(pc.thresholdMin, lmax * pc.threshold)) return;  // sem borda
+    const float lnw = lumaAt(p + ivec2(-1, -1)), lne = lumaAt(p + ivec2(1, -1));
+    const float lsw = lumaAt(p + ivec2(-1, 1)), lse = lumaAt(p + ivec2(1, 1));
+
+    // a mistura do serrilhado de um pixel: a distancia entre o centro e a media 3x3 (pesos 2 nos lados, 1 nos cantos)
+    const float avg   = (2.0 * (ln + ls + lw + le) + (lnw + lne + lsw + lse)) / 12.0;
+    const float sub0  = clamp(abs(avg - lc) / range, 0.0, 1.0);
+    const float sub1  = smoothstep(0.0, 1.0, sub0);
+    const float subBl = sub1 * sub1 * pc.subpix;
+
+    // a direcao: borda horizontal (as linhas de cima e de baixo diferem) ou vertical
+    const float edgeH = abs(lnw - 2.0 * lw + lsw) + 2.0 * abs(ln - 2.0 * lc + ls) + abs(lne - 2.0 * le + lse);
+    const float edgeV = abs(lnw - 2.0 * ln + lne) + 2.0 * abs(lw - 2.0 * lc + le) + abs(lsw - 2.0 * ls + lse);
+    const bool  horiz = edgeV >= edgeH;  // a variacao e entre linhas: a borda corre na horizontal
+
+    // o lado da borda: o vizinho (acima/abaixo ou esquerda/direita) com o maior degrau
+    const float l1 = horiz ? ln : lw, l2 = horiz ? ls : le;
+    const float g1 = abs(l1 - lc), g2 = abs(l2 - lc);
+    const bool  first = g1 >= g2;
+    const ivec2 across = horiz ? ivec2(0, first ? -1 : 1) : ivec2(first ? -1 : 1, 0);
+    const ivec2 along  = horiz ? ivec2(1, 0) : ivec2(0, 1);
+    const float lEdge  = 0.5 * (lc + (first ? l1 : l2));  // o luma medio da borda (entre o pixel e o vizinho)
+    const float gScale = 0.25 * max(g1, g2);
+
+    // a procura das pontas: anda ao longo da borda na media das duas linhas ate o degrau sumir
+    int   dn = kSearch, dp = kSearch;
+    float endN = lEdge, endP = lEdge;
+    for (int i = 1; i <= kSearch; ++i) {
+        const ivec2 q   = p - along * i;
+        const float l   = 0.5 * (lumaAt(q) + lumaAt(q + across));
+        if (abs(l - lEdge) >= gScale) { dn = i, endN = l; break; }
+    }
+    for (int i = 1; i <= kSearch; ++i) {
+        const ivec2 q   = p + along * i;
+        const float l   = 0.5 * (lumaAt(q) + lumaAt(q + across));
+        if (abs(l - lEdge) >= gScale) { dp = i, endP = l; break; }
+    }
+    // a ponta mais perto decide: a mistura so vale se o centro esta do lado certo daquela ponta
+    const bool  nearN   = dn < dp;
+    const float dist    = float(min(dn, dp));
+    const float len     = float(dn + dp);
+    const float endL    = nearN ? endN : endP;
+    const bool  centerLess = lc < lEdge;
+    const bool  good    = ((endL - lEdge) < 0.0) != centerLess;
+    const float edgeBl  = good ? 0.5 - dist / len : 0.0;
+
+    const float blend = max(edgeBl, subBl);
+    if (blend <= 0.0) return;
+    vec3 o = mix(c.rgb, rgba(p + across).rgb, blend);
+    if (pc.debug == 1u) o = vec3(1.0, 0.0, 1.0);
+    imageStore(color, p, vec4(o, c.a));
+}

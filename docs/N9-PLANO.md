@@ -248,9 +248,12 @@ só como histórico:
 ### N10.0 (antigo N9.4) — Controles e experiência de PC (E, M) — movido para depois da 1.0 (seção 17)
 
 - Remapeamento por ação no menu; teclado, mouse, Xbox e PlayStation, com ícones pelo dispositivo; sensibilidade e
-  zonas mortas; inversão; vibração configurável; vários monitores; janela, tela cheia e sem bordas; cursor e foco
+  zonas mortas; inversão; vários monitores; janela, tela cheia e sem bordas; cursor e foco
   corretos (regra de 2026-10-23, `app/cursor_policy.h`); escala da interface em 1080p, 1440p, 4K e ultrawide.
 - Conforto não muda velocidade, física nem combate.
+- **Vibração fora do escopo (D4, aprovada pelo mantenedor em 2026-11-15):** o `pdVib` está ligado ao executável, mas sem
+  chamadores, e nenhuma rota medida pede vibração. A Original não muda. A Remastered pode ganhar a vibração no futuro só com
+  uma prova de que o jogo a pede ou com uma nova autorização. Evidência e etapas em `docs/N9-4-A-N9-12-PLANEJAMENTO.md`.
 - **Aceitação:** cada ação remapeável e persistida; troca de dispositivo troca os ícones na hora; estado por passo
   igual ao do mapa padrão com o mesmo roteiro lógico; testes em 1 e 2 monitores.
 
@@ -422,6 +425,22 @@ pelas subetapas (decisão do mantenedor, 2026-11-10). Não começa sem autoriza�
 - **Aceitação:** cada risco registrado resolvido ou aceito pelo mantenedor com evidência; as baterias do N9.5 em diante
   (H, R, P, J, Original × `referencias_n87`) sem falhas na árvore integrada.
 
+### N9.13 — Remasterização dos filmes com IA (R, G) — registrada em 2026-11-13
+
+Pedido do mantenedor (2026-11-13): os filmes em widescreen com IA, e uma segunda versão com o 3D melhorado, movimento mais
+moderno e widescreen. Planejamento em `docs/N9-13-FILMES-IA.md`. Não começa sem autorização.
+- **Versão A (widescreen):** os 16 filmes (320x240, 30 fps) ampliados e estendidos para 16:9 pelas laterais, com os mesmos
+  cortes, duração e áudio.
+- **Versão B (modernizada):** sobre a A, o visual do 3D refeito por vídeo para vídeo guiado pela estrutura do original, a 60
+  fps com a duração exata; o mesmo roteiro visual.
+- **Distribuição:** os filmes gerados são derivados do jogo: nunca no git nem na release. O repositório leva só o processo
+  (`tools/filmes-ia/`, fase 13.2), que roda na máquina de quem tem o CDI, com modelos de licença aberta conferida (sem NC,
+  sem API paga).
+- **No jogo:** a Remastered escolhe Filmes: original / widescreen / modernizados entre os pacotes instalados; o filme 16:9 em
+  tela cheia no 16:9; recuo por filme; a Original sempre com os filmes do disco.
+- **Aceitação:** por filme e versão, a mesma contagem de quadros, duração e passo lógico do fim (seção 14.2); sincronia de
+  áudio e legendas; consistência temporal medida; revisão visual do mantenedor. Decisões D13-1 a D13-6 pendentes.
+
 ---
 
 ## 6. Requisitos não funcionais
@@ -454,6 +473,7 @@ Pré-requisito: **N8 encerrado** (executável sem legado, com a regressão integ
 | 10 | N9.10 refinamentos | 3 (o 4 foi cancelado; tempo de jogo e perfis leem o sistema original) |
 | 11 | N9.11 otimização e validação final | todos |
 | 12 | N9.12 estabilização (registrada em 2026-11-10) | todos; antes do gate de campanha |
+| 13 | N9.13 filmes com IA (registrada em 2026-11-13) | 9 (o contrato dos filmes substituíveis), N9.5 (a apresentação 16:9); antes do N9.11 (D13-6) |
 
 Reorganização técnica sugerida: a marca cena/HUD na IR e a profundidade guardada (pré-requisitos do N7) entram no
 começo do marco 6, porque servem ao 16:9, ao SSAO e à água. O instalador (marco 2) pode andar em paralelo com os
@@ -707,3 +727,16 @@ Consequências:
 - **H9 (faltas de áudio):** continua pendente para a 1.0, tratado no N9.7.
 - **N10.3:** leva o diagnóstico do desempenho no Linux (P-L1) e a L6 do N9-L. O N9-L L0–L5 segue como está.
 - Nas seções anteriores a esta, os números são os antigos.
+
+## 18. Registro de 2026-11-13: N9.13, a remasterização dos filmes com IA (números antigos; na numeração da seção 17 os filmes widescreen fazem parte do N9.3)
+
+Pedido do mantenedor, em 2026-11-13: "Adiciona e planeja uma etapa para fazer a remasterização dos vídeos. Quero
+transformar eles em widescreen usando IA e outra versão melhorando a qualidade do 3D do vídeo, deixando uma movimentação mais
+moderna e gráfica, e widescreen."
+- **Registrado** como N9.13 (seção 5), com o plano em `docs/N9-13-FILMES-IA.md`: fases 13.0 (investigação, modelos e
+  licenças, medida local), 13.1 (o contrato no jogo e o 16:9 em tela cheia), 13.2 (versão A), 13.3 (versão B) e 13.4
+  (bateria).
+- **A numeração não muda** (seção 15). A ordem recomendada põe o N9.13 depois do N9.9 e antes do N9.11 (D13-6); a decisão é do
+  mantenedor.
+- **Restrições que já valem:** os filmes gerados não são distribuídos (seção 1.2); só modelos e ferramentas sem custo nem
+  licença restritiva (regra de 2026-11-03); a sincronia e o passo lógico do fim dos filmes (seção 14.2).

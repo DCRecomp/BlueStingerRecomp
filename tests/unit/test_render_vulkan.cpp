@@ -14,6 +14,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -394,6 +395,195 @@ BS_TEST(render_vulkan_ambient_occlusion) {
         d->set_ambient_occlusion(false);
         std::vector<uint32_t> back;
         BS_CHECK(d->submit(cl).ok() && d->read_frame(back, w, h).ok() && back == off);  // desligado de novo = o fiel
+    }
+    BS_CHECK(nr::vulkan_live_objects() == 0);
+}
+
+// N9.8 fase 8.3 (A2): o antialiasing das bordas da cena 3D. Um triangulo projetado claro (1/w variando: cena) e um triangulo
+// 2D claro (1/w constante: o HUD), os dois com bordas inclinadas sobre o fundo preto. Desligado: o fiel (igual ao software).
+// Ligado: so pixels da cena mudam, todos na regiao do triangulo projetado; cada um fica entre o menor e o maior luma da sua
+// vizinhanca 3x3 (mistura, nenhuma cor nova); o 2D fica bit a bit; o render de outro tamanho nao muda; desligado de novo
+// volta ao fiel e a imagem auxiliar sai.
+namespace {
+nr::CommandList aa_scene(uint32_t w = 640, uint32_t h = 480) {
+    nr::CommandList cl;
+    cl.frame.width = w, cl.frame.height = h, cl.frame.clear_color = 0xFF000000;
+    auto proj = [&](float x, float y, float z) {
+        nr::Vertex v;
+        v.x = float(w) / 2 + 500.f * x / z, v.y = float(h) / 2 + 500.f * y / z, v.inv_w = 1.f / z, v.color = 0xFFF0F0F0;
+        return v;
+    };
+    auto tri = [&](nr::Vertex a, nr::Vertex b, nr::Vertex c) {
+        nr::Draw d;
+        d.first_vertex = uint32_t(cl.vertices.size()), d.vertex_count = 3;
+        cl.vertices.push_back(a), cl.vertices.push_back(b), cl.vertices.push_back(c);
+        cl.draws.push_back(d);
+    };
+    tri(proj(-300, -200, 500), proj(250, -150, 700), proj(-100, 200, 600));  // a cena: bordas inclinadas
+    tri({420, 300, 0.01f, 0, 0, 0xFFF0F0F0, 0}, {620, 330, 0.01f, 0, 0, 0xFFF0F0F0, 0}, {450, 460, 0.01f, 0, 0, 0xFFF0F0F0, 0});
+    // revisao Codex 20261113-135423: um desenho da lista translucida (alfa 255, a mistura do jogo) sobre a borda esquerda do
+    // triangulo projetado: desenhado no passe B, depois das bordas, os pixels dele ficam iguais com e sem o antialiasing
+    tri({60, 120, 0.5f, 0, 0, 0xFF8040C0, 0}, {200, 140, 0.5f, 0, 0, 0xFF8040C0, 0}, {70, 330, 0.5f, 0, 0, 0xFF8040C0, 0});
+    cl.draws.back().state.list = nr::ListType::Translucent;
+    cl.draws.back().state.src = nr::Blend::SrcAlpha, cl.draws.back().state.dst = nr::Blend::InvSrcAlpha;
+    cl.draws.back().state.use_alpha = true;
+    return cl;
+}
+} // namespace
+
+BS_TEST(render_vulkan_edge_antialiasing) {
+    std::string err;
+    {
+        auto d = nr::VulkanDevice::create(&err);
+        if (!d) BS_SKIP("dispositivo Vulkan");
+        const nr::CommandList cl = aa_scene();
+        nr::soft::SoftwareDevice sw;
+        std::vector<uint32_t>    soft, off, on, again;
+        uint32_t                 w = 0, h = 0;
+        BS_CHECK(sw.submit(cl).ok() && sw.read_frame(soft, w, h).ok());
+        BS_CHECK(d->submit(cl).ok() && d->read_frame(off, w, h).ok());
+        BS_CHECK(off == soft && !off.empty());
+        const uint64_t before = d->stats().aa_frames;
+        d->set_edge_antialiasing(true);
+        BS_CHECK(d->submit(cl).ok() && d->read_frame(on, w, h).ok() && w == 640 && h == 480);
+        BS_CHECK(d->stats().aa_frames == before + 1 && d->stats().aa_image_bytes == 640ull * 480 * 4);
+        BS_CHECK(d->submit(cl).ok() && d->read_frame(again, w, h).ok() && again == on);  // determinismo
+        if (on.size() != off.size()) return;
+        auto     at = [&](const std::vector<uint32_t>& img, int x, int y) { return img[size_t(y) * 640 + x]; };
+        uint32_t changed = 0, outside = 0, newColor = 0, hud = 0;
+        for (int y = 1; y < 479; ++y)
+            for (int x = 1; x < 639; ++x) {
+                if (at(on, x, y) == at(off, x, y)) continue;
+                ++changed;
+                if (x >= 410 && y >= 290) ++hud;       // a regiao do triangulo 2D
+                else if (x < 15 || x > 600 || y < 15 || y > 420) ++outside;  // longe do triangulo projetado
+                double lo = 1e9, hi = -1;
+                for (int j = -1; j <= 1; ++j)
+                    for (int i = -1; i <= 1; ++i) lo = std::min(lo, lum(at(off, x + i, y + j))), hi = std::max(hi, lum(at(off, x + i, y + j)));
+                const double l = lum(at(on, x, y));
+                if (l < lo - 1.0 || l > hi + 1.0) ++newColor;
+            }
+        std::fprintf(stderr, "  bordas: %u pixels misturados (2D %u, fora %u, fora da vizinhanca %u)\n", changed, hud, outside, newColor);
+        BS_CHECK(changed > 100 && hud == 0 && outside == 0 && newColor == 0);
+        uint32_t cover = 0, coverDiff = 0;  // os pixels do desenho translucido (a cor dele sem o antialiasing)
+        for (size_t i = 0; i < off.size(); ++i)
+            if ((off[i] & 0xFFFFFF) == 0x8040C0) ++cover, coverDiff += on[i] != off[i];
+        std::fprintf(stderr, "  bordas: desenho translucido %u pixels, %u diferentes\n", cover, coverDiff);
+        BS_CHECK(cover > 1000 && coverDiff == 0);
+        // o render de outro tamanho (o desenho em textura) fica como o fiel
+        const nr::CommandList small = aa_scene(256, 256);
+        std::vector<uint32_t> s_soft, s_on;
+        BS_CHECK(sw.submit(small).ok() && sw.read_frame(s_soft, w, h).ok());
+        BS_CHECK(d->submit(small).ok() && d->read_frame(s_on, w, h).ok() && s_on == s_soft);
+        d->set_edge_antialiasing(false);
+        std::vector<uint32_t> back;
+        BS_CHECK(d->submit(cl).ok() && d->read_frame(back, w, h).ok() && back == off);
+        BS_CHECK(d->stats().aa_image_bytes == 0);
+    }
+    BS_CHECK(nr::vulkan_live_objects() == 0);
+}
+
+// N9.8 fase 8.4: a mascara do HUD no alfa do slot (hudmask.comp). A cena de aa_scene na escala 2 (o slot): o triangulo
+// projetado (cena), o 2D opaco e o translucido 2D (o HUD) sobre a borda do projetado. Ligada: o RGB do slot e a imagem que
+// volta para a CPU ficam iguais; o alfa e 255 no meio da cena, 0 sobre o translucido, no 2D opaco e no fundo, com uma
+// rampa (valores intermediarios) so perto do HUD. Outra escala com a mascara (o slot recriado: os conjuntos reescritos pela
+// geracao) e desligada de novo (o slot como antes).
+BS_TEST(render_vulkan_hud_mask) {
+    std::string err;
+    {
+        auto d = nr::VulkanDevice::create(&err);
+        if (!d) BS_SKIP("dispositivo Vulkan");
+        const nr::CommandList cl = aa_scene();
+        auto readSlot = [&](std::vector<uint32_t>& out, uint32_t& sw, uint32_t& sh) {
+            const uint64_t seq = d->last_slot(sw, sh);
+            uint32_t       width = 0;
+            return seq && d->read_slot(seq, 0, sh, out, width) && width == sw;
+        };
+        for (float scale : {2.f, 1.5f}) {
+            d->set_scale(scale);
+            d->set_hud_mask(false);
+            std::vector<uint32_t> base, cpu0, masked, cpu1, again;
+            uint32_t              sw = 0, sh = 0, w = 0, h = 0;
+            BS_CHECK(d->submit(cl).ok() && readSlot(base, sw, sh) && d->read_frame(cpu0, w, h).ok());
+            const uint64_t f0 = d->stats().hud_mask_frames;
+            d->set_hud_mask(true);
+            BS_CHECK(d->submit(cl).ok() && readSlot(masked, sw, sh) && d->read_frame(cpu1, w, h).ok());
+            BS_CHECK(d->stats().hud_mask_frames == f0 + 1 && d->stats().hud_mask_tiles > 0);
+            BS_CHECK(cpu1 == cpu0);  // a imagem que volta para a CPU (o framebuffer emulado) nao muda
+            BS_CHECK(masked.size() == base.size() && sw == uint32_t(640 * scale + 0.5f));
+            if (masked.size() != base.size() || base.empty()) continue;
+            uint32_t rgbDiff = 0;
+            for (size_t i = 0; i < base.size(); ++i) rgbDiff += (masked[i] & 0xFFFFFF) != (base[i] & 0xFFFFFF);
+            BS_CHECK(rgbDiff == 0);
+            auto alpha = [&](float gx, float gy) {  // nas coordenadas do jogo
+                return masked[size_t(gy * scale) * sw + size_t(gx * scale)] >> 24;
+            };
+            const uint32_t aScene = alpha(300, 160), aHud = alpha(150, 200), aOpaque2d = alpha(500, 380), aBack = alpha(600, 40);
+            uint32_t       ramp = 0, rampFar = 0;
+            for (uint32_t y = 0; y < sh; ++y)
+                for (uint32_t x = 0; x < sw; ++x) {
+                    const uint32_t a = masked[size_t(y) * sw + x] >> 24;
+                    if (a == 0 || a == 255) continue;
+                    ++ramp;
+                    const float gx = x / scale, gy = y / scale;  // longe do retangulo do translucido (60..200, 120..330)
+                    if (gx < 60 - 16 || gx > 200 + 16 || gy < 120 - 16 || gy > 330 + 16) ++rampFar;
+                }
+            std::fprintf(stderr, "  mascara do HUD (escala %.1f): alfa cena %u, HUD %u, 2D opaco %u, fundo %u; rampa %u pixels (%u longe do HUD)\n",
+                         scale, aScene, aHud, aOpaque2d, aBack, ramp, rampFar);
+            BS_CHECK(aScene == 255 && aHud == 0 && aOpaque2d == 0 && aBack == 0 && ramp > 0 && rampFar == 0);
+            BS_CHECK(d->submit(cl).ok() && readSlot(again, sw, sh) && again == masked);  // determinismo
+        }
+        // um sprite da cena (translucido, 1/w constante DENTRO da faixa da cena: fumaca, fogo) sobre o projetado continua na
+        // cena (os efeitos valem nele); o HUD (1/w 0,5, colado na camera) continua fora
+        {
+            d->set_scale(2.f);
+            nr::CommandList sp = aa_scene();
+            nr::Draw        dr;
+            dr.first_vertex = uint32_t(sp.vertices.size()), dr.vertex_count = 3;
+            for (const nr::Vertex& v : {nr::Vertex{330, 140, 1.f / 510, 0, 0, 0xFFFFA040, 0}, nr::Vertex{420, 150, 1.f / 510, 0, 0, 0xFFFFA040, 0},
+                                         nr::Vertex{350, 210, 1.f / 510, 0, 0, 0xFFFFA040, 0}})
+                sp.vertices.push_back(v);
+            dr.state.list = nr::ListType::Translucent, dr.state.src = nr::Blend::SrcAlpha, dr.state.dst = nr::Blend::InvSrcAlpha;
+            dr.state.use_alpha = true;
+            sp.draws.push_back(dr);
+            std::vector<uint32_t> m;
+            uint32_t              sw = 0, sh = 0;
+            BS_CHECK(d->submit(sp).ok() && readSlot(m, sw, sh) && m.size() == size_t(sw) * sh);
+            if (m.size() == size_t(sw) * sh) {
+                const uint32_t aSprite = m[size_t(170 * 2) * sw + 360 * 2] >> 24, aHud = m[size_t(200 * 2) * sw + 150 * 2] >> 24;
+                const uint32_t color   = m[size_t(170 * 2) * sw + 360 * 2] & 0xFFFFFF;
+                std::fprintf(stderr, "  mascara do HUD: sprite da cena alfa %u (cor %06X), HUD %u\n", aSprite, color, aHud);
+                BS_CHECK(aSprite == 255 && color == 0xFFA040 && aHud == 0);
+            }
+        }
+        // revisao Codex 20261114-010850: 1/w nao finito, zero, negativo ou abaixo do limite nunca marca o HUD (nenhum bloco)
+        {
+            nr::CommandList bad = aa_scene();
+            bad.draws.pop_back(), bad.vertices.resize(bad.vertices.size() - 3);  // sem o HUD de aa_scene
+            for (float iw : {std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::infinity(), 0.f, -0.5f, 0.01f}) {
+                nr::Draw dr;
+                dr.first_vertex = uint32_t(bad.vertices.size()), dr.vertex_count = 3;
+                for (const nr::Vertex& v : {nr::Vertex{100, 100, iw, 0, 0, 0xFF20FF20, 0}, nr::Vertex{300, 110, iw, 0, 0, 0xFF20FF20, 0},
+                                             nr::Vertex{120, 300, iw, 0, 0, 0xFF20FF20, 0}})
+                    bad.vertices.push_back(v);
+                dr.state.list = nr::ListType::Translucent, dr.state.src = nr::Blend::SrcAlpha, dr.state.dst = nr::Blend::InvSrcAlpha;
+                dr.state.use_alpha = true;
+                bad.draws.push_back(dr);
+            }
+            uint32_t sw = 0, sh = 0;
+            BS_CHECK(d->submit(bad).ok() && d->last_slot(sw, sh) != 0);
+            std::fprintf(stderr, "  mascara do HUD: 1/w invalido ou abaixo do limite, %llu blocos\n",
+                         (unsigned long long)d->stats().hud_mask_tiles);
+            BS_CHECK(d->stats().hud_mask_tiles == 0);
+        }
+        d->set_hud_mask(false);
+        std::vector<uint32_t> off;
+        uint32_t              sw = 0, sh = 0;
+        BS_CHECK(d->submit(cl).ok() && readSlot(off, sw, sh));
+        uint32_t alphaMasked = 0;  // desligada: o alfa volta a ser o do alvo (nenhum pixel com a rampa)
+        for (uint32_t p : off) alphaMasked += (p >> 24) != 0 && (p >> 24) != 255;
+        BS_CHECK(!off.empty() && alphaMasked == 0);
+        d->set_scale(1.f);
     }
     BS_CHECK(nr::vulkan_live_objects() == 0);
 }
@@ -940,6 +1130,156 @@ BS_TEST(render_vulkan_effects_target_switch) {
             BS_CHECK(same);
         }
         d->destroy_texture(lamp);
+    }
+    BS_CHECK(nr::vulkan_live_objects() == 0);
+}
+
+// N9.8 fase 8.1: a filtragem da Remastered (mipmaps pela GPU, trilinear, anisotropica; a variante -DFILTERED).
+//  - um chao em perspectiva com um xadrez de 1 texel: longe, o fiel (so o maior nivel) cintila; filtrado, vira cinza;
+//  - perto (ampliado), o filtrado fica no bilinear do fiel; o ponto nao muda; desligada, a imagem do fiel bit a bit;
+//  - a textura enviada antes de ligar ganha a cadeia (promocao); a criada depois ja nasce com ela;
+//  - repeticao, clamp e espelho em u e em v: ampliado, o filtrado igual ao fiel na tolerancia da quantizacao.
+namespace {
+nr::CommandList floor_scene(nr::TextureHandle t, nr::Filter f) {
+    nr::CommandList cl;
+    cl.frame.width = 640, cl.frame.height = 480, cl.frame.clear_color = 0xFF000000;
+    auto vtx = [](float x, float y, float iw, float u, float v) {
+        nr::Vertex vx;
+        vx.x = x, vx.y = y, vx.inv_w = iw, vx.u = u, vx.v = v, vx.color = 0xFFFFFFFF;
+        return vx;
+    };
+    // de perto (y 479, 1/w 1) a longe (y 200, 1/w 0,02): as UVs com a perspectiva
+    cl.vertices = {vtx(0, 479, 1.f, 0, 0), vtx(640, 479, 1.f, 32, 0), vtx(280, 200, 0.02f, 0, 400), vtx(360, 200, 0.02f, 32, 400)};
+    nr::Draw dr;
+    dr.vertex_count = 4, dr.state.depth = nr::DepthTest::Always, dr.state.texture = t, dr.state.filter = f;
+    dr.state.env = nr::TexEnv::Replace;
+    cl.draws = {dr};
+    return cl;
+}
+nr::CommandList quad_scene(nr::TextureHandle t, nr::Wrap wu, nr::Wrap wv) {
+    nr::CommandList cl;
+    cl.frame.width = 640, cl.frame.height = 480, cl.frame.clear_color = 0xFF000000;
+    auto vtx = [](float x, float y, float u, float v) {
+        nr::Vertex vx;
+        vx.x = x, vx.y = y, vx.inv_w = 1.f, vx.u = u, vx.v = v, vx.color = 0xFFFFFFFF;
+        return vx;
+    };
+    // 384 x 384 pixels para UV de -1 a 2 numa textura 32 x 32: 4 pixels por texel, tres copias em cada eixo
+    cl.vertices = {vtx(100, 40, -1, -1), vtx(484, 40, 2, -1), vtx(100, 424, -1, 2), vtx(484, 424, 2, 2)};
+    nr::Draw dr;
+    dr.vertex_count = 4, dr.state.depth = nr::DepthTest::Always, dr.state.texture = t, dr.state.env = nr::TexEnv::Replace;
+    dr.state.wrap_u = wu, dr.state.wrap_v = wv;
+    cl.draws = {dr};
+    return cl;
+}
+// media e desvio do verde num retangulo da imagem 640 x 480
+void band(const std::vector<uint32_t>& img, int x0, int y0, int x1, int y1, double& mean, double& sd) {
+    double s = 0, s2 = 0, n = 0;
+    for (int y = y0; y < y1; ++y)
+        for (int x = x0; x < x1; ++x) {
+            const double g = double((img[size_t(y) * 640 + x] >> 8) & 0xFF);
+            s += g, s2 += g * g, ++n;
+        }
+    mean = s / n, sd = std::sqrt(std::max(0.0, s2 / n - mean * mean));
+}
+int max_diff(const std::vector<uint32_t>& a, const std::vector<uint32_t>& b, int x0, int y0, int x1, int y1) {
+    int m = 0;
+    for (int y = y0; y < y1; ++y)
+        for (int x = x0; x < x1; ++x)
+            for (int sh = 0; sh <= 16; sh += 8)
+                m = std::max(m, std::abs(int((a[size_t(y) * 640 + x] >> sh) & 0xFF) - int((b[size_t(y) * 640 + x] >> sh) & 0xFF)));
+    return m;
+}
+} // namespace
+
+BS_TEST(render_vulkan_texture_filtering) {
+    std::string err;
+    {
+        auto d = nr::VulkanDevice::create(&err);
+        if (!d) BS_SKIP("dispositivo Vulkan");
+        if (!d->stats().mipmaps) BS_SKIP("mipmaps pela GPU");
+        std::fprintf(stderr, "  anisotropica ate %ux\n", d->stats().max_anisotropy);
+        nr::TextureDesc td;
+        td.width = td.height = 16;
+        std::vector<uint32_t> checker(256);
+        for (uint32_t i = 0; i < 256; ++i) checker[i] = ((i % 16) + (i / 16)) % 2 ? 0xFFFFFFFFu : 0xFF000000u;
+        const nr::TextureHandle t = d->create_texture(td, std::as_bytes(std::span<const uint32_t>(checker))).value();
+        d->set_scale(2);
+        std::vector<uint32_t> fiel, tri, ani, off, pFiel, pFilt;
+        BS_CHECK(run_cl(*d, floor_scene(t, nr::Filter::Bilinear), fiel));
+        BS_CHECK(run_cl(*d, floor_scene(t, nr::Filter::Point), pFiel));
+        BS_CHECK(d->stats().filtered_draws == 0 && d->stats().mip_textures == 0);
+        d->set_filtering(1, 16);
+        BS_CHECK(run_cl(*d, floor_scene(t, nr::Filter::Bilinear), tri));
+        const nr::VulkanStats s1 = d->stats();
+        BS_CHECK(s1.mip_promotions == 1 && s1.mip_textures == 1 && s1.filtered_draws == 1);
+        BS_CHECK(run_cl(*d, floor_scene(t, nr::Filter::Point), pFilt));
+        BS_CHECK(d->stats().filtered_draws == s1.filtered_draws);  // o ponto nao vai pela variante
+        BS_CHECK(pFilt == pFiel);
+        d->set_filtering(2, 16);
+        BS_CHECK(run_cl(*d, floor_scene(t, nr::Filter::Bilinear), ani));
+        d->set_filtering(0, 16);
+        BS_CHECK(run_cl(*d, floor_scene(t, nr::Filter::Bilinear), off));
+        BS_CHECK(off == fiel);  // desligada: o fiel bit a bit, mesmo com a textura ja com os mipmaps
+        if (fiel.size() == 640u * 480 && tri.size() == fiel.size() && ani.size() == fiel.size()) {
+            double mf = 0, sf = 0, mt = 0, st = 0, ma = 0, sa = 0;
+            band(fiel, 300, 206, 340, 226, mf, sf), band(tri, 300, 206, 340, 226, mt, st), band(ani, 300, 206, 340, 226, ma, sa);
+            std::fprintf(stderr, "  longe (verde): fiel media %.1f desvio %.1f; trilinear %.1f / %.1f; anisotropica %.1f / %.1f\n",
+                         mf, sf, mt, st, ma, sa);
+            BS_CHECK(st < sf * 0.5 && sa < sf * 0.5);  // a cintilacao some
+            BS_CHECK(std::abs(mt - 127.5) < 25 && std::abs(ma - 127.5) < 25);  // e vira o cinza do xadrez
+            const int nearDiff = max_diff(fiel, tri, 0, 440, 640, 478);
+            std::fprintf(stderr, "  perto: maior diferenca fiel x trilinear %d\n", nearDiff);
+            BS_CHECK(nearDiff <= 6);
+        }
+        d->set_filtering(1, 16);  // de novo: a textura ja tem a cadeia (nenhuma promocao nova)
+        std::vector<uint32_t> again;
+        BS_CHECK(run_cl(*d, floor_scene(t, nr::Filter::Bilinear), again) && again == tri);
+        BS_CHECK(d->stats().mip_promotions == 1);
+        // revisao Codex 20261112-211237: o reenvio de uma textura que ja tem a cadeia (todos os niveis de volta a destino, o
+        // maior substituido e os outros gerados de novo): o xadrez vira vermelho, perto (nivel 0) e longe (niveis menores)
+        {
+            const std::vector<uint32_t> red(256, 0xFFFF0000u);
+            BS_CHECK(d->update_texture(t, std::as_bytes(std::span<const uint32_t>(red))).ok());
+            std::vector<uint32_t> img;
+            BS_CHECK(run_cl(*d, floor_scene(t, nr::Filter::Bilinear), img));
+            if (img.size() == 640u * 480) {
+                int bad = 0;
+                for (const auto [x, y] : {std::pair{320, 470}, {320, 300}, {320, 215}, {310, 206}})
+                    bad += !close(img[size_t(y) * 640 + x] & 0xFFFFFF, 0xFF0000, 2);
+                std::fprintf(stderr, "  reenvio com a cadeia: %d de 4 pontos fora do vermelho\n", bad);
+                BS_CHECK(bad == 0);
+            }
+            BS_CHECK(d->update_texture(t, std::as_bytes(std::span<const uint32_t>(checker))).ok());
+            BS_CHECK(run_cl(*d, floor_scene(t, nr::Filter::Bilinear), img) && img == tri);  // de volta ao xadrez
+        }
+        // uma textura criada com a filtragem ligada ja nasce com a cadeia
+        nr::TextureDesc gd;
+        gd.width = gd.height = 32;
+        std::vector<uint32_t> grad(32 * 32);
+        for (uint32_t y = 0; y < 32; ++y)
+            for (uint32_t x = 0; x < 32; ++x) grad[y * 32 + x] = 0xFF000000u | ((x * 8) << 16) | ((y * 8) << 8) | (255 - x * 4);
+        const nr::TextureHandle g = d->create_texture(gd, std::as_bytes(std::span<const uint32_t>(grad))).value();
+        BS_CHECK(d->stats().mip_textures == 2 && d->stats().mip_promotions == 1);
+        d->set_scale(1);
+        int worst = 0;
+        for (const nr::Wrap wu : {nr::Wrap::Repeat, nr::Wrap::Clamp, nr::Wrap::Mirror})
+            for (const nr::Wrap wv : {nr::Wrap::Repeat, nr::Wrap::Clamp, nr::Wrap::Mirror}) {
+                std::vector<uint32_t> a, b;
+                d->set_filtering(0, 16);
+                BS_CHECK(run_cl(*d, quad_scene(g, wu, wv), a));
+                d->set_filtering(1, 16);
+                BS_CHECK(run_cl(*d, quad_scene(g, wu, wv), b));
+                if (a.size() != 640u * 480 || b.size() != a.size()) continue;
+                const int m = max_diff(a, b, 102, 42, 482, 422);  // por dentro do quadrado (um pixel de folga)
+                if (m > 3) std::fprintf(stderr, "  modo u %d v %d: diferenca %d\n", int(wu), int(wv), m);
+                worst = std::max(worst, m);
+            }
+        std::fprintf(stderr, "  repeticao, clamp e espelho (9 combinacoes, ampliado 4x): maior diferenca %d\n", worst);
+        BS_CHECK(worst <= 3);
+        d->destroy_texture(g);
+        d->destroy_texture(t);
+        BS_CHECK(d->stats().mip_textures == 0);
     }
     BS_CHECK(nr::vulkan_live_objects() == 0);
 }

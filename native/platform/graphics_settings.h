@@ -38,6 +38,10 @@ enum class Water : uint8_t { Original, Enhanced, High };
 // N9.6 fase 1: a qualidade do SSAO (baixa: meia resolucao, 4 direcoes x 3 passos; media: meia resolucao, 8 x 4; alta: o
 // alvo inteiro, 8 x 4). O mesmo numero de native::render::AoQuality
 enum class SsaoQuality : uint8_t { Low, Medium, High };
+// N9.8 fase 8.3 (D8-4): Area = a reducao por area na apresentacao (A1, so acima de 2:1); Edges = a reducao e o antialiasing
+// das bordas da cena 3D (A2, um compute entre as opacas e as translucidas, o HUD e as telas 2D fora). O MSAA foi avaliado e
+// nao foi feito (`msaa` fica no arquivo, sem efeito)
+enum class Antialiasing : uint8_t { Original, Area, Edges };
 
 struct GraphicsSettings {
     // do preset
@@ -45,7 +49,8 @@ struct GraphicsSettings {
     uint32_t   scale_pct   = 100;  // escala sobre a resolucao interna (50 a 200)
     Filter     filter      = Filter::Original;
     uint32_t   anisotropy  = 16;   // 2 a 16 (so com Filter::Anisotropic)
-    uint32_t   msaa        = 1;    // 1, 2, 4, 8
+    uint32_t   msaa        = 1;    // 1, 2, 4, 8 (avaliado e nao feito: sem efeito)
+    Antialiasing antialiasing = Antialiasing::Original;  // N9.8 fase 8.3
     bool       hd_textures = false;  // substituicoes HD por conteudo, quando houver pacote (N9)
     bool       lighting    = false;  // iluminacao aprimorada (so com dados confiaveis)
     Shadows    shadows     = Shadows::Original;
@@ -73,6 +78,9 @@ struct GraphicsSettings {
     // v0.9.7-1: a versao dos padroes da Remastered ja aplicada a este arquivo ([padroes] remastered; 0 = nenhuma). Fora dos
     // presets e da classificacao
     uint32_t   remaster_defaults = 0;
+    // N9.8 (D2, mantenedor 2026-11-14): a versao da migracao unica do antialiasing ja aplicada ([padroes] antialiasing; 0 =
+    // nenhuma). Fora dos presets e da classificacao
+    uint32_t   aa_defaults = 0;
     bool       operator==(const GraphicsSettings&) const = default;
 };
 
@@ -87,9 +95,10 @@ struct Features {
     bool crt = false;      // N7c: filtro CRT (so com resolucao interna >= kCrtMinHeight)
     bool water = false;    // N9.7: a agua aprimorada (Remastered com o Vulkan; a Original nunca)
     bool ssao = false;     // N9.6 fase 1: oclusao ambiente (Remastered com o Vulkan e a apresentacao direta)
+    bool antialiasing = false;  // N9.8 fase 8.3: a reducao por area e as bordas (Remastered com o Vulkan e a apresentacao direta)
     static Features all() {
         Features f{true, true, true, true, true, true, true, true, true, true, true};
-        f.color = f.tonemap = f.sharpen = f.bloom = f.crt = f.water = f.ssao = true;
+        f.color = f.tonemap = f.sharpen = f.bloom = f.crt = f.water = f.ssao = f.antialiasing = true;
         return f;
     }
 };
@@ -115,6 +124,12 @@ GraphicsSettings preset(Preset p);                   // o preset (Custom = Origi
 // kRemasterDefaults e a versao desses padroes: um graficos.toml com uma versao menor recebe os novos uma vez.
 inline constexpr uint32_t kRemasterDefaults = 1;
 GraphicsSettings remastered_best(const GraphicsSettings& base);
+// N9.8 (D2 b, mantenedor 2026-11-14): migracao unica do antialiasing. Um graficos.toml gravado pelo menu de uma versao anterior
+// a fase 8.3 (o cabecalho do jogo, sem [imagem] antialiasing e sem a marca [padroes] antialiasing) recebe a reducao por area
+// (a do Alto), uma vez, so na Remastered fora do --headless; um arquivo escrito a mao, a Original e o --antialiasing (que so
+// vale na execucao) nunca mudam o arquivo.
+inline constexpr uint32_t kAntialiasingDefaults = 1;
+bool antialiasing_migration_due(const std::string& text);
 // O texto que o menu grava no comeco do arquivo (to_toml): distingue um graficos.toml gravado pelo jogo de um escrito a mao
 inline constexpr const char* kGraphicsHeader = "# Blue Stinger Native PC: configuracoes graficas";
 Preset           classify(const GraphicsSettings& s);  // qual preset a configuracao e (ou Custom)

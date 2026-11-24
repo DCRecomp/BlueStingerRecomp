@@ -30,6 +30,7 @@ struct QuadPush {  // o layout de `Quad` em present.vert/present.frag
 static_assert(sizeof(QuadPush) == 36);
 
 constexpr uint32_t kOpaque  = 1;  // imagem do jogo: o alfa nao conta
+constexpr uint32_t kAreaFilter = 2;  // N9.8 fase 8.3 (A1): a reducao por area (present.frag)
 constexpr float    kFull[4] = {0, 0, 1, 1};
 
 class Presenter final : public PresenterImpl {
@@ -178,6 +179,10 @@ public:
                 post_.assign(r.post, r.post + r.post_count);
                 if (srcH < kCrtMinSourceHeight)
                     std::erase_if(post_, [&](const PostPass& p) { return p.shader == pc->builtin(PostBuiltin::Crt); });
+                // N9.8 fase 8.4: o modo da mascara do HUD so com um slot que a tem no alfa; a imagem da CPU (filmes, telas da
+                // CPU) e um slot sem ela passam pelos efeitos como antes
+                if (!(pinned_ >= 0 && slots_.slot_masked(pinned_)))
+                    for (PostPass& p : post_) p.hud_mask = false;
                 if (VkImageView v = pc->record(cmd_, gameView, gameLayout, srcW, srcH, post_)) {
                     // BS_VK_DIAG (so diagnostico, nada muda): a saida do pos depois de uma recriacao das imagens dele ja tem
                     // um conjunto no cache? (o conjunto foi escrito para a vista destruida que tinha o mesmo handle)
@@ -214,7 +219,9 @@ public:
         if (gameView) {
             const float x0 = area[0] / float(sw_) * 2 - 1, y0 = area[1] / float(sh_) * 2 - 1;
             const float x1 = (area[0] + area[2]) / float(sw_) * 2 - 1, y1 = (area[1] + area[3]) / float(sh_) * 2 - 1;
-            quad(opaque_, gameView, gameLayout, linear ? linear_ : nearest_, {x0, y0, x1, y1}, uv, kOpaque);
+            // N9.8 fase 8.3 (A1): a reducao por area (present.frag, bit 1) so com o bilinear; o shader so a usa acima de 2:1
+            quad(opaque_, gameView, gameLayout, linear ? linear_ : nearest_, {x0, y0, x1, y1}, uv,
+                 kOpaque | (linear && r.area_filter ? kAreaFilter : 0u));
         }
         for (int i = 0; i < 2; ++i)
             if (layerOn[i]) quad(blend_, layer_[i].image.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, nearest_, {-1, -1, 1, 1}, kFull, 0);

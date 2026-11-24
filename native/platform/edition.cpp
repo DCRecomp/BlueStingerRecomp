@@ -20,6 +20,10 @@ EditionProfile profile_for(Edition e) {
     p.wide_frame           = e == Edition::Remastered;
     p.enhanced_water       = e == Edition::Remastered;
     p.lighting_effects     = e == Edition::Remastered;
+    p.texture_filtering    = e == Edition::Remastered;
+    p.hd_textures          = e == Edition::Remastered;
+    p.antialiasing         = e == Edition::Remastered;
+    p.post_hud_mask        = e == Edition::Remastered;
     return p;
 }
 

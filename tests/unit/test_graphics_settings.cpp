@@ -97,11 +97,12 @@ BS_TEST(graphics_presets_safe_defaults) {
     for (st::Preset p : {st::Preset::Original, st::Preset::Balanced, st::Preset::High}) {
         const st::GraphicsSettings s = st::preset(p);
         BS_CHECK(s.shadows == st::Shadows::Original && !s.ssao && !s.lighting && s.water == st::Water::Original);  // N9.7 D7-1
+        BS_CHECK(!s.hd_textures);  // N9.8 D8-5: as texturas HD so pela escolha manual
         BS_CHECK(st::from_toml(std::string("preset = \"") + st::preset_name(p) + "\"\n") == s);  // o nome no arquivo
     }
     const st::GraphicsSettings hi = st::preset(st::Preset::High);  // o resto do Alto nao mudou
     BS_CHECK(hi.resolution == st::Resolution::P1440 && hi.filter == st::Filter::Anisotropic && hi.anisotropy == 16 && hi.msaa == 4 &&
-             hi.hd_textures && hi.sharpen == 0.25f && hi.color && hi.contrast == 1.10f && hi.saturation == 1.15f);
+             hi.sharpen == 0.25f && hi.color && hi.contrast == 1.10f && hi.saturation == 1.15f);
     st::Capabilities gpu;
     gpu.vulkan = true, gpu.max_msaa = 8, gpu.max_anisotropy = 16, gpu.max_height = 2160, gpu.features = st::Features::all();
     const fs::path dir = fs::temp_directory_path() / "bs_graficos_presets";
@@ -138,6 +139,32 @@ BS_TEST(graphics_presets_safe_defaults) {
 }
 
 // O que o renderizador ainda nao implementa volta ao original (o menu o mostra indisponivel), com o motivo
+// N9.8 fase 8.3 (D8-4, D8-5): o antialiasing. A reducao por area no Alto; as bordas so na escolha manual; no arquivo como
+// "original" | "area" | "bordas"; sem o recurso (a Original, o software, a apresentacao pelo SDL), o original
+BS_TEST(graphics_antialiasing_fase83) {
+    BS_CHECK(st::preset(st::Preset::Original).antialiasing == st::Antialiasing::Original);
+    BS_CHECK(st::preset(st::Preset::Balanced).antialiasing == st::Antialiasing::Original);
+    BS_CHECK(st::preset(st::Preset::High).antialiasing == st::Antialiasing::Area);
+    st::GraphicsSettings e = st::preset(st::Preset::High);
+    e.antialiasing         = st::Antialiasing::Edges;
+    BS_CHECK(st::classify(e) == st::Preset::Custom);  // as bordas sobre o Alto: personalizado
+    const std::string t = st::to_toml(e);
+    BS_CHECK(t.find("antialiasing = \"bordas\"") != std::string::npos && st::from_toml(t) == e);
+    std::string warn;
+    BS_CHECK(st::from_toml("[imagem]\nantialiasing = \"fxaa\"\n", &warn).antialiasing == st::Antialiasing::Original && !warn.empty());
+    st::Capabilities gpu;
+    gpu.vulkan = true, gpu.max_anisotropy = 16, gpu.max_height = 2160, gpu.features = st::Features::all();
+    BS_CHECK(st::clamp_to(e, gpu).antialiasing == st::Antialiasing::Edges);
+    gpu.features.antialiasing = false;  // a Original (o perfil nao libera) ou a apresentacao sem o Vulkan
+    std::vector<std::string> notes;
+    BS_CHECK(st::clamp_to(e, gpu, &notes).antialiasing == st::Antialiasing::Original && !notes.empty());
+    st::Capabilities soft;  // o software
+    BS_CHECK(st::clamp_to(e, soft).antialiasing == st::Antialiasing::Original);
+    // vale no quadro seguinte (nao recria alvos)
+    st::GraphicsSettings a = st::preset(st::Preset::High);
+    BS_CHECK(st::apply_kind(a, e) == st::Apply::Immediate);
+}
+
 BS_TEST(graphics_unimplemented_features_fall_back) {
     st::GraphicsSettings s = st::preset(st::Preset::High);
     s.bloom = true, s.window = st::WindowMode::Fullscreen;
@@ -397,4 +424,47 @@ BS_TEST(graphics_remastered_best_defaults) {
     BS_CHECK(st::from_toml(t).remaster_defaults == st::kRemasterDefaults && st::from_toml(t) == b);
     BS_CHECK(st::from_toml(st::to_toml(st::GraphicsSettings{})).remaster_defaults == 0);
     BS_CHECK(st::to_toml(st::GraphicsSettings{}).find("[padroes]") == std::string::npos);
+}
+
+// N9.8 (D2 b, mantenedor 2026-11-14): a migracao unica do antialiasing
+BS_TEST(graphics_antialiasing_migration_d2) {
+    // os padroes novos da Remastered ja trazem a area e a marca
+    const st::GraphicsSettings b = st::remastered_best(st::GraphicsSettings{});
+    BS_CHECK(b.antialiasing == st::Antialiasing::Area && b.aa_defaults == st::kAntialiasingDefaults);
+    const std::string novo = st::to_toml(b);
+    BS_CHECK(novo.find("antialiasing = 1") != std::string::npos && st::from_toml(novo).aa_defaults == st::kAntialiasingDefaults);
+    BS_CHECK(!st::antialiasing_migration_due(novo));  // gravado por esta versao: nunca migra
+    // o arquivo do menu da v0.9.7-1: o cabecalho, a marca [padroes] remastered, sem [imagem] antialiasing
+    st::GraphicsSettings velho = b;
+    velho.antialiasing = st::Antialiasing::Original, velho.aa_defaults = 0;
+    std::string t = st::to_toml(velho);
+    const size_t k = t.find("antialiasing = \"");
+    BS_CHECK(k != std::string::npos);
+    t.erase(k, t.find('\n', k) - k + 1);
+    BS_CHECK(t.find("antialiasing") == std::string::npos && t.find("remastered = 1") != std::string::npos);
+    BS_CHECK(st::antialiasing_migration_due(t));
+    const st::GraphicsSettings lido = st::from_toml(t);
+    BS_CHECK(lido.antialiasing == st::Antialiasing::Original && lido.aa_defaults == 0 && lido.remaster_defaults == 1);
+    // depois da migracao (o que o jogo grava): area e a marca; uma segunda leitura nao migra de novo
+    st::GraphicsSettings m = lido;
+    m.antialiasing = st::Antialiasing::Area, m.aa_defaults = st::kAntialiasingDefaults;
+    const st::GraphicsSettings m2 = st::from_toml(st::to_toml(m));
+    BS_CHECK(m2.antialiasing == st::Antialiasing::Area && !st::antialiasing_migration_due(st::to_toml(m)));
+    BS_CHECK(m2.resolution == lido.resolution && m2.aspect == lido.aspect && m2.ssao == lido.ssao);  // o resto nao muda
+    // o jogador que desligou o antialiasing depois da migracao: a marca fica, o "original" escolhido vale
+    m.antialiasing = st::Antialiasing::Original;
+    BS_CHECK(!st::antialiasing_migration_due(st::to_toml(m)));
+    // escrito a mao (sem o cabecalho do jogo), ilegivel, ou com a chave explicita: nunca migra
+    BS_CHECK(!st::antialiasing_migration_due("[imagem]\nresolucao = \"1080p\"\n"));
+    BS_CHECK(!st::antialiasing_migration_due(std::string(st::kGraphicsHeader) + "\n[imagem\n"));
+    BS_CHECK(!st::antialiasing_migration_due(std::string(st::kGraphicsHeader) + "\n[imagem]\nantialiasing = \"original\"\n"));
+    // a marca so com o antialiasing (sem a da Remastered) tambem vai e volta
+    st::GraphicsSettings so;
+    so.aa_defaults = st::kAntialiasingDefaults;
+    BS_CHECK(st::from_toml(st::to_toml(so)).aa_defaults == st::kAntialiasingDefaults &&
+             st::from_toml(st::to_toml(so)).remaster_defaults == 0);
+    // fora dos presets: a marca nao muda a classificacao
+    st::GraphicsSettings alto = st::preset(st::Preset::High);
+    alto.aa_defaults = st::kAntialiasingDefaults;
+    BS_CHECK(st::classify(alto) == st::Preset::High);
 }

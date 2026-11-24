@@ -35,6 +35,7 @@
 #include "platform/user_settings.h"
 #include "render/vulkan/vk_device.h"
 #include "render/wide_frame.h"
+#include "render/texture_packs.h"  // N9.8 fase 8.2
 #include "platform/telemetry.h"  // N9.5 fase 5C
 #include "render_capture.h"
 #include "gdfs_adapter.h"
@@ -112,6 +113,9 @@ struct Args {
     int      light  = 0;          // --iluminacao ligado|desligado (N9.6 fase 3; 0 = o do graficos.toml; so na Remastered)
     int      shadows = 0;         // --sombras original|aprimoradas (N9.6 fase 4; 0 = o do graficos.toml; so na Remastered)
     int      water = 0;           // --agua original|aprimorada|alta (N9.7; 0 = a do graficos.toml; 1 + qualidade; so na Remastered)
+    int      filter = 0;          // --filtragem original|bilinear|anisotropica (N9.8 fase 8.1; 0 = a do graficos.toml; 1 + modo)
+    int      hdTextures = 0;      // --texturas-hd desligado|ligado (N9.8 fase 8.2; 0 = a do graficos.toml; 1 desligado, 2 ligado)
+    int      aa = 0;              // --antialiasing original|area|bordas (N9.8 fase 8.3; 0 = o do graficos.toml; 1 + modo)
     int      cameraMode = -1;     // --camera original|livre (N7c; -1 = a do controles.toml, ou Original sem janela)
     int      present = -1;        // --apresentacao vulkan|sdl (N7c; -1 = Vulkan quando houver)
     bs::AudioEffectsProvider audioEffects = bs::AudioEffectsProvider::Legacy;  // --audio-efeitos nativo|legado (N6)
@@ -203,6 +207,23 @@ bool parseArgs(Args& a) {
         else if (s == L"--ssao" && (v = next())) {  // N9.6 fase 1: so nesta execucao
             if (*v == L"desligado") a.ssao = 1;
             else if (*v == L"ligado") a.ssao = 2;
+            else return false;
+        }
+        else if (s == L"--filtragem" && (v = next())) {  // N9.8 fase 8.1: so nesta execucao (nao vai para o graficos.toml)
+            if (*v == L"original") a.filter = 1;
+            else if (*v == L"bilinear") a.filter = 2;
+            else if (*v == L"anisotropica") a.filter = 3;
+            else return false;
+        }
+        else if (s == L"--antialiasing" && (v = next())) {  // N9.8 fase 8.3: so nesta execucao (nao vai para o graficos.toml)
+            if (*v == L"original") a.aa = 1;
+            else if (*v == L"area") a.aa = 2;
+            else if (*v == L"bordas") a.aa = 3;
+            else return false;
+        }
+        else if (s == L"--texturas-hd" && (v = next())) {  // N9.8 fase 8.2: so nesta execucao (nao vai para o graficos.toml)
+            if (*v == L"desligado") a.hdTextures = 1;
+            else if (*v == L"ligado") a.hdTextures = 2;
             else return false;
         }
         else if (s == L"--agua" && (v = next())) {  // N9.7: so nesta execucao (nao vai para o graficos.toml)
@@ -298,6 +319,18 @@ fs::path exeDir() { return bs::platform::exe_dir(); }
 // N9-L (A11): a pasta dos mods ao lado do executavel e as subpastas, sem diferenciar maiusculas ("Mods/Video" no Linux)
 fs::path modsPath(const wchar_t* sub = nullptr) {
     return bs::native::resolve_case(exeDir(), sub ? fs::path(L"mods") / sub : fs::path(L"mods"));
+}
+
+// N9.8 fase 8.2: os pacotes de texturas HD (mods\<pacote>\mod.toml com texturas\); os avisos no stderr
+bs::native::render::TexturePacks discoverTexturePacks() {
+    std::vector<std::string> problems;
+    auto packs = bs::native::render::TexturePacks::discover(modsPath(), "T13001N V1.000", &problems);
+    for (const auto& p : packs.packages())
+        std::fprintf(stderr, "[texturas-hd] pacote %s %s (prioridade %d): %u texturas\n", p.id.c_str(), p.version.c_str(),
+                     p.priority, p.textures);
+    for (const auto& pr : problems) std::fprintf(stderr, "[texturas-hd] %s\n", pr.c_str());
+    if (packs.empty()) std::fprintf(stderr, "[texturas-hd] nenhum pacote com texturas em mods\\: a opcao fica indisponivel\n");
+    return packs;
 }
 
 // Pasta dos arquivos do usuario (log): ao lado do executavel se der para gravar la; senao
@@ -425,6 +458,16 @@ bool validateData(const fs::path& dir, bs::FilesProvider files, std::string& err
     }
 }
 
+#if BS_VALIDACAO
+// N9.8 fase 8.4, so validacao: BS_HUD_MASCARA=1 liga a mascara do HUD tambem sem a janela e grava o alfa do slot nas
+// capturas (vNNNNNN_mascara.bmp); BS_HUD_MASCARA=0 a desliga na janela (os efeitos como antes, para a comparacao). -1 = sem
+// a variavel. O produto nao le a variavel.
+int hudMaskEnv() {
+    const char* v = std::getenv("BS_HUD_MASCARA");
+    return v && *v == '1' ? 1 : v && *v == '0' ? 0 : -1;
+}
+#endif
+
 // Capturas do headless (--dump-every N --capture <dir>), na thread do jogo, nos VBlanks multiplos de N (exatos: a mesma
 // rota em duas execucoes captura os mesmos quadros). BS_CAPTURA_VBLANKS=a-b,c-d limita a essas faixas; BS_CAPTURA_CRUA=1
 // grava tambem o quadro sem a legenda (vNNNNNN_crua.bmp) quando ha legenda; com a resolucao interna, vNNNNNN_hd.bmp.
@@ -441,8 +484,13 @@ std::function<void(const bs::GameFrame&)> headlessCapture(const Args& a) {
             if (*q == ',') ++q;
         }
     const bool raw  = std::getenv("BS_CAPTURA_CRUA") != nullptr;
+#if BS_VALIDACAO
+    const bool hudMaskDump = hudMaskEnv() == 1;  // N9.8 fase 8.4: o alfa do slot (a mascara do HUD) em vNNNNNN_mascara.bmp
+#else
+    const bool hudMaskDump = false;
+#endif
     auto       subs = std::make_shared<bs::SubtitleOverlay>();  // N7c: a captura mostra a legenda como o jogador a ve
-    return [dir = a.capture, ranges, raw, subs](const bs::GameFrame& f) {
+    return [dir = a.capture, ranges, raw, subs, hudMaskDump](const bs::GameFrame& f) {
         const uint64_t v = f.vblank;
         bool           want = ranges.empty();
         for (const auto& [x, y] : ranges) want = want || (v >= x && v <= y);
@@ -461,6 +509,11 @@ std::function<void(const bs::GameFrame&)> headlessCapture(const Args& a) {
             hd.width = f.hiresWidth, hd.height = f.hiresRows;
             std::snprintf(name, sizeof name, "v%06llu_hd.bmp", (unsigned long long)v);
             writeBmp(dir / name, hd);
+            if (hudMaskDump) {  // N9.8 fase 8.4 (so validacao): o alfa em cinza
+                for (uint32_t& p : hd.argb) p = 0xFF000000u | (p >> 24) * 0x010101u;
+                std::snprintf(name, sizeof name, "v%06llu_mascara.bmp", (unsigned long long)v);
+                writeBmp(dir / name, hd);
+            }
             // N9.5 fase 4: o estado do pilar dinamico nesta captura (o criterio H6 de tools/dev/n95_headless.py)
             if (hd.width > hd.height * 4 / 3) {
                 const auto p = bs::transitional::render_capture::pillar_sides();
@@ -862,6 +915,9 @@ public:
     void     set_light_override() { lightOverride_ = true; }  // nem --iluminacao (N9.6 fase 3)
     void     set_shadows_override() { shadowsOverride_ = true; }  // nem --sombras (N9.6 fase 4)
     void     set_water_override() { waterOverride_ = true; }  // nem --agua (N9.7)
+    void     set_filter_override() { filterOverride_ = true; }  // nem --filtragem (N9.8 fase 8.1)
+    void     set_hd_override() { hdOverride_ = true; }  // nem --texturas-hd (N9.8 fase 8.2)
+    void     set_aa_override() { aaOverride_ = true; }  // nem --antialiasing (N9.8 fase 8.3)
     // antes do apply(prefs, true): a --resolucao-interna e o limite 4:3 da GPU (VulkanStats::max_internal_height)
     void     set_internal_height_override(uint32_t h, uint32_t gpuMax) { heightOverride_ = h, gpuMax_ = (std::max)(480u, gpuMax); }
     // a apresentacao recuou para o SDL (sem slots): o quadro largo deixa de existir nesta execucao
@@ -920,6 +976,11 @@ public:
             // revisao Codex 20261110-011045: pela altura em uso (o limite do 16:9 pode reduzi-la abaixo de 1080)
             ps.crt = g.crt && g.vulkan && height >= st::kCrtMinHeight;
             ps.crtScanlines = g.crt_scanlines, ps.crtMask = g.crt_mask, ps.crtVignette = g.crt_vignette;
+            ps.areaFilter = g.vulkan && g.antialiasing != st::Antialiasing::Original;  // N9.8 fase 8.3 (A1)
+            ps.hudMask    = g.vulkan && editionProfile().post_hud_mask;                 // N9.8 fase 8.4
+#if BS_VALIDACAO
+            if (hudMaskEnv() == 0) ps.hudMask = false;  // so validacao: BS_HUD_MASCARA=0, os efeitos como antes (comparacao)
+#endif
             for (const auto& pkg : shaders_)
                 if (pkg.error.empty() && pkg.name == g.shader) {
                     ps.shader = &pkg;
@@ -954,6 +1015,13 @@ public:
         if (heightChanged && !heightFirst) sendHeight();
         if (start || g.vulkan != old.graphics.vulkan || g.water != old.graphics.water)
             host_.setWaterQuality(g.vulkan ? uint32_t(g.water) : 0);
+        // N9.8 fase 8.1: a filtragem (clamp_to ja a leva ao original sem o recurso: a Original e o software)
+        if (start || g.vulkan != old.graphics.vulkan || g.filter != old.graphics.filter || g.anisotropy != old.graphics.anisotropy)
+            host_.setFiltering(g.vulkan ? uint32_t(g.filter) : 0, g.anisotropy);
+        if (start || g.vulkan != old.graphics.vulkan || g.antialiasing != old.graphics.antialiasing)  // N9.8 fase 8.3 (A2)
+            host_.setEdgeAntialiasing(g.vulkan && g.antialiasing == st::Antialiasing::Edges);
+        if (start || g.vulkan != old.graphics.vulkan || g.hd_textures != old.graphics.hd_textures)  // N9.8 fase 8.2
+            host_.setHdTextures(g.vulkan && g.hd_textures);
         // N9.6 fase 1: a oclusao ambiente (clamp_to ja a desliga sem o recurso: a Original e o recuo para o SDL)
         if (start || g.ssao != old.graphics.ssao || g.ssao_quality != old.graphics.ssao_quality || g.vulkan != old.graphics.vulkan)
             host_.setAmbientOcclusion(g.vulkan && g.ssao, uint32_t(g.ssao_quality));
@@ -984,6 +1052,10 @@ public:
         if (g.aspect != old.graphics.aspect) aspectOverride_ = false;  // N9.5 fase 5A: escolhida no menu, deixa de ser da linha de comando
         if (p.camera.mode != old.camera.mode) cameraOverride_ = false;
         if (p.subtitles.enabled != old.subtitles.enabled || p.subtitles.language != old.subtitles.language) subtitleOverride_ = false;
+        // N9.8 (revisao Codex 20261113-135423): a filtragem, as texturas HD e o antialiasing mudados no menu tambem
+        if (g.filter != old.graphics.filter || g.anisotropy != old.graphics.anisotropy) filterOverride_ = false;
+        if (g.hd_textures != old.graphics.hd_textures) hdOverride_ = false;
+        if (g.antialiasing != old.graphics.antialiasing) aaOverride_ = false;
         persist();
     }
 
@@ -1003,6 +1075,10 @@ public:
         if (lightOverride_) d.graphics.lighting = persisted_.graphics.lighting;  // N9.6 fase 3
         if (shadowsOverride_) d.graphics.shadows = persisted_.graphics.shadows;  // N9.6 fase 4
         if (waterOverride_) d.graphics.water = persisted_.graphics.water;  // N9.7
+        if (filterOverride_) d.graphics.filter = persisted_.graphics.filter, d.graphics.anisotropy = persisted_.graphics.anisotropy;
+        if (aaOverride_) d.graphics.antialiasing = persisted_.graphics.antialiasing;  // N9.8 fase 8.3
+        // N9.8 fase 8.2: sem pacote nesta execucao (a opcao nao existe) a escolha do arquivo fica para quando ele voltar
+        if (hdOverride_ || !menu_.capabilities().features.hd_textures) d.graphics.hd_textures = persisted_.graphics.hd_textures;
         // N9.5 fase 5A (D5-2, D5-4): a ultima proporcao aplicada de fato; a do arquivo na Original, com --proporcao ou
         // quando a escolha nao valeu (software, recuo para o SDL)
         d.graphics.aspect = st::aspect_for_file(applied_.graphics.aspect, wide_ ? st::Aspect::Wide16x9 : st::Aspect::Original4x3,
@@ -1055,7 +1131,8 @@ private:
     // proporcao veio da linha de comando (so nesta execucao)
     bool                              wideAllowed_ = false, aspectOverride_ = false, ssaoOverride_ = false,
                                       ssaoQualityOverride_ = false, lightOverride_ = false,
-                                      shadowsOverride_ = false, waterOverride_ = false;
+                                      shadowsOverride_ = false, waterOverride_ = false, filterOverride_ = false,
+                                      hdOverride_ = false, aaOverride_ = false;
     uint32_t                          wide_ = 0;
     // N9.5 fase 5B: a --resolucao-interna (0 = a do graficos.toml; so nesta execucao) e a altura interna enviada ao jogo
     uint32_t                          heightOverride_ = 0, appliedHeight_ = 0, gpuMax_ = 480;
@@ -1413,6 +1490,12 @@ int runWindow(bs::GameHost& host, ni::InputSystem& input, const Args& a, SDL_Win
     if (const char* v = std::getenv("BS_CONTROLE_VIRTUAL"); v && *v) virtualPad = std::make_unique<VirtualPad>(readFile(v));
     bs::CursorWhy cursorWhy    = bs::CursorWhy::Fullscreen;  // o estado inicial do SDL: visivel
     bool          cursorHidden = false;
+    // RecompLauncher (SDK, "Controllers and Big Picture mode"): Play no modo Big Picture (controle, sofa, Steam Deck)
+    // abre em tela cheia; no modo desktop e sem o launcher, a janela de sempre. F11 continua alternando.
+    if (const char* m = std::getenv("RECOMPLAUNCHER_MODE"); m && std::string(m) == "bigpicture") {
+        fullscreen = true;
+        SDL_SetWindowFullscreen(window, true);
+    }
     while (!quit) {
         if (virtualPad && virtualPad->step()) quit = true;
         SDL_Event e;
@@ -1538,6 +1621,15 @@ int runWindow(bs::GameHost& host, ni::InputSystem& input, const Args& a, SDL_Win
             std::snprintf(name, sizeof name, "janela_v%06llu_%dx%d.bmp", (unsigned long long)frame.vblank, ow, oh);
             writeBmp(fs::path(winDir) / name, f);
         }
+#if BS_VALIDACAO
+        // N9.8 fase 8.4 (so validacao): BS_JANELA_SAIR_VBLANK=<n> fecha a janela pelo caminho normal depois do VBlank n (as
+        // suites da janela leem o resumo do render, que so sai no fim do processo)
+        static const uint64_t quitAt = [] {
+            const char* v = std::getenv("BS_JANELA_SAIR_VBLANK");
+            return v && *v ? std::strtoull(v, nullptr, 10) : 0ull;
+        }();
+        if (quitAt && frame.vblank >= quitAt) quit = true;
+#endif
 #if BS_VALIDACAO
         // N9.5 fase 5 (so validacao, revisao Codex 20261110-004711): BS_APRESENTACAO_FALHAR=<n> da a apresentacao Vulkan como
         // falha a partir do n-esimo quadro apresentado: o caminho real do recuo para o SDL (fallbackToSdl, drop_wide)
@@ -1981,6 +2073,18 @@ int mainHeadless(Args& a) {
         std::fprintf(stderr, "erro: --sombras aprimoradas so na edicao Remastered com --render nativo\n");
         return 2;
     }
+    if (a.filter >= 2 && (!editionProfile().texture_filtering || opt.render != bs::RenderProvider::Native)) {  // N9.8 fase 8.1
+        std::fprintf(stderr, "erro: --filtragem bilinear|anisotropica so na edicao Remastered com --render nativo\n");
+        return 2;
+    }
+    if (a.aa >= 2 && (!editionProfile().antialiasing || opt.render != bs::RenderProvider::Native)) {  // N9.8 fase 8.3
+        std::fprintf(stderr, "erro: --antialiasing area|bordas so na edicao Remastered com --render nativo\n");
+        return 2;
+    }
+    if (a.hdTextures == 2 && (!editionProfile().hd_textures || opt.render != bs::RenderProvider::Native)) {  // N9.8 fase 8.2
+        std::fprintf(stderr, "erro: --texturas-hd ligado so na edicao Remastered com --render nativo\n");
+        return 2;
+    }
     if (a.water >= 2 && (!editionProfile().enhanced_water || opt.render != bs::RenderProvider::Native)) {  // N9.7
         std::fprintf(stderr, "erro: --agua aprimorada|alta so na edicao Remastered com --render nativo\n");
         return 2;
@@ -1995,12 +2099,19 @@ int mainHeadless(Args& a) {
     }
     opt.input           = input.get();
     if (assist) opt.vblankHook = [&assist](const bs::GameOptions::VblankView& v) { return assist->onVblank(v); };
+    bs::native::render::TexturePacks packs;  // N9.8 fase 8.2: antes do host (vive mais que a thread do jogo)
     bs::GameHost host;
     if (a.dumpEvery && !a.capture.empty()) opt.captureEvery = a.dumpEvery, opt.capture = headlessCapture(a);
     const bool headlessNative = opt.render == bs::RenderProvider::Native;
     // N9.6 fase 2b: o catalogo de materiais so na Remastered (a Original nao calcula identidade nenhuma para ele)
     bs::transitional::render_capture::set_materials(editionProfile().lighting_effects);
+    // N9.8 fase 8.2: as texturas HD sem janela so com --texturas-hd ligado (validado acima)
+    if (a.hdTextures == 2) {
+        packs = discoverTexturePacks();
+        host.setTexturePacks(&packs);
+    }
     host.start(std::move(opt));
+    if (a.hdTextures == 2) host.setHdTextures(true);
     if (a.internalHeight) {
         // N9.5 fase 5B: o mesmo limite da janela (o alvo largo tem outro); a altura desce pelos degraus do menu ate caber
         uint32_t h = a.internalHeight;
@@ -2021,6 +2132,14 @@ int mainHeadless(Args& a) {
     if (a.light == 2) host.setLighting(true);  // N9.6 fase 3 (validado acima)
     if (a.shadows == 2) host.setShadows(true);  // N9.6 fase 4 (validado acima)
     if (a.water >= 2) host.setWaterQuality(uint32_t(a.water - 1));  // N9.7 (validado acima)
+    if (a.filter >= 2) host.setFiltering(uint32_t(a.filter - 1), 16);  // N9.8 fase 8.1 (validado acima)
+    if (a.aa == 3) host.setEdgeAntialiasing(true);  // N9.8 fase 8.3: sem janela so as bordas (a area e da apresentacao)
+#if BS_VALIDACAO
+    if (hudMaskEnv() == 1) {  // N9.8 fase 8.4: so validacao, a mascara do HUD tambem sem a janela (o alfa do slot)
+        bs::transitional::render_capture::set_hud_mask_diagnostic();
+        std::fprintf(stderr, "[render] BS_HUD_MASCARA=1: a mascara do HUD no alfa do slot (so validacao)\n");
+    }
+#endif
     if (a.ssao == 2)  // N9.6 fase 1 (validado acima); sem --ssao-qualidade, a media (o padrao do graficos.toml)
         host.setAmbientOcclusion(true, a.ssaoQuality >= 0 ? uint32_t(a.ssaoQuality) : uint32_t(st::SsaoQuality::Medium));
 #if BS_VALIDACAO
@@ -2244,10 +2363,32 @@ int mainWindow(Args& a) {
                              exists ? "graficos.toml de uma versao anterior" : "instalacao nova", st::kRemasterDefaults);
             }
         }
+        // N9.8 (D2 b, mantenedor 2026-11-14): migracao unica do antialiasing. O graficos.toml que o menu gravou antes da fase
+        // 8.3 (sem [imagem] antialiasing e sem a marca [padroes] antialiasing) recebe a reducao por area, uma vez; o resto do
+        // arquivo nao muda. Arquivo escrito a mao, a Original e o --headless nunca migram; o --antialiasing so vale na execucao.
+        if (editionProfile().edition == bs::native::edition::Edition::Remastered && !a.headless &&
+            prefs.graphics.aa_defaults < st::kAntialiasingDefaults) {
+            std::error_code ec;
+            if (fs::exists(prefsDir / st::kGraphicsFile, ec)) {
+                std::ifstream     in(prefsDir / st::kGraphicsFile, std::ios::binary);
+                std::stringstream ss;
+                ss << in.rdbuf();
+                if (st::antialiasing_migration_due(ss.str())) {
+                    prefs.graphics.antialiasing = st::Antialiasing::Area;
+                    prefs.graphics.aa_defaults  = st::kAntialiasingDefaults;
+                    std::string err;
+                    if (!st::write_graphics(prefsDir, prefs.graphics, &err)) std::fprintf(stderr, "[menu] %s\n", err.c_str());
+                    std::fprintf(stderr, "[menu] Remastered: antialiasing por area no graficos.toml de uma versao anterior "
+                                         "(migracao unica, versao %u)\n", st::kAntialiasingDefaults);
+                }
+            }
+        }
         // a marca acompanha toda gravacao do menu na Remastered (um arquivo gravado por esta versao nunca e tratado como de
         // uma anterior); o arquivo so muda quando o jogador muda algo
-        if (editionProfile().edition == bs::native::edition::Edition::Remastered)
+        if (editionProfile().edition == bs::native::edition::Edition::Remastered) {
             prefs.graphics.remaster_defaults = (std::max)(prefs.graphics.remaster_defaults, st::kRemasterDefaults);
+            prefs.graphics.aa_defaults       = (std::max)(prefs.graphics.aa_defaults, st::kAntialiasingDefaults);  // N9.8 (D2)
+        }
         persisted        = prefs;
         // O perfil fornece o padrao sem reescrever a preferencia compartilhada entre edicoes. Um arquivo existente
         // sempre vence (fora a vez unica dos padroes da Remastered, acima).
@@ -2272,6 +2413,7 @@ int mainWindow(Args& a) {
         }
     }
     st::Capabilities caps;  // o que o renderizador ja implementa (o resto: "em breve" no menu)
+    bs::native::render::TexturePacks texturePacks;  // N9.8 fase 8.2: vivo ate o fim do jogo (GameHost::setTexturePacks)
     uint32_t         gpuMaxHeight = 480;
     {
         std::string vkErr;
@@ -2292,6 +2434,18 @@ int mainWindow(Args& a) {
         caps.features.ssao = editionProfile().lighting_effects;  // N9.6 fase 1: a oclusao ambiente da Remastered
         caps.features.lighting = editionProfile().lighting_effects;  // N9.6 fase 3: a luz das fontes do catalogo
         caps.features.shadows = editionProfile().lighting_effects;   // N9.6 fase 4: as sombras aprimoradas
+        caps.features.antialiasing = editionProfile().antialiasing;  // N9.8 fase 8.3: a reducao por area e as bordas
+        // N9.8 fase 8.1: a filtragem (mipmaps pela GPU, trilinear, anisotropica ate o limite do dispositivo)
+        const auto vk = bs::native::render::vulkan_shared(nullptr);
+        if (vk && vk->stats().mipmaps) {
+            caps.features.filtering = editionProfile().texture_filtering;
+            caps.max_anisotropy     = vk->stats().max_anisotropy;
+        }
+        // N9.8 fase 8.2: as texturas HD na Remastered, quando algum pacote de mods\ tem texturas
+        if (editionProfile().hd_textures) {
+            texturePacks            = discoverTexturePacks();
+            caps.features.hd_textures = !texturePacks.empty();
+        }
     }
     // N9.5 fase 5A: a edicao tem a opcao 4:3/16:9 (com o Vulkan): a escolha 16:9 fica guardada mesmo quando o quadro largo
     // nao existe nesta execucao (caps.wide_frame; o recuo para o SDL), e so a imagem fica em 4:3 (effective_aspect)
@@ -2302,6 +2456,9 @@ int mainWindow(Args& a) {
     if (a.light) prefs.graphics.lighting = a.light == 2;  // N9.6 fase 3: so nesta execucao
     if (a.shadows) prefs.graphics.shadows = a.shadows == 2 ? st::Shadows::Enhanced : st::Shadows::Original;  // N9.6 fase 4
     if (a.water) prefs.graphics.water = st::Water(a.water - 1);  // N9.7: so nesta execucao (clamp_to desliga sem o recurso)
+    if (a.filter) prefs.graphics.filter = st::Filter(a.filter - 1);  // N9.8 fase 8.1: so nesta execucao
+    if (a.hdTextures) prefs.graphics.hd_textures = a.hdTextures == 2;  // N9.8 fase 8.2: so nesta execucao
+    if (a.aa) prefs.graphics.antialiasing = st::Antialiasing(a.aa - 1);  // N9.8 fase 8.3: so nesta execucao
     // N9.5 (revisao Codex 20261105-180747; fase 5B): o limite da GPU (max_internal_height) e calculado para um alvo 4:3; o
     // quadro largo tem 854/640 da largura e o seu limite e outro (graphics_settings: max_internal_height). Antes da fase 5B
     // ele so valia com o 16:9 ja no inicio; agora vale na proporcao em uso, inclusive depois de uma troca pelo menu, e a
@@ -2349,6 +2506,7 @@ int mainWindow(Args& a) {
                 return true;
             };
         bs::transitional::render_capture::set_materials(editionProfile().lighting_effects);  // N9.6 fase 2b
+        host.setTexturePacks(texturePacks.empty() ? nullptr : &texturePacks);  // N9.8 fase 8.2
         host.start(std::move(opt));
         InGameMenu menu(host, *input, window, pres, prefsDir, prefs, persisted, renderOverride, subtitleOverride, cameraOverride, caps,
                         languages);
@@ -2363,6 +2521,9 @@ int mainWindow(Args& a) {
         if (a.light) menu.set_light_override();
         if (a.shadows) menu.set_shadows_override();
         if (a.water) menu.set_water_override();
+        if (a.filter) menu.set_filter_override();
+        if (a.hdTextures) menu.set_hd_override();
+        if (a.aa) menu.set_aa_override();
         menu.set_speakers_available(speakers);
         menu.set_internal_height_override(a.internalHeight, gpuMaxHeight);  // so nesta execucao (com o limite da proporcao em uso)
         menu.apply(prefs, true);

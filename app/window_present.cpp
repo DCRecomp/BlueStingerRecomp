@@ -151,6 +151,7 @@ public:
         r.slot_seq = f.hiresSeq, r.slot_y0 = f.hiresY0, r.slot_rows = f.hiresRows;
         if (f.width && f.height) r.argb = f.argb.data(), r.width = f.width, r.height = f.height, r.argb_version = frameSeq;
         r.post = passes_.data(), r.post_count = uint32_t(passes_.size());
+        r.area_filter = spec_.areaFilter;  // N9.8 fase 8.3 (A1)
         // indice fixo por camada (0 legendas, 1 menu): a versao de uma nunca e confundida com a da outra
         r.layer_count = 2;
         for (size_t i = 0; i < layers.size() && i < 2; ++i) {
@@ -186,7 +187,22 @@ public:
                       (unsigned long long)s.recreated, s.frames ? s.cpu_ms_total / double(s.frames) : 0.0, s.cpu_ms_max,
                       s.frames ? s.wait_ms_total / double(s.frames) : 0.0, double(s.upload_bytes) / 1048576.0,
                       (unsigned long long)s.post_frames);
-        return b;
+        std::string out = b;
+        // N9.8 fase 8.4: o tempo de GPU medio de cada passe do pos (as consultas de timestamp da cadeia), para a medida de custo
+        static const char* const kNames[] = {"cor", "tonemapping", "nitidez", "bloom (horizontal)", "bloom (vertical)", "CRT"};
+        std::string              t;
+        for (const nr::PostTiming& x : dev_->post_timings()) {
+            if (!x.passes) continue;
+            int k = 0;
+            while (k < int(nr::PostBuiltin::Count) && dev_->post_builtin(nr::PostBuiltin(k)) != x.shader) ++k;
+            char line[96];
+            std::snprintf(line, sizeof line, "%s%s %.3f ms (%llu)", t.empty() ? "" : "; ",
+                          k < int(nr::PostBuiltin::Count) ? kNames[k] : "shader de mod", x.ms_total / double(x.passes),
+                          (unsigned long long)x.passes);
+            t += line;
+        }
+        if (!t.empty()) out += "[apresentacao] pos, GPU medio por passe: " + t + "\n";
+        return out;
     }
 
 private:
@@ -220,6 +236,11 @@ private:
         m.shader = mod;
         for (size_t i = 0; i < spec_.shaderParams.size() && i < nr::kPostParams; ++i) m.params[i] = spec_.shaderParams[i];
         if (mod >= 0 && spec_.shader->before_builtin) passes_.push_back(m);
+        // N9.8 fase 8.4: a mascara do HUD so quando a nitidez ou o bloom estao ligados e nenhum shader de mod vem antes (ele
+        // nao repassa o alfa); o dispositivo a grava no alfa dos slots seguintes, e os internos a repassam ate a nitidez
+        const bool     hud    = spec_.hudMask && (spec_.sharpen > 0 || spec_.bloom) && !(mod >= 0 && spec_.shader->before_builtin);
+        const size_t   first  = passes_.size();
+        dev_->set_hud_mask(hud);
         // ordem dos internos: bloom (sobre a imagem do jogo), tonemapping, correcao de cor, nitidez
         if (spec_.bloom) {
             nr::PostPass h, v;
@@ -245,6 +266,8 @@ private:
             n.shader = dev_->post_builtin(nr::PostBuiltin::Sharpen), n.params[0] = spec_.sharpen;
             if (n.shader >= 0) passes_.push_back(n);
         }
+        if (hud)  // os internos de cor (bloom, tonemapping, cor, nitidez) no modo da mascara
+            for (size_t i = first; i < passes_.size(); ++i) passes_[i].hud_mask = true;
         if (mod >= 0 && !spec_.shader->before_builtin) passes_.push_back(m);
         if (spec_.crt) {  // por ultimo: a "tela" sobre a imagem final do jogo
             nr::PostPass c;

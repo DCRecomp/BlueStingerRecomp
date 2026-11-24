@@ -46,6 +46,18 @@ struct VulkanStats {
     // -DWATER), os desenhos de agua desenhados por ela, e a imagem da cena para a agua viva agora (bytes; 0 = nenhuma)
     uint64_t    water_frames = 0, water_draws = 0;
     uint64_t    water_scene_bytes = 0;
+    // N9.8 fase 8.1: a filtragem da Remastered. mipmaps = o formato das texturas aceita a geracao dos niveis pela GPU (blit
+    // linear); max_anisotropy = o maior nivel da anisotropica (1 = sem o recurso); filtered_draws = desenhos pela variante
+    // -DFILTERED; mip_textures = as texturas vivas com a cadeia de mipmaps; mip_promotions = as que ganharam a cadeia ao
+    // ligar a filtragem (o envio delas foi antes)
+    bool        mipmaps = false;
+    uint32_t    max_anisotropy = 1;
+    uint64_t    filtered_draws = 0, mip_textures = 0, mip_promotions = 0;
+    // N9.8 fase 8.3 (A2): renders com o antialiasing das bordas da cena 3D aplicado (aa.comp) e a imagem de saida dele viva
+    // agora (bytes; 0 = nenhuma: sai com o antialiasing desligado)
+    uint64_t    aa_frames = 0, aa_image_bytes = 0;
+    // N9.8 fase 8.4: slots com a mascara do HUD no alfa (hudmask.comp) e os blocos de 8x8 marcados como HUD no ultimo deles
+    uint64_t    hud_mask_frames = 0, hud_mask_tiles = 0;
     uint64_t    negative_depth_frames = 0;  // quadros com 1/w negativo (profundidade deslocada, ver frame_prep)
     // garantias do modo fiel (igualdade bit a bit com o software): ambiente FP do software nos shaders
     // (VK_KHR_shader_float_controls) e profundidade crua (VK_EXT_depth_range_unrestricted)
@@ -76,6 +88,10 @@ struct PostPass {
     // binding 1 do passe: -1 = a imagem original do jogo (antes da cadeia); k = a ENTRADA do passe k, que so pode ser o
     // imediatamente anterior (o bloom compoe o borrado sobre a imagem de antes dele)
     int   original = -1;
+    // N9.8 fase 8.4: o passe interno no modo da mascara do HUD (o alfa da imagem e a mascara de hudmask.comp: a nitidez e
+    // o bloom so na cena 3D, os outros repassam o alfa). A apresentacao so o mantem quando a fonte e um slot com a mascara
+    // (VulkanDevice::set_hud_mask); senao o passe roda como antes. Os shaders de mod nao o usam
+    bool  hud_mask = false;
 };
 
 // Passes internos (secao 21), na interface dos de mods. Os ainda nao implementados devolvem -1 em post_builtin.
@@ -110,6 +126,9 @@ struct PresentRequest {
     uint32_t        width = 0, height = 0;
     uint64_t        argb_version = 0;            // muda a cada quadro novo
     bool            linear = true;               // filtragem ao ampliar (a imagem da CPU na resolucao do jogo)
+    // N9.8 fase 8.3 (A1): a reducao por area na imagem do jogo quando ela e mais de 2x maior que a area na janela (so com
+    // `linear`); ate 2:1 o bilinear de sempre
+    bool            area_filter = false;
     // pos-processamento: so na imagem do jogo, antes das camadas (texto nitido); vazio = a imagem como esta
     const PostPass* post = nullptr;
     uint32_t        post_count = 0;
@@ -153,6 +172,19 @@ public:
     // render, water.h). So os desenhos translucidos com kMaterialWater no catalogo, so no render do framebuffer. A imagem
     // da cena para a agua nasce no primeiro quadro que tiver um desses desenhos e sai com a agua desligada.
     virtual void     set_water(WaterQuality q, uint64_t render) = 0;
+    // N9.8 fase 8.1: a filtragem das texturas no proximo submit (0 = a do fiel, so o maior nivel; 1 = trilinear; 2 =
+    // trilinear com a anisotropica de `anisotropy`, limitada a stats().max_anisotropy). Ligada, as texturas ganham a cadeia
+    // de mipmaps (as ja enviadas, de uma vez, no submit seguinte) e os desenhos bilineares vao pela variante -DFILTERED. O
+    // ponto, a agua e a filtragem desligada ficam como o fiel. Sem stats().mipmaps, nada muda.
+    virtual void     set_filtering(uint32_t mode, uint32_t anisotropy) = 0;
+    // N9.8 fase 8.3 (A2): o antialiasing das bordas da cena 3D no proximo submit (aa.comp, depois dos volumes e antes das
+    // translucidas; so os pixels com o bit 1 do anexo de sombra mudam). So no render do framebuffer. Desligado = a imagem de
+    // antes
+    virtual void     set_edge_antialiasing(bool on) = 0;
+    // N9.8 fase 8.4: a mascara do HUD no alfa de cada slot escrito daqui em diante (hudmask.comp: 1 na cena 3D fora dos
+    // desenhos translucidos 2D, 0 no resto). O RGB do slot, o alvo e a imagem que volta para a CPU nao mudam. Desligada, o
+    // slot fica como antes (sem o compute)
+    virtual void     set_hud_mask(bool on) = 0;
     // N9.6 fase 1: a qualidade do AO (alta: o alvo inteiro, 8 direcoes x 4 passos, a primeira versao e o padrao do
     // dispositivo; media: meia resolucao com a reconstrucao pela profundidade, 8 x 4; baixa: meia resolucao, 4 x 3)
     virtual void     set_ambient_occlusion_quality(AoQuality q) = 0;

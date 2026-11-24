@@ -1,0 +1,38 @@
+#version 450
+// N9.8 fase 8.4 (docs/N9-8-AUDITORIA.md secao 11): a mascara do HUD para a nitidez e o bloom, gravada no ALFA do slot da
+// apresentacao (o alfa do alvo, que volta para a CPU, nao muda; a apresentacao ignora o alfa da imagem do jogo).
+// alfa = 1 so na cena 3D (bit 1 do anexo de sombra: as opacas e o punch-through projetados) fora do HUD; o HUD sao os
+// desenhos translucidos 2D (1/w constante), que nao gravam aquele bit: o render os marca em blocos de 8x8 pixels do alvo
+// (`tiles`, um byte por bloco, ja dilatado em um bloco), e a cobertura e interpolada entre os centros dos blocos (sem
+// degrau na borda do HUD). As telas 2D do jogo e o fundo ficam com 0. O RGB do slot nao muda.
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(set = 0, binding = 0) uniform usampler2D stencilTex;  // bit 0 sombra, bit 1 cena 3D
+layout(set = 0, binding = 1, rgba8) uniform image2D slot;    // o slot (a copia do alvo)
+layout(std430, set = 0, binding = 2) readonly buffer Tiles { uint t[]; };  // 4 blocos por palavra
+
+layout(push_constant) uniform Mask {
+    uvec2 size;   // o alvo (o slot)
+    uvec2 tiles;  // blocos por linha e por coluna
+} pc;
+
+float tile(ivec2 q) {
+    q = clamp(q, ivec2(0), ivec2(pc.tiles) - 1);
+    const uint i = uint(q.y) * pc.tiles.x + uint(q.x);
+    return float((t[i >> 2] >> ((i & 3u) * 8u)) & 0xFFu) / 255.0;
+}
+
+void main() {
+    const ivec2 p = ivec2(gl_GlobalInvocationID.xy);
+    if (any(greaterThanEqual(uvec2(p), pc.size))) return;
+    float a = 0.0;
+    if ((texelFetch(stencilTex, p, 0).r & 2u) != 0u) {
+        const vec2  tc = (vec2(p) + 0.5) / 8.0 - 0.5;  // em blocos, a partir do centro do primeiro
+        const ivec2 t0 = ivec2(floor(tc));
+        const vec2  f  = tc - vec2(t0);
+        const float h  = mix(mix(tile(t0), tile(t0 + ivec2(1, 0)), f.x), mix(tile(t0 + ivec2(0, 1)), tile(t0 + ivec2(1, 1)), f.x), f.y);
+        a              = 1.0 - h;
+    }
+    const vec4 c = imageLoad(slot, p);
+    imageStore(slot, p, vec4(c.rgb, a));
+}

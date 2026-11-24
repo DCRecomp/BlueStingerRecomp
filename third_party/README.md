@@ -14,6 +14,7 @@ projeto (ver LEGAL.md).
 | xxHash | BSD-2 | cache de texturas/pipelines | M5 |
 | pl_mpeg | MIT | conversão dos filmes no Builder; no Linux, os filmes do disco tocados pelo jogo (`third_party/pl_mpeg`) | N5, N9-L |
 | dr_flac | domínio público ou MIT-0 | FLAC de mods de áudio (`third_party/dr_libs`) | N6 |
+| stb_image 2.30 | domínio público ou MIT | PNG das texturas HD de mods, só a decodificação da memória (`third_party/stb`) | N9.8 |
 | libogg + libvorbis | BSD-3 (Xiph.Org) | OGG/Vorbis de mods de áudio, só a decodificação (`third_party/xiph`) | N6 |
 | FreeType 2.13.3 | FTL (FreeType License; o projeto escolhe a FTL da licença dupla FTL/GPLv2) | texto do menu e das legendas no Linux; FetchContent da tag `VER-2-13-3`, sem zlib, PNG, bzip2, Brotli nem HarfBuzz. Só no build do Linux | N9-L |
 | Noto Sans 2.015 (Regular e SemiBold) | SIL OFL 1.1 | fonte do texto no Linux, embutida no executável (`third_party/fonts/noto-sans`, com o `OFL.txt`) | N9-L |
