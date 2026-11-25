@@ -539,8 +539,8 @@ BS_TEST(settings_menu_camera_page) {
     BS_CHECK(m.page() == bs::SettingsMenu::Page::Controls);
 }
 
-// Cursor do mouse (app/cursor_policy.h): so no modo janela, escondido no gameplay com foco; o menu e a perda de foco o
-// mostram; em tela cheia nada muda (visivel, como antes).
+// Cursor do mouse (app/cursor_policy.h): escondido no gameplay com foco, na janela e (desde 2026-11-25) em tela cheia; o menu e a perda de foco o
+// mostram.
 BS_TEST(cursor_policy_windowed_only) {
     using bs::CursorWhy;
     BS_CHECK(bs::cursor_state(false, true, false) == CursorWhy::Gameplay && bs::cursor_hidden(CursorWhy::Gameplay));
@@ -548,5 +548,6 @@ BS_TEST(cursor_policy_windowed_only) {
     BS_CHECK(bs::cursor_state(false, false, false) == CursorWhy::NoFocus && !bs::cursor_hidden(CursorWhy::NoFocus));
     BS_CHECK(bs::cursor_state(false, false, true) == CursorWhy::NoFocus);
     for (bool focus : {false, true})
-        for (bool menu : {false, true}) BS_CHECK(!bs::cursor_hidden(bs::cursor_state(true, focus, menu)));
+        for (bool menu : {false, true})  // 2026-11-25: tela cheia segue a regra da janela (oculto so no gameplay com foco)
+            BS_CHECK(bs::cursor_hidden(bs::cursor_state(true, focus, menu)) == (focus && !menu));
 }
