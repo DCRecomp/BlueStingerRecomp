@@ -265,3 +265,10 @@ bool http_download(const std::string& url, const std::filesystem::path& dst, con
 }
 
 } // namespace bs::builder::plat
+namespace bs::builder::plat {
+// 2026-11-25: no Linux, uma conexao (o curl do sistema)
+bool http_download_paralelo(const std::string& url, const std::filesystem::path& dst, const std::atomic<bool>* cancel,
+                            const std::function<void(uint64_t, uint64_t)>& onBytes, std::string* err) {
+    return http_download(url, dst, cancel, onBytes, err);
+}
+} // namespace bs::builder::plat

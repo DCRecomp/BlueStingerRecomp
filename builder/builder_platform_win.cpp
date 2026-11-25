@@ -10,11 +10,16 @@
 #include <shellapi.h>
 #include <winhttp.h>
 
+#include <algorithm>
+#include <atomic>
 #include <cstdio>
 #include <cwchar>
 #include <fstream>
 #include <iterator>
+#include <mutex>
 #include <random>
+#include <thread>
+#include <vector>
 
 namespace fs = std::filesystem;
 
@@ -343,5 +348,165 @@ bool http_download(const std::string& url, const fs::path& dst, const std::atomi
     }
     return true;
 }
+
+// 2026-11-25: o download em partes (Range) ao mesmo tempo (http_download_paralelo, builder_platform.h)
+namespace {
+
+struct Pedido {
+    HINTERNET s = nullptr, c = nullptr, r = nullptr;
+    ~Pedido() {
+        for (HINTERNET h : {r, c, s})
+            if (h) WinHttpCloseHandle(h);
+    }
+};
+
+// abre um GET (com o cabecalho Range, se houver) e le o status e o total do Content-Range; falso com a mensagem em *err
+bool abre_get(Pedido& p, const std::string& url, const std::wstring& range, DWORD* status, uint64_t* rangeTotal,
+              std::string* err) {
+    auto fail = [&](const std::string& m) {
+        if (err) *err = m + (GetLastError() ? " (erro " + std::to_string(GetLastError()) + ")" : "");
+        return false;
+    };
+    const std::wstring wurl(url.begin(), url.end());  // so ASCII
+    wchar_t            host[256] = {}, path[2048] = {};
+    URL_COMPONENTS     uc{};
+    uc.dwStructSize     = sizeof uc;
+    uc.lpszHostName     = host;
+    uc.dwHostNameLength = DWORD(std::size(host));
+    uc.lpszUrlPath      = path;
+    uc.dwUrlPathLength  = DWORD(std::size(path));
+    SetLastError(0);
+    if (!WinHttpCrackUrl(wurl.c_str(), 0, 0, &uc)) return fail("endereco invalido");
+    if (uc.nScheme != INTERNET_SCHEME_HTTPS) return fail("so HTTPS");
+    p.s = WinHttpOpen(L"BlueStingerRecompiled-Installer/1", WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY, WINHTTP_NO_PROXY_NAME,
+                      WINHTTP_NO_PROXY_BYPASS, 0);
+    if (!p.s)
+        p.s = WinHttpOpen(L"BlueStingerRecompiled-Installer/1", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME,
+                          WINHTTP_NO_PROXY_BYPASS, 0);
+    if (!p.s) return fail("WinHttpOpen");
+    WinHttpSetTimeouts(p.s, 30000, 30000, 30000, 60000);
+    DWORD politica = WINHTTP_OPTION_REDIRECT_POLICY_DISALLOW_HTTPS_TO_HTTP;
+    WinHttpSetOption(p.s, WINHTTP_OPTION_REDIRECT_POLICY, &politica, sizeof politica);
+    p.c = WinHttpConnect(p.s, host, uc.nPort, 0);
+    if (!p.c) return fail("conexao");
+    p.r = WinHttpOpenRequest(p.c, L"GET", path, nullptr, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, WINHTTP_FLAG_SECURE);
+    if (!p.r) return fail("pedido");
+    const std::wstring hdr = range.empty() ? std::wstring() : L"Range: " + range + L"\r\n";
+    if (!WinHttpSendRequest(p.r, hdr.empty() ? WINHTTP_NO_ADDITIONAL_HEADERS : hdr.c_str(), hdr.empty() ? 0 : DWORD(-1L),
+                            WINHTTP_NO_REQUEST_DATA, 0, 0, 0) ||
+        !WinHttpReceiveResponse(p.r, nullptr))
+        return fail("sem resposta do servidor");
+    DWORD tam = sizeof *status;
+    *status   = 0;
+    WinHttpQueryHeaders(p.r, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER, WINHTTP_HEADER_NAME_BY_INDEX, status, &tam,
+                        WINHTTP_NO_HEADER_INDEX);
+    wchar_t buf[128] = {};
+    DWORD   bt       = sizeof buf;
+    *rangeTotal      = 0;
+    if (WinHttpQueryHeaders(p.r, WINHTTP_QUERY_CUSTOM, L"Content-Range", buf, &bt, WINHTTP_NO_HEADER_INDEX))
+        if (const wchar_t* barra = std::wcschr(buf, L'/')) *rangeTotal = std::wcstoull(barra + 1, nullptr, 10);
+    return true;
+}
+
+} // namespace
+
+bool http_download_paralelo(const std::string& url, const fs::path& dst, const std::atomic<bool>* cancel,
+                            const std::function<void(uint64_t, uint64_t)>& onBytes, std::string* err) {
+    constexpr uint64_t kMinimo = 8ull << 20;  // abaixo disto, uma conexao so
+    uint64_t           total   = 0;
+    {
+        Pedido      p;
+        DWORD       status = 0;
+        uint64_t    rt     = 0;
+        std::string e;
+        // sem Range, arquivo pequeno ou erro: o caminho de sempre (com a mensagem dele)
+        if (!abre_get(p, url, L"bytes=0-0", &status, &rt, &e) || status != 206 || rt < kMinimo)
+            return http_download(url, dst, cancel, onBytes, err);
+        total = rt;
+    }
+    {
+        std::ofstream cria(dst, std::ios::binary | std::ios::trunc);
+        if (!cria) {
+            if (err) *err = "nao foi possivel gravar o arquivo";
+            return false;
+        }
+    }
+    std::error_code ec;
+    fs::resize_file(dst, total, ec);
+    if (ec) {
+        if (err) *err = "disco cheio ou sem permissao";
+        return false;
+    }
+    const int             n = kPartesDownload;
+    std::atomic<uint64_t> recebidos{0};
+    std::atomic<bool>     parar{false};
+    std::mutex            m;
+    std::string           primeiroErro;
+    auto                  avisa = [&] {
+        if (!onBytes) return;
+        std::lock_guard<std::mutex> g(m);
+        onBytes(recebidos.load(), total);
+    };
+    auto parte = [&](int k) {
+        const uint64_t a = total * uint64_t(k) / uint64_t(n), b = total * uint64_t(k + 1) / uint64_t(n);  // [a, b)
+        uint64_t       feito = 0;
+        std::string    e;
+        bool           desiste = false;
+        for (int tentativa = 0; tentativa < 3 && !desiste && a + feito < b; ++tentativa) {
+            if (parar.load() || (cancel && cancel->load())) return;
+            Pedido             p;
+            DWORD              status = 0;
+            uint64_t           rt     = 0;
+            const std::wstring range  = L"bytes=" + std::to_wstring(a + feito) + L"-" + std::to_wstring(b - 1);
+            if (!abre_get(p, url, range, &status, &rt, &e)) continue;
+            if (status != 206 || rt != total) {
+                e       = "o servidor nao respeitou o intervalo (HTTP " + std::to_string(status) + ")";
+                desiste = true;
+                break;
+            }
+            std::ofstream o(dst, std::ios::binary | std::ios::in | std::ios::out);
+            o.seekp(std::streamoff(a + feito));
+            std::vector<char> buf(1 << 16);
+            for (;;) {
+                if (parar.load() || (cancel && cancel->load())) return;
+                DWORD lidos = 0;
+                if (!WinHttpReadData(p.r, buf.data(), DWORD(buf.size()), &lidos)) {
+                    e = "leitura interrompida (erro " + std::to_string(GetLastError()) + ")";
+                    break;
+                }
+                if (lidos == 0) break;
+                const uint64_t cabe = std::min<uint64_t>(lidos, b - (a + feito));
+                o.write(buf.data(), std::streamsize(cabe));
+                if (!o) {
+                    e       = "disco cheio ou sem permissao";
+                    desiste = true;
+                    break;
+                }
+                feito += cabe;
+                recebidos += cabe;
+                avisa();
+                if (a + feito >= b) break;
+            }
+        }
+        if (a + feito < b) {
+            std::lock_guard<std::mutex> g(m);
+            if (primeiroErro.empty()) primeiroErro = e.empty() ? "parte incompleta" : e;
+            parar = true;
+        }
+    };
+    std::vector<std::thread> ts;
+    for (int k = 0; k < n; ++k) ts.emplace_back(parte, k);
+    for (auto& t : ts) t.join();
+    if (cancel && cancel->load()) {
+        if (err) *err = "cancelado";
+        return false;
+    }
+    if (!primeiroErro.empty() || recebidos.load() != total) {
+        if (err) *err = primeiroErro.empty() ? "download incompleto" : primeiroErro;
+        return false;
+    }
+    return true;
+}
+
 
 } // namespace bs::builder::plat

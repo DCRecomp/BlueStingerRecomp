@@ -1201,7 +1201,7 @@ Result build(const Request& req, const Callbacks& cb) {
                 const auto     raizes = plat::cache_roots_privadas();
                 const fs::path cacheFilmes = raizes.empty() ? fs::path() : raizes.front() / L"filmes-widescreen";
                 const widescreen::Report wr = widescreen::install(
-                    res.installDir / L"mods" / L"video", plat::http_download, cb.cancel, log,
+                    res.installDir / L"mods" / L"video", plat::http_download_paralelo, cb.cancel, log,
                     [&](double f) { progress(0.5 + 0.5 * f, "filmes widescreen"); }, widescreen::kBaseUrl,
                     [&](const widescreen::Andamento& a) {
                         if (cb.download)

@@ -110,4 +110,13 @@ const char* cli_usage_extra();
 bool http_download(const std::string& url, const std::filesystem::path& dst, const std::atomic<bool>* cancel,
                    const std::function<void(uint64_t, uint64_t)>& onBytes, std::string* err);
 
+// 2026-11-25 (mantenedor: o download dos filmes em paralelo): o mesmo contrato do http_download, mas um arquivo grande e
+// baixado em `partes` intervalos de bytes (Range) ao mesmo tempo, cada um gravado no seu lugar do arquivo. No archive.org cada
+// conexao tem a velocidade limitada: 8 partes deram 5,2x num filme de 117 MB (tmp/dl-teste). Um intervalo que cai e
+// retomado de onde parou (3 tentativas). Sem suporte a Range, ou arquivo pequeno, vira o http_download de uma conexao.
+// onBytes(recebidos, total) e chamado de varias threads, um por vez. Linux: o http_download (curl).
+inline constexpr int kPartesDownload = 8;
+bool http_download_paralelo(const std::string& url, const std::filesystem::path& dst, const std::atomic<bool>* cancel,
+                            const std::function<void(uint64_t, uint64_t)>& onBytes, std::string* err);
+
 } // namespace bs::builder::plat

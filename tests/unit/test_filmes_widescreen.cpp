@@ -184,3 +184,41 @@ BS_TEST(widescreen_cache_com_conteudo_errado_baixa_e_corrige) {
     BS_CHECK(le(a.p / "E001.mp4") == "filme novo");
     BS_CHECK(le(cache.p / "E001.mp4") == "filme novo");  // o cache foi atualizado com o filme conferido
 }
+
+// 2026-11-25: o download em partes no servidor real (so com BS_TESTE_REDE=1; os outros testes nao usam rede). Baixa um filme
+// pequeno do item publicado com 1 e com 8 conexoes, confere o SHA-256 pela lista do item e imprime os tempos.
+#include "builder_platform.h"
+#include <chrono>
+#include <cstdio>
+#include <cstdlib>
+
+BS_TEST(widescreen_rede_download_em_partes_confere) {
+    if (!std::getenv("BS_TESTE_REDE")) return;
+    Pasta d("rede");
+    std::string err;
+    const fs::path lista = d.p / "SHA256SUMS.txt";
+    BS_CHECK(bs::builder::plat::http_download(std::string(kBaseUrl) + kSumsFile, lista, nullptr, nullptr, &err));
+    std::string esperado;
+    for (const auto& e : parse_sums(le(lista)))
+        if (e.file == "E107.mp4") esperado = e.sha256;
+    BS_CHECK(!esperado.empty());
+    using relogio = std::chrono::steady_clock;
+    auto t0 = relogio::now();
+    BS_CHECK(bs::builder::plat::http_download(std::string(kBaseUrl) + "E107.mp4", d.p / "um.mp4", nullptr, nullptr, &err));
+    const double s1 = std::chrono::duration<double>(relogio::now() - t0).count();
+    uint64_t ultimo = 0;
+    bool     cresce = true;
+    t0              = relogio::now();
+    BS_CHECK(bs::builder::plat::http_download_paralelo(std::string(kBaseUrl) + "E107.mp4", d.p / "partes.mp4", nullptr,
+                                                       [&](uint64_t got, uint64_t) {
+                                                           cresce = cresce && got >= ultimo;
+                                                           ultimo = got;
+                                                       },
+                                                       &err));
+    const double s8 = std::chrono::duration<double>(relogio::now() - t0).count();
+    BS_CHECK(sha256_file(d.p / "um.mp4") == esperado);
+    BS_CHECK(sha256_file(d.p / "partes.mp4") == esperado);
+    BS_CHECK(cresce && ultimo == fs::file_size(d.p / "partes.mp4"));
+    std::printf("[rede] E107.mp4 %.1f MB: 1 conexao %.1f s, %d partes %.1f s (%.1fx)\n",
+                double(fs::file_size(d.p / "partes.mp4")) / 1048576.0, s1, bs::builder::plat::kPartesDownload, s8, s1 / s8);
+}
