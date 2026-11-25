@@ -154,3 +154,33 @@ BS_TEST(widescreen_sem_rede_e_cancelado_viram_aviso) {
     const Report r2 = install(d.p, s.fetch(), &cancelar, nullptr, nullptr, kBase);
     BS_CHECK(r2.cancelado && r2.baixados == 0 && !fs::exists(d.p / "E001.mp4"));
 }
+
+// 2026-11-24 (mantenedor: "Quando instalar uma atualizacao, nao deve precisar baixar os videos de novo"): o cache compartilhado
+BS_TEST(widescreen_cache_evita_baixar_de_novo_em_outra_pasta) {
+    Pasta    a("cache a"), b("cache b"), cache("cache c");
+    Servidor s;
+    s.arquivos[kBase + "E001.mp4"] = "filme 1";
+    s.arquivos[kBase + "E002.mp4"] = "filme 2";
+    s.arquivos[kBase + "SHA256SUMS.txt"] = sha("filme 1") + "  E001.mp4\n" + sha("filme 2") + "  E002.mp4\n";
+    const Report r1 = install(a.p, s.fetch(), nullptr, nullptr, nullptr, kBase, nullptr, cache.p);
+    BS_CHECK(r1.baixados == 2 && r1.doCache == 0);
+    BS_CHECK(le(cache.p / "E001.mp4") == "filme 1" && le(cache.p / "E002.mp4") == "filme 2");
+    // outra pasta de instalacao (ou uma reinstalacao do zero): os filmes vem do cache, nenhum download de filme
+    const Report r2 = install(b.p, s.fetch(), nullptr, nullptr, nullptr, kBase, nullptr, cache.p);
+    BS_CHECK(r2.baixados == 0 && r2.doCache == 2 && r2.falhas == 0 && r2.aviso.empty());
+    BS_CHECK(le(b.p / "E001.mp4") == "filme 1" && le(b.p / "E002.mp4") == "filme 2");
+    BS_CHECK(read_registry(b.p).size() == 2);
+    BS_CHECK(s.pedidos[kBase + "E001.mp4"] == 1 && s.pedidos[kBase + "E002.mp4"] == 1);
+}
+
+BS_TEST(widescreen_cache_com_conteudo_errado_baixa_e_corrige) {
+    Pasta    a("cache errado a"), cache("cache errado c");
+    Servidor s;
+    s.arquivos[kBase + "E001.mp4"] = "filme novo";
+    s.arquivos[kBase + "SHA256SUMS.txt"] = sha("filme novo") + "  E001.mp4\n";
+    grava(cache.p / "E001.mp4", "filme velho");  // versao antiga no cache: nao pode entrar
+    const Report r = install(a.p, s.fetch(), nullptr, nullptr, nullptr, kBase, nullptr, cache.p);
+    BS_CHECK(r.baixados == 1 && r.doCache == 0);
+    BS_CHECK(le(a.p / "E001.mp4") == "filme novo");
+    BS_CHECK(le(cache.p / "E001.mp4") == "filme novo");  // o cache foi atualizado com o filme conferido
+}

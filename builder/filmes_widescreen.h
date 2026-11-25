@@ -38,6 +38,7 @@ using Fetch = std::function<bool(const std::string& url, const std::filesystem::
 
 struct Report {
     int         baixados = 0, presentes = 0, falhas = 0, doJogador = 0;
+    int         doCache = 0;  // 2026-11-24: copiados do cache compartilhado (sem baixar de novo)
     bool        cancelado = false;
     std::string aviso;  // vazio = tudo certo
 };
@@ -57,7 +58,11 @@ struct Andamento {
 inline constexpr double kLogIntervalo = 30;
 Report install(const std::filesystem::path& modsVideo, const Fetch& fetch, const std::atomic<bool>* cancel,
                const std::function<void(const std::string&)>& log, const std::function<void(double)>& progress,
-               const std::string& baseUrl = kBaseUrl, const std::function<void(const Andamento&)>& andamento = nullptr);
+               const std::string& baseUrl = kBaseUrl, const std::function<void(const Andamento&)>& andamento = nullptr,
+               const std::filesystem::path& cacheDir = {});
+// 2026-11-24 (mantenedor: "Quando instalar uma atualizacao, nao deve precisar baixar os videos de novo"): cacheDir e uma pasta
+// compartilhada entre as instalacoes (vazia = sem cache). Antes de baixar, um filme do cache com o SHA-256 da lista entra por
+// hard link (copia se o volume for outro); cada filme conferido na instalacao vai para o cache do mesmo jeito.
 
 std::map<std::string, std::string> read_registry(const std::filesystem::path& modsVideo);
 

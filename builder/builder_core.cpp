@@ -416,7 +416,14 @@ void install_swap(const fs::path& stage, const fs::path& dest, const std::functi
             if (hasList ? oldPkg.count(lower(path_wide_generic(rel))) > 0 : (isPkg && isPkg(rel))) continue;
             const fs::path to = stage / rel;
             fs::create_directories(to.parent_path());
-            if (!fs::exists(to)) fs::copy_file(it->path(), to);
+            // 2026-11-24: os arquivos grandes (os filmes widescreen, 3,3 GB) por hard link quando der, sem copiar nem baixar de
+            // novo; os pequenos (saves, configuracoes) continuam copiados, para o backup da instalacao anterior ficar intacto
+            if (!fs::exists(to)) {
+                std::error_code lec;
+                if (fs::file_size(it->path(), lec) >= (64ull << 20) && !lec) fs::create_hard_link(it->path(), to, lec);
+                else lec = std::make_error_code(std::errc::operation_not_supported);
+                if (lec) fs::copy_file(it->path(), to);
+            }
         }
     }
 
@@ -1189,6 +1196,10 @@ Result build(const Request& req, const Callbacks& cb) {
         } else if (req.widescreenMovies) {
             const auto ic = native::install::read_config(res.installDir);
             if (ic.edition == native::edition::Edition::Remastered) {
+                // 2026-11-24: o cache compartilhado dos filmes (BS_BUILDER_CACHE nos testes, senao %LOCALAPPDATA%\BlueStingerRecomp):
+                // uma atualizacao ou uma instalacao em outra pasta nao baixa os filmes de novo
+                const auto     raizes = plat::cache_roots_privadas();
+                const fs::path cacheFilmes = raizes.empty() ? fs::path() : raizes.front() / L"filmes-widescreen";
                 const widescreen::Report wr = widescreen::install(
                     res.installDir / L"mods" / L"video", plat::http_download, cb.cancel, log,
                     [&](double f) { progress(0.5 + 0.5 * f, "filmes widescreen"); }, widescreen::kBaseUrl,
@@ -1196,7 +1207,8 @@ Result build(const Request& req, const Callbacks& cb) {
                         if (cb.download)
                             cb.download({DownloadProgress::Kind::WidescreenMovies, a.atual, a.quantos, a.arquivo, a.recebidos,
                                          a.tamanho, a.sessao, a.fim});
-                    });
+                    },
+                    cacheFilmes);
                 res.widescreenDownloaded = wr.baixados, res.widescreenPresent = wr.presentes;
                 if (!wr.aviso.empty()) res.warning += (res.warning.empty() ? "" : "\n") + wr.aviso;
             } else {

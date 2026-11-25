@@ -91,9 +91,42 @@ std::map<std::string, std::string> read_registry(const fs::path& dir) {
     return r;
 }
 
+namespace {
+// hard link (nada copiado; o mesmo volume) ou copia; o destino entra por troca atomica a partir de um .part
+bool link_ou_copia(const fs::path& de, const fs::path& para) {
+    std::error_code ec;
+    const fs::path  part = para.string() + ".part";
+    fs::remove(part, ec);
+    fs::create_hard_link(de, part, ec);
+    if (ec) {
+        ec.clear();
+        fs::copy_file(de, part, fs::copy_options::overwrite_existing, ec);
+        if (ec) {
+            fs::remove(part, ec);
+            return false;
+        }
+    }
+    fs::rename(part, para, ec);
+    if (ec) fs::remove(part, ec);
+    return !ec;
+}
+// o filme conferido vai para o cache: nada a fazer se o cache ja e o mesmo arquivo (hard link) ou tem o mesmo SHA-256
+void guarda_no_cache(const fs::path& cacheDir, const fs::path& filme, const std::string& sha) {
+    if (cacheDir.empty()) return;
+    std::error_code ec;
+    fs::create_directories(cacheDir, ec);
+    const fs::path c = cacheDir / filme.filename();
+    if (fs::exists(c, ec)) {
+        if (fs::equivalent(c, filme, ec)) return;
+        if (fs::file_size(c, ec) == fs::file_size(filme, ec) && sha256_file(c) == sha) return;
+    }
+    link_ou_copia(filme, c);
+}
+} // namespace
+
 Report install(const fs::path& dir, const Fetch& fetch, const std::atomic<bool>* cancel,
                const std::function<void(const std::string&)>& log, const std::function<void(double)>& progress,
-               const std::string& baseUrl, const std::function<void(const Andamento&)>& andamento) {
+               const std::string& baseUrl, const std::function<void(const Andamento&)>& andamento, const fs::path& cacheDir) {
     Report    rep;
     Andamento an;
     auto      A = [&] {
@@ -156,12 +189,24 @@ Report install(const fs::path& dir, const Fetch& fetch, const std::atomic<bool>*
             const std::string atual = sha256_file(dst);
             if (atual == e.sha256) {
                 ++rep.presentes, reg[e.file] = e.sha256;
+                guarda_no_cache(cacheDir, dst, e.sha256);
                 continue;
             }
             const auto r = reg.find(e.file);
             if (r == reg.end() || r->second != atual) {  // nao fomos nos que pusemos este arquivo: e do jogador
                 ++rep.doJogador;
                 L(e.file + ": ja existe um filme do jogador com esse nome; mantido");
+                continue;
+            }
+        }
+        // 2026-11-24: o cache compartilhado antes da rede (uma atualizacao ou outra pasta de instalacao nao baixa de novo)
+        if (!cacheDir.empty()) {
+            const fs::path c = cacheDir / fs::path(e.file);
+            if (fs::exists(c, ec) && sha256_file(c) == e.sha256 && link_ou_copia(c, dst)) {
+                reg[e.file] = e.sha256;
+                write_registry(dir, reg);
+                ++rep.doCache;
+                L(e.file + ": do cache (sem baixar)");
                 continue;
             }
         }
@@ -213,12 +258,14 @@ Report install(const fs::path& dir, const Fetch& fetch, const std::atomic<bool>*
         reg[e.file] = e.sha256;
         write_registry(dir, reg);
         ++rep.baixados;
+        guarda_no_cache(cacheDir, dst, e.sha256);
     }
     write_registry(dir, reg);
     P(1);
     if (rep.cancelado) rep.aviso = "download dos filmes widescreen cancelado; os que faltam usam o filme original";
     else if (rep.falhas) rep.aviso = std::to_string(rep.falhas) + " filme(s) widescreen nao baixado(s); esses usam o filme original";
-    L("baixados " + std::to_string(rep.baixados) + ", ja presentes " + std::to_string(rep.presentes) + ", falhas " +
+    L("baixados " + std::to_string(rep.baixados) + ", ja presentes " + std::to_string(rep.presentes) + ", do cache " +
+      std::to_string(rep.doCache) + ", falhas " +
       std::to_string(rep.falhas) + (rep.doJogador ? ", do jogador " + std::to_string(rep.doJogador) : ""));
     return rep;
 }
