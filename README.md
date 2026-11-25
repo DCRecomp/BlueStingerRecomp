@@ -29,13 +29,13 @@ game running in the Flycast emulator. No BIOS and no CPU emulation.*
 Atualizado em 24/11/2026. O jogo já roda no Windows a partir do seu disco, com controles (teclado e controle), saves,
 filmes, áudio e vídeo nativos, renderização Vulkan, câmera livre, texturas HD, antialiasing e legendas em português, inglês,
 espanhol, francês, russo, japonês e chinês. A versão atual é uma **pré-release**:
-[v0.9.7-6](https://github.com/DCRecomp/BlueStingerRecomp/releases/tag/v0.9.7-6), com suporte completo ao RecompLauncher
+[v0.9.7-7](https://github.com/DCRecomp/BlueStingerRecomp/releases/tag/v0.9.7-7), com suporte completo ao RecompLauncher
 (instalação fácil, saves na nuvem e configurações no launcher). Os 16 filmes widescreen estão publicados.
 
 *Updated on 2026-11-24. The game already runs on Windows from your disc, with native controls (keyboard and gamepad),
 saves, movies, audio and video, Vulkan rendering, a free camera, HD textures, antialiasing and subtitles in Portuguese,
 English, Spanish, French, Russian, Japanese and Chinese. The current version is a **pre-release**:
-[v0.9.7-6](https://github.com/DCRecomp/BlueStingerRecomp/releases/tag/v0.9.7-6), with full RecompLauncher support (easy
+[v0.9.7-7](https://github.com/DCRecomp/BlueStingerRecomp/releases/tag/v0.9.7-7), with full RecompLauncher support (easy
 setup, cloud saves and settings in the launcher). All 16 widescreen movies are published.*
 
 Rumo à versão 1.0: as etapas N0 a N6 estão concluídas, N7 e N8 estão em 95% e o N9 tem 6 de 8 partes com o trabalho
