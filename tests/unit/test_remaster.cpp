@@ -218,3 +218,44 @@ BS_TEST(remaster_desenho_mouse) {
         if (d.item_em(640, y)) alguma = true;
     BS_CHECK(alguma && !d.item_em(2, 2));
 }
+
+// 2026-11-25: o save nativo dos pontos de save (app/remaster/save_nativo.h): os 6 perfis, vazio grava direto, ocupado pede
+// confirmacao, Voltar cancela; o perfil mais recente valido vem selecionado
+BS_TEST(remaster_salvar_lista_nativa) {
+    rm::Interface ui;
+    ui.abrir_salvar(dois_perfis());
+    rm::Vista v = ui.vista();
+    BS_CHECK(ui.tela() == rm::Tela::Salvar && v.itens.size() == 7);  // 6 perfis + Cancelar
+    BS_CHECK(v.titulo == "Salvar" && v.itens[1].detalhe == "Vazio" && v.itens[0].detalhe != "Vazio");
+    BS_CHECK(v.itens[4].detalhe == "Arquivo danificado" && v.itens[4].ativo);  // da para gravar por cima de um danificado
+    BS_CHECK(v.selecionado == 2);  // o 4 e mais novo, mas danificado: o 2 e o mais recente valido
+    // vazio: grava direto
+    ui.input(MenuAction::Up);  // Perfil 2 (arquivo 1, vazio)
+    ui.input(MenuAction::Confirm);
+    auto s = ui.tomar();
+    BS_CHECK(s && s->pedido == rm::Pedido::Salvar && s->arquivo == 1);
+    // ocupado: confirma; Cancelar volta a lista; Sim grava
+    ui.abrir_salvar(dois_perfis());
+    ui.input(MenuAction::Confirm);  // Perfil 3 (arquivo 2)
+    BS_CHECK(ui.tela() == rm::Tela::Confirmar && !ui.tomar());
+    BS_CHECK(ui.vista().texto.find("Perfil 3") != std::string::npos && ui.vista().itens[0].rotulo == "Sim, gravar");
+    ui.input(MenuAction::Down), ui.input(MenuAction::Confirm);
+    BS_CHECK(ui.tela() == rm::Tela::Salvar && !ui.tomar());
+    ui.input(MenuAction::Confirm), ui.input(MenuAction::Confirm);
+    s = ui.tomar();
+    BS_CHECK(s && s->pedido == rm::Pedido::Salvar && s->arquivo == 2);
+    // Voltar (Esc/B) e o item Cancelar: o jogo volta sem gravar
+    ui.abrir_salvar({});
+    BS_CHECK(ui.vista().selecionado == 0);
+    ui.input(MenuAction::Back);
+    s = ui.tomar();
+    BS_CHECK(s && s->pedido == rm::Pedido::CancelarSave);
+    ui.abrir_salvar({});
+    ate(ui, "Cancelar");
+    ui.input(MenuAction::Confirm);
+    s = ui.tomar();
+    BS_CHECK(s && s->pedido == rm::Pedido::CancelarSave);
+    // as acoes novas tem nome no arquivo de eventos
+    rm::Acao a;
+    BS_CHECK(rm::acao_de_nome("salvar", a) && a == rm::Acao::Salvar && rm::acao_de_nome("cancelarsave", a) && a == rm::Acao::CancelarSave);
+}

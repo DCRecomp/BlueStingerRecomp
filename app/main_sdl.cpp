@@ -22,6 +22,7 @@
 #include "remaster/desenho.h"
 #include "remaster/entrada_titulo.h"
 #include "remaster/interface.h"
+#include "remaster/save_nativo.h"
 #include "subtitle_overlay.h"
 #include "menu_overlay.h"
 #include "window_present.h"
@@ -1155,7 +1156,7 @@ public:
 
 private:
     // ---- N9.2: Remastered (docs/N9-2-INTERFACE.md) ----
-    enum class Fase : uint8_t { Nada, Agindo, Saindo, Reiniciando };
+    enum class Fase : uint8_t { Nada, Agindo, Saindo, Reiniciando, Salvando, Salvo };
     bool                              remaster_ = false;
     fs::path                          savesRoot_;
     bs::remaster::Interface           ui_;
@@ -1166,6 +1167,7 @@ private:
     bool                              tituloAtivo_ = false, remPausado_ = false;
     int                               carregarDepois_ = -1;  // Carregar pela pausa: o arquivo, depois do reinicio
     bool                              pediuMenu_ = false;     // o "PRESS START" ja foi pedido (5 -> 6)
+    uint64_t                          saveVez_ = 0;          // o ultimo pedido de save do jogo que abriu a lista
     // fade (segundos): entrada e saida da interface
     static constexpr double           kFade = 0.25;
     bool                              eraAberta_ = false;
@@ -1300,6 +1302,18 @@ private:
         if (!host_.paused()) tituloAtivo_ = st.noTitulo && now - ultimoQuadroTitulo_ < 0.5;
         ui_.set_ingles(menu_.english());
         if (held_ >= 0 && now >= nextRepeat_ && ui_.aberta() && !menu_.is_open()) ui_.input(bs::MenuAction(held_)), nextRepeat_ = now + 0.12;
+        {  // 2026-11-25: o save nativo nos pontos de save (app/remaster/save_nativo.h)
+            const rm::EstadoSave sv = rm::SaveNativo::get().estado();
+            if (sv.aguardando && sv.vez != saveVez_ && fase_ == Fase::Nada) {
+                saveVez_ = sv.vez;
+                if (menu_.is_open()) menu_.close();
+                input_.release_keyboard();
+                ui_.abrir_salvar(perfis());
+                std::fprintf(stderr, "[remaster] save: lista nativa aberta\n");
+            } else if (!sv.aguardando && fase_ == Fase::Nada && ui_.tela() == rm::Tela::Salvar) {
+                ui_.fechar();  // o jogo saiu do fluxo de save sem a lista (reproducao)
+            }
+        }
         switch (fase_) {
         case Fase::Nada:
             if (!ui_.aberta() && tituloAtivo_ && !st.ocupado) {
@@ -1322,6 +1336,23 @@ private:
             break;
         case Fase::Saindo:  // a acao valeu: o titulo termina por baixo da tela de espera; ela fecha quando ele para
             if (now - ultimoQuadroTitulo_ > 0.35 || now - desde_ > 20) ui_.fechar(), fase_ = Fase::Nada;
+            break;
+        case Fase::Salvando: {  // a gravacao pedida: espera o jogo terminar
+            const rm::EstadoSave sv = rm::SaveNativo::get().estado();
+            if (sv.ocupado || sv.resultado == 0) {
+                if (now - desde_ > 40) ui_.erro(T("O jogo n\xC3\xA3o terminou de gravar.", "The game did not finish saving.")), fase_ = Fase::Nada;
+            } else if (sv.resultado == 1) {
+                ui_.aguardar(std::string(T("Jogo salvo no perfil ", "Game saved to profile ")) + std::to_string(sv.arquivo + 1) + ".");
+                fase_ = Fase::Salvo, desde_ = now;
+            } else {
+                ui_.erro(T("N\xC3\xA3o foi poss\xC3\xADvel gravar. Verifique o espa\xC3\xA7o em disco e tente de novo no ponto de save.",
+                           "The game could not be saved. Check the free disk space and try again at the save point."));
+                fase_ = Fase::Nada;
+            }
+            break;
+        }
+        case Fase::Salvo:  // a confirmacao fica um instante e a lista some
+            if (now - desde_ > 1.2) ui_.fechar(), fase_ = Fase::Nada;
             break;
         case Fase::Reiniciando:  // depois do reinicio, com o titulo no "PRESS START": o load pedido ou o menu inicial
             if (tituloAtivo_ && st.estado == 5) {
@@ -1361,6 +1392,15 @@ private:
             }
             break;
         }
+        case rm::Pedido::Salvar:
+            rm::SaveNativo::get().pedir(rm::Acao::Salvar, s.arquivo);
+            ui_.aguardar(std::string(T("Gravando no perfil ", "Saving to profile ")) + std::to_string(s.arquivo + 1) + "...");
+            fase_ = Fase::Salvando, desde_ = now;
+            break;
+        case rm::Pedido::CancelarSave:
+            rm::SaveNativo::get().pedir(rm::Acao::CancelarSave);
+            ui_.fechar();
+            break;
         case rm::Pedido::Retomar:
             ui_.fechar();
             pausar(false);
@@ -1986,6 +2026,14 @@ void remasterSession() {
     // de eventos dela); um roteiro ou uma gravacao-base conduzem o menu original, inteiro (revisao Codex 20261104-222855)
     const bool roteiroOriginal = (std::getenv("BS_INPUT_SCRIPT") || std::getenv("BS_GRAVAR_BASE")) && eventos.empty() &&
                                  !std::getenv("BS_REMASTER_PEDIR");
+    std::vector<rm::Evento> eventosSave;
+    for (auto it = eventos.begin(); it != eventos.end();)
+        if (it->acao == rm::Acao::Salvar || it->acao == rm::Acao::CancelarSave) eventosSave.push_back(*it), it = eventos.erase(it);
+        else ++it;
+    rm::SaveNativo::get().instalar(std::move(eventosSave), aplicado);
+    if (const char* sv = std::getenv("BS_REMASTER_SALVAR"); sv && *sv)
+        rm::SaveNativo::get().escolha_automatica(std::string(sv) == "cancelar" ? rm::Acao::CancelarSave : rm::Acao::Salvar,
+                                                 std::string(sv) == "cancelar" ? 0 : std::atoi(sv));
     rm::EntradaTitulo::get().instalar(std::move(eventos), std::move(aplicado), !roteiroOriginal);
     if (const char* p = std::getenv("BS_REMASTER_PEDIR"); p && *p) {
         std::string s = p, nome = s.substr(0, s.find(':'));

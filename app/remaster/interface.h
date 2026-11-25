@@ -4,7 +4,9 @@
 // e quem integra (app/main_sdl.cpp) executa o que tomar() devolve (pontos de entrada do titulo, reinicio, configuracoes,
 // sair). A edicao Original nao usa nada disto.
 //   Menu inicial: Novo jogo, Continuar (o perfil gravado mais recente), Carregar, Configuracoes, Extras, Sair.
-//   Pausa:        Continuar, Salvar (no N9.3; ate la desativado), Carregar, Configuracoes, Menu principal, Sair.
+//   Pausa:        Continuar, Salvar (desativado: so nos pontos de save), Carregar, Configuracoes, Menu principal, Sair.
+//   Salvar:       nos pontos de save do jogo (2026-11-25, mantenedor), no lugar do painel do Dreamcast: os 6 perfis, o que tem
+//                 save pede confirmacao para gravar por cima; Voltar cancela (app/remaster/save_nativo.h).
 //   Perfis:       os saves de PC como perfis (numero, data, valido), sem VMU, soquete nem bloco (decisao do mantenedor).
 //   Acoes que perdem o progresso da partida (Carregar, Menu principal e Sair, na pausa) pedem confirmacao.
 #include "settings_menu.h"  // MenuAction
@@ -17,7 +19,7 @@
 
 namespace bs::remaster {
 
-enum class Tela : uint8_t { Fechada, Inicial, Pausa, Perfis, Confirmar, Extras, Aguarde, Erro };
+enum class Tela : uint8_t { Fechada, Inicial, Pausa, Perfis, Confirmar, Extras, Aguarde, Erro, Salvar };
 
 // Um save de PC (arquivo BLUESTIN.00n do cartao nativo) visto como perfil.
 struct Perfil {
@@ -26,10 +28,10 @@ struct Perfil {
     bool    valido  = true;     // imagem integra (envelope e VMS conferidos)
 };
 
-enum class Pedido : uint8_t { Nenhum, NovoJogo, Carregar, Retomar, Configuracoes, MenuPrincipal, Sair };
+enum class Pedido : uint8_t { Nenhum, NovoJogo, Carregar, Retomar, Configuracoes, MenuPrincipal, Sair, Salvar, CancelarSave };
 struct Saida {
     Pedido pedido  = Pedido::Nenhum;
-    int    arquivo = 0;  // Carregar
+    int    arquivo = 0;  // Carregar, Salvar
 };
 
 struct ItemVista {
@@ -59,6 +61,8 @@ public:
 
     void abrir_inicial(std::vector<Perfil> perfis);
     void abrir_pausa(std::vector<Perfil> perfis);
+    // o jogo chegou a um ponto de save: a lista dos 6 perfis (o mais recente selecionado), no lugar do painel do Dreamcast
+    void abrir_salvar(std::vector<Perfil> perfis);
     void aguardar(const std::string& texto);       // uma acao em andamento (cobre o jogo)
     void erro(const std::string& texto);           // volta a tela de origem com Confirmar/Voltar
     void fechar();
@@ -79,7 +83,7 @@ public:
 
 private:
     enum class Item : uint8_t { NovoJogo, Continuar, Carregar, Configuracoes, Extras, Sair, Retomar, Salvar, MenuPrincipal,
-                                Perfil, Sim, Nao, Voltar };
+                                Perfil, Sim, Nao, Voltar, Gravar };
     struct Entrada {
         Item        item;
         std::string rotulo, detalhe;

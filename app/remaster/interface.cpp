@@ -63,6 +63,15 @@ void Interface::abrir_pausa(std::vector<Perfil> perfis) {
     sel_ = 0;
 }
 
+void Interface::abrir_salvar(std::vector<Perfil> perfis) {
+    perfis_ = std::move(perfis);
+    pilha_.clear();
+    origem_ = tela_ = Tela::Salvar;
+    saida_.reset();
+    sel_ = 0;  // o perfil da partida (o gravado mais recente); sem nenhum, o primeiro
+    if (const auto p = mais_recente(perfis_)) sel_ = p->arquivo;
+}
+
 void Interface::aguardar(const std::string& texto) {
     aviso_ = texto;
     tela_  = Tela::Aguarde;
@@ -112,8 +121,21 @@ std::vector<Interface::Entrada> Interface::entradas() const {
         }
         r.push_back({Item::Voltar, L("Voltar", "Back"), ""});
         break;
+    case Tela::Salvar:
+        for (int n = 0; n < 6; ++n) {
+            const Perfil* p = nullptr;
+            for (const auto& q : perfis_)
+                if (q.arquivo == n) p = &q;
+            Entrada e{Item::Gravar, rotulo_perfil(Perfil{n}),
+                      !p ? L("Vazio", "Empty") : p->valido ? data_texto(p->gravado, ingles_) : L("Arquivo danificado", "Damaged file")};
+            e.arquivo = n;
+            r.push_back(e);
+        }
+        r.push_back({Item::Voltar, L("Cancelar", "Cancel"), ""});
+        break;
     case Tela::Confirmar:
-        r.push_back({Item::Sim, L("Sim, continuar", "Yes, continue"), "", true, true});
+        r.push_back({Item::Sim, origem_ == Tela::Salvar ? L("Sim, gravar", "Yes, save") : L("Sim, continuar", "Yes, continue"), "",
+                     true, true});
         r.push_back({Item::Nao, L("Cancelar", "Cancel"), ""});
         break;
     case Tela::Extras:
@@ -154,6 +176,19 @@ void Interface::confirmar_entrada(const Entrada& e) {
         destrutivo(Saida{Pedido::Sair}, "Sair do jogo? O progresso desde o \xC3\xBAltimo save ser\xC3\xA1 perdido.",
                    "Quit the game? Progress since the last save will be lost.");
         break;
+    case Item::Gravar: {
+        bool ocupado = false;
+        for (const auto& q : perfis_) ocupado = ocupado || q.arquivo == e.arquivo;
+        if (!ocupado) {
+            saida_ = Saida{Pedido::Salvar, e.arquivo};
+            break;
+        }
+        aConfirmar_ = Saida{Pedido::Salvar, e.arquivo};
+        pergunta_   = std::string(L("Gravar por cima do ", "Overwrite ")) + rotulo_perfil(Perfil{e.arquivo}) +
+                    L("? O save que est\xC3\xA1 nele ser\xC3\xA1 substitu\xC3\xAD" "do.", "? The save in it will be replaced.");
+        ir(Tela::Confirmar);
+        break;
+    }
     case Item::Sim: saida_ = aConfirmar_; break;
     case Item::Nao:
     case Item::Voltar: input(MenuAction::Back); break;
@@ -190,6 +225,7 @@ void Interface::input(MenuAction a) {
         }
         if (pilha_.empty()) {
             if (tela_ == Tela::Pausa) saida_ = Saida{Pedido::Retomar};  // o menu inicial nao fecha
+            if (tela_ == Tela::Salvar) saida_ = Saida{Pedido::CancelarSave};  // o jogo volta sem gravar
             return;
         }
         tela_ = pilha_.back().first, sel_ = pilha_.back().second;
@@ -232,6 +268,11 @@ Vista Interface::vista() const {
     case Tela::Perfis:
         v.titulo    = L("Carregar", "Load");
         v.subtitulo = L("Escolha o perfil", "Choose a profile");
+        break;
+    case Tela::Salvar:
+        v.titulo    = L("Salvar", "Save");
+        v.subtitulo = L("Escolha onde gravar", "Choose where to save");
+        v.dica = L("Enter ou A: gravar   \xC2\xB7   Esc ou B: cancelar", "Enter or A: save   \xC2\xB7   Esc or B: cancel");
         break;
     case Tela::Confirmar:
         v.titulo = L("Confirmar", "Confirm");

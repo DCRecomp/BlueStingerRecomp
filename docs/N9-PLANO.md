@@ -687,6 +687,10 @@ Na Remastered, ficam do N9.2:
 
 Nos pontos de save, o painel do jogo (com a VMU) continua o original, nas duas edições.
 
+> **Atualização de 2026-11-25 (mantenedor):** na Remastered, os pontos de save passam a abrir a **lista nativa** dos 6 perfis
+> no lugar do painel do Dreamcast (`app/remaster/save_nativo.h`, `docs/N9-2-INTERFACE.md` seção 7). O sistema de saves do jogo
+> continua o mesmo: a gravação é a rotina do próprio jogo, com o mesmo arquivo. A Original continua com o painel.
+
 ## 16. Registro de 2026-11-10: N9.6 autorizado e a etapa de estabilização
 
 Decisões do mantenedor, em 2026-11-10, depois da bateria final do N9.5:

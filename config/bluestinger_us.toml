@@ -191,6 +191,9 @@ slots = [
   0x8C1713A4,  # translacao da matriz (52 chamadores)
   0x8C170DC8,  # giro em Y da matriz (33 chamadores)
   0x8C170D34,  # giro em X da matriz (25 chamadores)
+  # 2026-11-25 (save nativo da Remastered, app/remaster/save_nativo.h): o painel de saves, chamado direto pelo fluxo de save do
+  # gameplay (8C052694); na Original o slot aponta para o gerado (o mesmo painel de sempre)
+  0x8C01D200,  # painel de saves (modo, 8): 0 = save, 1 = load, 2 = conferencia do boot
 ]
 # N2b (docs/N2b-PLANO.md, secao 1.2): back-edges dos lacos que esperam uma condicao acesa por
 # evento. O gerador emite BS_WAIT no desvio de volta e BS_WAIT_END na instrucao seguinte (por

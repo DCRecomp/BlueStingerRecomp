@@ -4,6 +4,7 @@ add_library(bs_app_core STATIC game_host.cpp assist.cpp
             settings_menu.cpp      # N7c: modelo do menu interno de configuracoes
             remaster/entrada_titulo.cpp   # N9.2: pontos de entrada nativos do titulo (so na Remastered)
             remaster/interface.cpp        # N9.2: modelo da interface nativa da Remastered
+            remaster/save_nativo.cpp      # 2026-11-25: o save nativo dos pontos de save (so na Remastered)
             remaster/desenho.cpp)         # N9.2: desenho dela (native/text, identidade do projeto)
 # N7c: desenho do menu (Direct2D/DirectWrite no Windows)
 if(WIN32)

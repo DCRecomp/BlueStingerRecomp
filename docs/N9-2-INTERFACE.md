@@ -83,3 +83,23 @@ original e o menu interno de configurações do N7c (matriz da seção 4 do plan
 ## 6. Provas
 
 Ver `STATUS.md` (N9.2) e `docs/N9-2-PONTOS-DE-ENTRADA.md`, seção 4.
+
+## 7. Save nativo nos pontos de save (2026-11-25)
+
+Pedido do mantenedor: "o save dentro do jogo precisa ser atualizado na remasterização, ainda está com o menu de escolha de
+slots". Escolha dele: a **lista nativa**.
+
+- **No jogo:** o fluxo de save chama o painel `8C01D200(0, 8)` a cada quadro do estado 8 (laço `8C052240`, chamada em
+  `8C052694`) e sai quando a situação `u16 [8C1F3B40]` volta a 0 (estado 9). Na Remastered, só essa chamada (modo 0, retorno
+  `8C052698`) é substituída: a situação fica em 1 enquanto a lista está aberta, e a gravação é a rotina do próprio jogo,
+  `8C01CCE0(unidade 0, arquivo n)`, a mesma do painel (6 trabalhando, 8 gravou, 9 erro). O boot e o LOAD seguem o painel.
+- **Slot:** `0x8C01D200` entrou nos `[native] slots` (`config/bluestinger_us.toml`); na Original o slot aponta para o
+  gerado. Sem o slot, a Remastered usa o painel original (com aviso no log).
+- **Tela:** "Salvar", com os 6 perfis (data, "Vazio" ou "Arquivo danificado"), o perfil mais recente selecionado; um perfil
+  com save pede confirmação para gravar por cima; Voltar e "Cancelar" saem sem gravar. Depois: "Jogo salvo no perfil N."
+- **Gravação e reprodução:** `salvar N` e `cancelarsave` no mesmo arquivo de eventos (`BS_REMASTER_ACOES`, `<gravacao>.acoes`);
+  `BS_REMASTER_SALVAR=<n>|cancelar` escolhe na primeira lista (testes sem janela).
+- **Prova** (build com mods, rota `passo_save_rcg02`, ponto de save simulado por `BS_SAVES_H2=7500`, `tmp/save-dev`): a
+  imagem VMS gravada pela lista nativa (Remastered) × a do painel (Original) difere só no tempo de jogo (`0x284`, o painel
+  leva alguns quadros a mais) e no CRC do cabeçalho (`0x46`); a partida termina na mesma posição. Unitário
+  `remaster_salvar_lista_nativa`.

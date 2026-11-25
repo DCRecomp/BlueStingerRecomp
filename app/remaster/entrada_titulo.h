@@ -24,7 +24,8 @@ struct Sh4Context;
 
 namespace bs::remaster {
 
-enum class Acao : uint8_t { Nenhuma, AbrirMenu, NovoJogo, Carregar };
+// Salvar e CancelarSave (2026-11-25) sao do save nativo dos pontos de save (app/remaster/save_nativo.h), no mesmo arquivo de eventos
+enum class Acao : uint8_t { Nenhuma, AbrirMenu, NovoJogo, Carregar, Salvar, CancelarSave };
 const char* acao_nome(Acao a);
 bool        acao_de_nome(const std::string& n, Acao& out);
 

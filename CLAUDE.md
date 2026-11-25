@@ -26,6 +26,9 @@ V1.000) para C++ nativo em Windows x64. Arquitetura e decisões em
   9.3 widescreen e HUD (antigo 9.5), 9.4 luz e sombras (antigo 9.6), 9.5 água (antigo 9.7), 9.6 texturas e AA (antigo 9.8),
   9.7 estabilização (antigo 9.12). Depois da 1.0: N10.0–N10.3 (antigos N9.4, N9.9, N9.10, N9.11) e N11 mods (antigo N10).
   Usar os números novos daqui em diante; os registros anteriores mantêm os antigos (`docs/N9-PLANO.md` seção 17).
+- **Save nativo da Remastered (2026-11-25):** nos pontos de save, a Remastered mostra a lista nativa dos 6 perfis no lugar do
+  painel do Dreamcast (`app/remaster/save_nativo.h`, slot nativo `0x8C01D200`); grava pela rotina do jogo (`8C01CCE0`), com
+  o mesmo arquivo. A Original não muda (`docs/N9-2-INTERFACE.md` seção 7).
 - **README bilíngue (2026-11-22):** cada parágrafo do README em português seguido do mesmo texto em inglês. A seção
   "Bugs reportados" lista cada problema das issues com ✅ (resolvido) ou ❌ (em aberto) e a versão da correção; manter
   atualizada a cada release ou issue nova.

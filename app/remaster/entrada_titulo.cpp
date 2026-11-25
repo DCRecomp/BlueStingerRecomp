@@ -73,12 +73,14 @@ const char* acao_nome(Acao a) {
     case Acao::AbrirMenu: return "menu";
     case Acao::NovoJogo: return "novojogo";
     case Acao::Carregar: return "carregar";
+    case Acao::Salvar: return "salvar";
+    case Acao::CancelarSave: return "cancelarsave";
     default: return "nenhuma";
     }
 }
 
 bool acao_de_nome(const std::string& n, Acao& out) {
-    for (Acao a : {Acao::AbrirMenu, Acao::NovoJogo, Acao::Carregar})
+    for (Acao a : {Acao::AbrirMenu, Acao::NovoJogo, Acao::Carregar, Acao::Salvar, Acao::CancelarSave})
         if (n == acao_nome(a)) return out = a, true;
     return false;
 }
