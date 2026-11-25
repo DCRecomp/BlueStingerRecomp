@@ -27,20 +27,16 @@ game running in the Flycast emulator. No BIOS and no CPU emulation.*
 ## Status
 
 Atualizado em 24/11/2026. O jogo já roda no Windows a partir do seu disco, com controles (teclado e controle), saves,
-filmes, áudio e vídeo nativos, renderização Vulkan, câmera livre e legendas em português e inglês. A versão atual é uma
-**pré-release**: [v0.9.7-5](https://github.com/DCRecomp/BlueStingerRecomp/releases/tag/v0.9.7-5). Os 16 filmes widescreen
-estão publicados e já são baixados por ela.
+filmes, áudio e vídeo nativos, renderização Vulkan, câmera livre, texturas HD, antialiasing e legendas em português, inglês,
+espanhol, francês, russo, japonês e chinês. A versão atual é uma **pré-release**:
+[v0.9.7-6](https://github.com/DCRecomp/BlueStingerRecomp/releases/tag/v0.9.7-6), com suporte completo ao RecompLauncher
+(instalação fácil, saves na nuvem e configurações no launcher). Os 16 filmes widescreen estão publicados.
 
 *Updated on 2026-11-24. The game already runs on Windows from your disc, with native controls (keyboard and gamepad),
-saves, movies, audio and video, Vulkan rendering, a free camera and subtitles in Portuguese and English. The current
-version is a **pre-release**: [v0.9.7-5](https://github.com/DCRecomp/BlueStingerRecomp/releases/tag/v0.9.7-5). All 16
-widescreen movies are published and it already downloads them.*
-
-Já no código, para a próxima versão: texturas HD e antialiasing na Remastered, legendas em espanhol, francês, russo,
-japonês e chinês, e o suporte ao RecompLauncher.
-
-*Already in the code, for the next version: HD textures and antialiasing in the Remastered edition, subtitles in Spanish,
-French, Russian, Japanese and Chinese, and RecompLauncher support.*
+saves, movies, audio and video, Vulkan rendering, a free camera, HD textures, antialiasing and subtitles in Portuguese,
+English, Spanish, French, Russian, Japanese and Chinese. The current version is a **pre-release**:
+[v0.9.7-6](https://github.com/DCRecomp/BlueStingerRecomp/releases/tag/v0.9.7-6), with full RecompLauncher support (easy
+setup, cloud saves and settings in the launcher). All 16 widescreen movies are published.*
 
 Rumo à versão 1.0: as etapas N0 a N6 estão concluídas, N7 e N8 estão em 95% e o N9 tem 6 de 8 partes com o trabalho
 técnico concluído. A campanha completa ainda não começou. Isso dá **cerca de 88%**: as 11 etapas da 1.0 (N0 a N9 e a
@@ -80,7 +76,7 @@ to N11.*
 | N9.3 | Widescreen 16:9 e HUD, incluindo os filmes widescreen / 16:9 widescreen and HUD, including widescreen movies | 🟡 pronto, falta conferência visual; filmes: 16 de 16 aprovados e publicados / done, visual review pending; movies: 16 of 16 approved and published |
 | N9.4 | Iluminação, sombras e oclusão ambiente / Lighting, shadows and ambient occlusion | 🟡 pronto, falta conferência visual / done, visual review pending |
 | N9.5 | Água remasterizada / Remastered water | 🟡 só o cais; faltam outras áreas / docks only; other areas pending |
-| N9.6 | Texturas HD, antialiasing e pós-processamento / HD textures, antialiasing and post-processing | 🟡 integrado ao código, falta conferência visual / merged into the code, visual review pending |
+| N9.6 | Texturas HD, antialiasing e pós-processamento / HD textures, antialiasing and post-processing | 🟡 publicado na v0.9.7-6, falta conferência visual / released in v0.9.7-6, visual review pending |
 | N9.7 | Estabilização final / Final stabilization | ⬜ |
 
 O suporte a Linux (N9-L) segue em paralelo: os passos L0 a L5 já foram publicados.
@@ -125,6 +121,7 @@ each one. If your problem is not listed, please open an issue.*
 | [#3](https://github.com/DCRecomp/BlueStingerRecomp/issues/3) | A instalação exigia o Visual Studio / Installing required Visual Studio | ✅ | v0.9.7-5 |
 | [#4](https://github.com/DCRecomp/BlueStingerRecomp/issues/4), [#5](https://github.com/DCRecomp/BlueStingerRecomp/issues/5) | O Director's Cut não era suportado / The Director's Cut was not supported | ✅ | v0.9.7-4 |
 | [#4](https://github.com/DCRecomp/BlueStingerRecomp/issues/4) | Versão PAL em 480p perde a sincronia e trava na primeira cena da Janine no QG / PAL version at 480p loses sync and freezes in the first Janine scene at HQ | ❌ ainda não testado / not tested yet | — |
+| RecompLauncher | "Jogar" abria o desinstalador e a instalação fácil não aparecia / "Play" opened the uninstaller and easy setup was missing | ✅ | v0.9.7-6 |
 | testes internos / internal tests | Falhas intermitentes no áudio em tempo real / Intermittent real-time audio dropouts | ❌ | — |
 
 ## Versões suportadas / Supported versions
