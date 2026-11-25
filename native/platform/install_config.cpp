@@ -66,7 +66,8 @@ std::string config_text(const InstallConfig& c) {
            "# Trocar o valor nao move as partidas de um lugar para o outro.\n"
            "[saves]\nlocal = \"" +
            (c.saves == SavesLocation::Portable ? "portatil" : "documentos") + "\"\n" +
-           "\n# legendas.idioma: \"auto\" (padrao: pt-BR se instalado, senao en-US), um idioma (pt-BR, en-US...) ou \"nenhuma\".\n"
+           "\n# legendas.idioma: \"auto\" (padrao: o idioma do sistema se houver o pacote, senao pt-BR, senao en-US), um idioma (pt-BR, en-US, es-ES,\n"
+           "#   fr-FR, ru-RU, ja-JP, zh-CN...) ou \"nenhuma\".\n"
            "# As legendas vem de mods\n"
            "# (mods\\video, mods\\<pacote>\\legendas); sem legendas no idioma, nada aparece.\n"
            "[legendas]\nidioma = \"" + (c.subtitles.empty() ? std::string("nenhuma") : c.subtitles) + "\"\n";

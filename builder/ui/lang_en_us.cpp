@@ -214,7 +214,7 @@ const Entry kEntries[] = {
     {"comp.title", L"Components and languages"},
     {"comp.subs", L"Subtitles (initial language; change it in the game menu)"},
     {"comp.subs.auto", L"Automatic"},
-    {"comp.subs.auto.hint", L"Portuguese (Brazil) if the package exists; otherwise English."},
+    {"comp.subs.auto.hint", L"The Windows language if its package exists; otherwise Portuguese (Brazil), then English."},
     {"comp.subs.pt", L"Português (Brasil)"},
     {"comp.subs.en", L"English"},
     {"comp.subs.off", L"Off"},

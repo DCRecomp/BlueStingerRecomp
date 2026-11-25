@@ -1851,12 +1851,36 @@ struct TempSaves {
 };
 TempSaves g_tempSaves;
 
-// "auto" (o padrao): pt-BR se um pacote de mods\ tiver as falas em pt-BR, senao en-US, senao desligadas (com aviso).
+// "auto" (o padrao): o idioma do sistema se houver um pacote de legendas nele (2026-11-24: espanhol, frances, russo, japones e
+// chines), senao pt-BR se um pacote de mods\ tiver as falas em pt-BR, senao en-US, senao desligadas (com aviso).
+std::vector<std::string> autoSubtitleCandidates() {
+    static const std::pair<const char*, const char*> kPacote[] = {{"pt", "pt-BR"}, {"en", "en-US"}, {"es", "es-ES"},
+                                                                  {"fr", "fr-FR"}, {"ru", "ru-RU"}, {"ja", "ja-JP"},
+                                                                  {"zh", "zh-CN"}};
+    std::vector<std::string> out;
+    auto add = [&](const std::string& l) {
+        if (std::find(out.begin(), out.end(), l) == out.end()) out.push_back(l);
+    };
+    int n = 0;
+    if (SDL_Locale** locs = SDL_GetPreferredLocales(&n)) {
+        for (int i = 0; i < n; ++i) {
+            if (!locs[i] || !locs[i]->language) continue;
+            const std::string lang = locs[i]->language;
+            for (const auto& [pri, pkg] : kPacote)
+                if (lang == pri) add(pkg);
+        }
+        SDL_free(locs);
+    }
+    add("pt-BR");
+    add("en-US");
+    return out;
+}
+
 std::string resolveAutoSubtitles() {
     const auto mods = bs::native::localization::ModPackages::discover(modsPath(), bs::kJogoIdentidade);
-    for (const char* lang : {"pt-BR", "en-US"})
+    for (const auto& lang : autoSubtitleCandidates())
         if (const auto f = mods.find("legendas/falas.{idioma}.toml", lang); f && f->language == lang) {
-            std::fprintf(stderr, "[legenda] idioma automatico: %s (pacote %s)\n", lang, f->package->id.c_str());
+            std::fprintf(stderr, "[legenda] idioma automatico: %s (pacote %s)\n", lang.c_str(), f->package->id.c_str());
             return lang;
         }
     std::fprintf(stderr, "[legenda] idioma automatico: nenhum pacote de legendas em mods\\; legendas desativadas\n");

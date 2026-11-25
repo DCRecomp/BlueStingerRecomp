@@ -15,6 +15,13 @@ namespace {
 std::string language_label(const std::string& lang) {
     if (lang == "pt-BR") return "Português (Brasil)";
     if (lang == "en-US" || lang == "en") return "English";
+    // 2026-11-24: os pacotes em espanhol, frances, russo, japones e chines. O menu da Remastered desenha com a Noto Sans, que nao
+    // tem os ideogramas: o japones e o chines aparecem com o nome em letras latinas
+    if (lang == "es-ES" || lang == "es") return "Español";
+    if (lang == "fr-FR" || lang == "fr") return "Français";
+    if (lang == "ru-RU" || lang == "ru") return "Русский";
+    if (lang == "ja-JP" || lang == "ja") return "Nihongo (Japanese)";
+    if (lang == "zh-CN" || lang == "zh") return "Zhongwen (Chinese)";
     return lang;
 }
 std::string pct(uint32_t v) { return std::to_string(v) + " %"; }

@@ -108,6 +108,11 @@ std::string idioma_do_pacote(const std::string& id) {
     if (l.find("legendas") == std::string::npos && l.find("subtitles") == std::string::npos) return {};
     if (l.find("pt-br") != std::string::npos || l.find("pt_br") != std::string::npos) return "pt-BR";
     if (l.size() >= 3 && (l.compare(l.size() - 3, 3, "-en") == 0 || l.find("en-us") != std::string::npos)) return "en-US";
+    // 2026-11-24: espanhol, frances, russo, japones e chines (legendas-es, legendas-fr, legendas-ru, legendas-ja, legendas-zh-cn)
+    static const std::pair<const char*, const char*> kOutros[] = {{"-es", "es-ES"}, {"-fr", "fr-FR"}, {"-ru", "ru-RU"},
+                                                                  {"-ja", "ja-JP"}, {"-zh", "zh-CN"}};
+    for (const auto& [suf, lang] : kOutros)
+        if (l.find(std::string("legendas") + suf) != std::string::npos) return lang;
     return {};
 }
 
@@ -964,17 +969,28 @@ void Instalador::componentes(const Ret& r) {
         const char* chave;
         const char* dica;
     };
-    const Op ops[] = {{"auto", "comp.subs.auto", "comp.subs.auto.hint"},
-                      {"pt-BR", "comp.subs.pt", nullptr},
-                      {"en-US", "comp.subs.en", nullptr},
-                      {"", "comp.subs.off", nullptr}};
+    // 2026-11-24: os idiomas novos (nome no proprio idioma) so aparecem com o pacote no kit ou na pasta de pacotes
+    struct Extra {
+        const char*    valor;
+        const wchar_t* nome;
+    };
+    static const Extra kExtras[] = {{"es-ES", L"Español"}, {"fr-FR", L"Français"}, {"ru-RU", L"Русский"},
+                                    {"ja-JP", L"日本語"}, {"zh-CN", L"中文（简体）"}};
+    std::vector<Op> ops = {{"auto", "comp.subs.auto", "comp.subs.auto.hint"}, {"pt-BR", "comp.subs.pt", nullptr},
+                           {"en-US", "comp.subs.en", nullptr}};
+    for (const auto& e : kExtras)
+        if (tem(e.valor)) ops.push_back({e.valor, nullptr, nullptr});
+    ops.push_back({"", "comp.subs.off", nullptr});
     int k = 0;
     for (const auto& o : ops) {
+        std::wstring nome = o.chave ? tr(o.chave) : L"";
+        for (const auto& e : kExtras)
+            if (!o.chave && std::string(o.valor) == e.valor) nome = e.nome;
         std::wstring dica = o.dica ? tr(o.dica) : L"";
         if ((std::string(o.valor) == "pt-BR" || std::string(o.valor) == "en-US") && !tem(o.valor)) dica = tr("comp.pkg.missing");
-        const float h = ui_.altura_texto(tr(o.chave), est(tema::kCorpo), col - 30) + 6 +
+        const float h = ui_.altura_texto(nome, est(tema::kCorpo), col - 30) + 6 +
                         (dica.empty() ? 0.f : 2 + ui_.altura_texto(dica, est(tema::kPequeno), col - 30));
-        if (ui_.opcao(id("leg", k), 3, tr(o.chave), dica, {r.x, y1, col, h}, s.legendas == o.valor)) s.legendas = o.valor;
+        if (ui_.opcao(id("leg", k), 3, nome, dica, {r.x, y1, col, h}, s.legendas == o.valor)) s.legendas = o.valor;
         y1 += h + 6;
         ++k;
     }
@@ -1527,7 +1543,10 @@ void Instalador::simular(Tela t, Simulacao sim) {
     }
     if (t == Tela::Componentes) {
         s.pastaPacotes = L"D:\\pacotes";
-        s.pacotes = {{fs::path("legendas-pt-br"), L"Legendas pt-BR 0.2.1", "pt-BR"}, {fs::path("legendas-en"), L"Subtitles en-US 0.3.1", "en-US"}};
+        s.pacotes = {{fs::path("legendas-pt-br"), L"Legendas pt-BR 0.2.1", "pt-BR"}, {fs::path("legendas-en"), L"Subtitles en-US 0.3.1", "en-US"},
+                     {fs::path("legendas-es"), L"Subtítulos es-ES 0.1.0", "es-ES"}, {fs::path("legendas-fr"), L"Sous-titres fr-FR 0.1.0", "fr-FR"},
+                     {fs::path("legendas-ru"), L"Субтитры ru-RU 0.1.0", "ru-RU"}, {fs::path("legendas-ja"), L"字幕 ja-JP 0.1.0", "ja-JP"},
+                     {fs::path("legendas-zh-cn"), L"字幕 zh-CN 0.1.0", "zh-CN"}};
     }
 }
 

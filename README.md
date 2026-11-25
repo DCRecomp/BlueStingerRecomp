@@ -27,11 +27,13 @@ game running in the Flycast emulator. No BIOS and no CPU emulation.*
 ## Status
 
 Atualizado em 22/11/2026. O jogo já roda no Windows a partir do seu disco, com controles (teclado e controle), saves,
-filmes, áudio e vídeo nativos, renderização Vulkan, câmera livre e legendas em português e inglês. A versão atual é uma
+filmes, áudio e vídeo nativos, renderização Vulkan, câmera livre e legendas em português, inglês,
+espanhol, francês, russo, japonês e chinês. A versão atual é uma
 **pré-release**: [v0.9.7-5](https://github.com/DCRecomp/BlueStingerRecomp/releases/tag/v0.9.7-5).
 
 *Updated on 2026-11-22. The game already runs on Windows from your disc, with native controls (keyboard and gamepad),
-saves, movies, audio and video, Vulkan rendering, a free camera and subtitles in Portuguese and English. The current
+saves, movies, audio and video, Vulkan rendering, a free camera and subtitles in Portuguese, English,
+Spanish, French, Russian, Japanese and Chinese. The current
 version is a **pre-release**: [v0.9.7-5](https://github.com/DCRecomp/BlueStingerRecomp/releases/tag/v0.9.7-5).*
 
 Rumo à versão 1.0: as etapas N0 a N6 estão concluídas, N7 e N8 estão em 95% e o N9 tem 6 de 8 partes com o trabalho

@@ -17,6 +17,9 @@ Como gerar localmente, a partir dos dados do seu disco (`tools/dev/legendas`, ve
 3. `gerar_mod.py --versao <v>`: o pacote `legendas-en` (glossário, revisões, alucinações excluídas).
 4. `gerar_traducao.py --versao <v>`: o pacote `legendas-pt-br` a partir de `traducao.pt-BR.tsv`.
 5. Copiar `%LOCALAPPDATA%\BlueStingerRecomp\legendas-en\mod\legendas-en` e `...\mod\legendas-pt-br` para esta pasta.
+6. (2026-11-24) Espanhol, francês, russo, japonês e chinês: `gerar_idioma.py --idioma <es-ES|fr-FR|ru-RU|ja-JP|zh-CN>
+   --traducao <n<TAB>texto, uma linha por linha inglesa> --en legendas-en/fontes/transcricoes.en-US.tsv --saida mods-padrao`.
+   Tradução por IA, sem revisão humana; os tempos são os do inglês e uma linha longa vira mais de uma legenda.
 
 `revisoes.en-US.tsv` e `traducao.pt-BR.tsv` (em `tools/dev/legendas`) também ficam só locais, com cópias datadas em
 `%LOCALAPPDATA%\BlueStingerRecomp\backups`.
