@@ -30,6 +30,29 @@ aponta para `bluestingerrecomp`.
    do próximo pacote.
 4. **README**: o selo "Get it on RecompLauncher" no topo, no formato do guia (claro no tema escuro e escuro no claro).
 
+## Revisão de 2026-11-24 (manifesto v2)
+
+Relato do mantenedor: no launcher, **Jogar abria o desinstalador** e a **instalação fácil não aparecia**. Causa: o zip da
+v0.9.7-5 não tinha o `recomplauncher.json` (ele só entra a partir do pacote seguinte) e, num projeto do GitHub, o launcher só
+lê o manifesto do zip do release ou do catálogo. Sem ele, o launcher escolheu um dos quatro `.exe` do pacote, o
+`BlueStinger-Desinstalar.exe`. Pedido do mantenedor: suporte completo ao launcher e saves na nuvem.
+
+- **Entrada `game`** (o nome que o guia pede para a instalação fácil), com o rótulo citando `.gdi`, `.cue`, `.chd` e `.cdi`
+  (o launcher entrega o `.cue` só quando o rótulo o cita).
+- **Saves na nuvem e backups:** o passo `prepare` passa `--saves-portatil` (nova opção do `bs-builder`), então os saves ficam
+  em `{install}/jogo/BlueStinger/saves`; `saves` lista essa pasta e os `controles.toml`, `legendas.toml` e `audio.toml`
+  (o `graficos.toml` fica de fora: depende da GPU de cada PC).
+- **Configurações no launcher** (`config` + `settings`): modo de tela, resolução interna, proporção, VSync, antialiasing,
+  filtragem, texturas HD; avançadas: iluminação, sombras, água e oclusão ambiente; legendas (ligadas, idioma, tamanho);
+  volumes. Cada opção grava a chave própria (o jogo lê as chaves explícitas por cima do preset).
+- **Idioma "Automático":** o `legendas.toml` passa a aceitar `idioma = "auto"` (o padrão no launcher), com a mesma regra do
+  `instalacao.toml`: o idioma do Windows com pacote, senão pt-BR, senão en-US.
+- **`folders`/`actions`:** saves, mods, pasta do jogo e o log da instalação (`{install}/jogo/.bs-build`).
+- **`exit_codes`:** `0` é a saída normal. **`system`:** Windows 10.
+- **Filmes widescreen** marcados por padrão.
+- **Esquema atual:** `prepare.timeout` e `prepare.version` saíram do esquema oficial e foram tirados.
+- **Release:** o zip passa a se chamar `BlueStinger-Builder-v<versão>-Windows-x64.zip`, com o conteúdo e o manifesto na raiz.
+
 ## Conferência
 
 - O manifesto foi conferido contra o esquema oficial (`https://raw.githubusercontent.com/elripalda/RecompLauncher-SDK/main/schema/recomplauncher.json`)
