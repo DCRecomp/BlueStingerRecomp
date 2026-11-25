@@ -15,7 +15,7 @@ namespace bs::builder {
 
 // N0: tools/dcmap (mapa de regioes, usado pela sonda do runtime), native, legacy e transitional
 // sao alvos do CMake raiz e entram no kit.
-const wchar_t* const kKitEntries[20] = {L"CMakeLists.txt", L"LICENSE", L"VERSION", L"app", L"runtime",
+const wchar_t* const kKitEntries[21] = {L"CMakeLists.txt", L"LICENSE", L"VERSION", L"app", L"runtime",
                                         L"tools/extractor", L"tools/dist/LEIA-ME.txt", L"config",
                                         L"tools/dcmap", L"native", L"legacy", L"transitional",
                                         L"tools/build",           // N2b: dependencias do MSVC por JSON (D10)
@@ -25,6 +25,8 @@ const wchar_t* const kKitEntries[20] = {L"CMakeLists.txt", L"LICENSE", L"VERSION
                                         L"mods-padrao",           // N7c: mods padrao (legendas), em toda instalacao
                                         L"third_party/fonts",     // N9.2: Noto Sans (OFL 1.1), o texto da interface nos dois sistemas
                                         L"third_party/freetype",  // N9.2: FreeType 2.13.3 (FTL) em fontes, sem internet
+                                        L"third_party/stb",       // N9.8 fase 8.2: stb_image (PNG das texturas HD); faltava na copia
+                                                                  // do kit para o cache (caminho fora do ANSI), 2026-11-24
                                         L"icone-local"};          // icone a partir da capa do usuario (so local; opcional)
 
 namespace {
