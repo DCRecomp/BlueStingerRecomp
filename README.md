@@ -26,15 +26,21 @@ game running in the Flycast emulator. No BIOS and no CPU emulation.*
 
 ## Status
 
-Atualizado em 22/11/2026. O jogo já roda no Windows a partir do seu disco, com controles (teclado e controle), saves,
-filmes, áudio e vídeo nativos, renderização Vulkan, câmera livre e legendas em português, inglês,
-espanhol, francês, russo, japonês e chinês. A versão atual é uma
-**pré-release**: [v0.9.7-5](https://github.com/DCRecomp/BlueStingerRecomp/releases/tag/v0.9.7-5).
+Atualizado em 24/11/2026. O jogo já roda no Windows a partir do seu disco, com controles (teclado e controle), saves,
+filmes, áudio e vídeo nativos, renderização Vulkan, câmera livre e legendas em português e inglês. A versão atual é uma
+**pré-release**: [v0.9.7-5](https://github.com/DCRecomp/BlueStingerRecomp/releases/tag/v0.9.7-5). Os 16 filmes widescreen
+estão publicados e já são baixados por ela.
 
-*Updated on 2026-11-22. The game already runs on Windows from your disc, with native controls (keyboard and gamepad),
-saves, movies, audio and video, Vulkan rendering, a free camera and subtitles in Portuguese, English,
-Spanish, French, Russian, Japanese and Chinese. The current
-version is a **pre-release**: [v0.9.7-5](https://github.com/DCRecomp/BlueStingerRecomp/releases/tag/v0.9.7-5).*
+*Updated on 2026-11-24. The game already runs on Windows from your disc, with native controls (keyboard and gamepad),
+saves, movies, audio and video, Vulkan rendering, a free camera and subtitles in Portuguese and English. The current
+version is a **pre-release**: [v0.9.7-5](https://github.com/DCRecomp/BlueStingerRecomp/releases/tag/v0.9.7-5). All 16
+widescreen movies are published and it already downloads them.*
+
+Já no código, para a próxima versão: texturas HD e antialiasing na Remastered, legendas em espanhol, francês, russo,
+japonês e chinês, e o suporte ao RecompLauncher.
+
+*Already in the code, for the next version: HD textures and antialiasing in the Remastered edition, subtitles in Spanish,
+French, Russian, Japanese and Chinese, and RecompLauncher support.*
 
 Rumo à versão 1.0: as etapas N0 a N6 estão concluídas, N7 e N8 estão em 95% e o N9 tem 6 de 8 partes com o trabalho
 técnico concluído. A campanha completa ainda não começou. Isso dá **cerca de 88%**: as 11 etapas da 1.0 (N0 a N9 e a
@@ -71,10 +77,10 @@ to N11.*
 | N9.0 | Duas edições no mesmo executável / Two editions in the same executable | ✅ |
 | N9.1 | Instalador gráfico / Graphical installer | 🟡 pronto, falta conferência visual / done, visual review pending |
 | N9.2 | Interface da Remastered / Remastered interface | 🟡 pronto, falta conferência visual / done, visual review pending |
-| N9.3 | Widescreen 16:9 e HUD, incluindo os filmes widescreen / 16:9 widescreen and HUD, including widescreen movies | 🟡 jogo pronto; filmes: 10 de 16 aprovados / game done; movies: 10 of 16 approved |
+| N9.3 | Widescreen 16:9 e HUD, incluindo os filmes widescreen / 16:9 widescreen and HUD, including widescreen movies | 🟡 pronto, falta conferência visual; filmes: 16 de 16 aprovados e publicados / done, visual review pending; movies: 16 of 16 approved and published |
 | N9.4 | Iluminação, sombras e oclusão ambiente / Lighting, shadows and ambient occlusion | 🟡 pronto, falta conferência visual / done, visual review pending |
 | N9.5 | Água remasterizada / Remastered water | 🟡 só o cais; faltam outras áreas / docks only; other areas pending |
-| N9.6 | Texturas HD, antialiasing e pós-processamento / HD textures, antialiasing and post-processing | 🟡 pronto, falta integrar / done, merge pending |
+| N9.6 | Texturas HD, antialiasing e pós-processamento / HD textures, antialiasing and post-processing | 🟡 integrado ao código, falta conferência visual / merged into the code, visual review pending |
 | N9.7 | Estabilização final / Final stabilization | ⬜ |
 
 O suporte a Linux (N9-L) segue em paralelo: os passos L0 a L5 já foram publicados.
@@ -112,7 +118,7 @@ each one. If your problem is not listed, please open an issue.*
 | Issue | Problema / Problem | Status | Versão / Version |
 |---|---|---|---|
 | [#1](https://github.com/DCRecomp/BlueStingerRecomp/issues/1) | CDIs de outras fontes eram recusados / CDIs from other sources were rejected | ✅ | v0.9.7-3 |
-| [#1](https://github.com/DCRecomp/BlueStingerRecomp/issues/1) | O instalador fecha depois de escolher a imagem / The installer closes after choosing the image | ❌ não reproduzido nos nossos testes; aguardando mais informações / not reproduced in our tests; waiting for more details | — |
+| [#1](https://github.com/DCRecomp/BlueStingerRecomp/issues/1) | O instalador fecha depois de escolher a imagem / The installer closes after choosing the image | ❌ não reproduzido nos nossos testes; quem abriu a issue já instala, falta o retorno de outro usuário / not reproduced in our tests; the reporter can install now, waiting for another user's feedback | — |
 | [#2](https://github.com/DCRecomp/BlueStingerRecomp/issues/2) | Imagens CHD não eram aceitas / CHD images were not accepted | ✅ confirmado por quem relatou / confirmed by the reporter | v0.9.7-3 |
 | [#3](https://github.com/DCRecomp/BlueStingerRecomp/issues/3) | Imagens GDI não eram aceitas / GDI images were not accepted | ✅ | v0.9.7-3 |
 | [#3](https://github.com/DCRecomp/BlueStingerRecomp/issues/3) | O instalador fechava após o seletor de arquivos, por causa de uma extensão do Explorer / The installer closed after the file picker, because of an Explorer extension | ✅ | v0.9.7-4 |
