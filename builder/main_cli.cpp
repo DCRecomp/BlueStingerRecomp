@@ -65,6 +65,10 @@ int main(int argc, char** argv) {
         else if (a == L"--de-projeto" && more) req.fromProject = P(args[++i]);
         else if (a == L"--clean") req.clean = true;
         else if (a == L"--sem-filmes") req.movies = false;
+        // 2026-11-24: os saves na pasta da instalacao (saves\ ao lado do jogo), como o modo portatil do instalador; o RecompLauncher
+        // usa para o backup e os saves na nuvem (recomplauncher.json: saves)
+        else if (a == L"--saves-portatil") req.portableSaves = true;
+        else if (a == L"--saves-documentos") req.portableSaves = false;
         else if (a == L"--edicao" && more && parseEdition(args[i + 1], req)) ++i;
         else if (a == L"--somente-exportar") req.exportOnly = true;
         else if (a == L"--progresso-launcher") launcherProgress = true;
@@ -85,6 +89,7 @@ int main(int argc, char** argv) {
                          "                [--vcvars <vcvars64.bat> | --vswhere <vswhere.exe>] [--clean] [--name <subpasta>]\n"
                          "                [--edicao original|remastered] [--filmes-widescreen]\n"
                          "                [--progresso-launcher]  (o progresso para o RecompLauncher)\n"
+                         "                [--saves-portatil | --saves-documentos]  (onde ficam os saves)\n"
                          "                [--directors-cut en|fr --disco-ocidental <imagem> --confirmar-download]\n"
                          "                (disco japones v1.006 em --disc; baixa o patcher de terceiros, GPL-3.0)\n"
 #ifdef _WIN32

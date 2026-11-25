@@ -2427,9 +2427,17 @@ int mainWindow(Args& a) {
         subtitleOverride = a.subtitlesSet || !legFile;  // sem legendas.toml, o idioma vem do instalacao.toml
         if (a.renderExplicit) prefs.graphics.vulkan = a.render == 1;
         else a.render = prefs.graphics.vulkan ? 1 : 0;
-        if (!a.subtitlesSet && legFile) {
+        // 2026-11-24: idioma = "auto" no legendas.toml (o padrao do painel do RecompLauncher) segue a mesma regra do instalacao.toml:
+        // o idioma do sistema com pacote, senao pt-BR, senao en-US; "ligadas" continua valendo
+        const bool autoLang = legFile && prefs.subtitles.language == "auto";
+        if (!a.subtitlesSet && legFile && !autoLang) {
             a.subtitles    = prefs.subtitles.enabled ? prefs.subtitles.language : "nenhuma";
             a.subtitlesSet = true;
+        } else if (!a.subtitlesSet && autoLang) {
+            const std::string lang   = resolveAutoSubtitles();
+            prefs.subtitles.language = lang.empty() ? "en-US" : lang;
+            a.subtitles              = prefs.subtitles.enabled && !lang.empty() ? lang : "nenhuma";
+            a.subtitlesSet           = true;
         } else {
             const std::string lang    = subtitlesLanguage(a);
             prefs.subtitles.enabled   = !lang.empty();
