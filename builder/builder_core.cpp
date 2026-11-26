@@ -211,6 +211,36 @@ fs::path cacheDir(const fs::path& out, const fs::path& work) {
 
 // Parte do kit que a compilacao usa: kKitEntries (project_export.cpp).
 
+// Copia a arvore `from` para `to`. Nao usa fs::copy quando `to` ja existe: no MSVC 14.50
+// essa copia chama equivalent(), que devolve o erro 87 (parametro incorreto) em FAT32,
+// exFAT e pasta de rede sem identificador de arquivo de 128 bits. skip_existing deixa
+// quieto o arquivo que ja esta no destino (legendas de video de outro pacote).
+void copy_tree(const fs::path& from, const fs::path& to, bool skip_existing) {
+    if (!fs::exists(to)) {
+        fs::create_directories(to.parent_path());
+        fs::copy(from, to, fs::copy_options::recursive);
+        return;
+    }
+    if (!fs::is_directory(to)) {
+        fs::copy(from, to, fs::copy_options::recursive);
+        return;
+    }
+    for (const auto& ent : fs::directory_iterator(from)) {
+        const fs::path dest = to / ent.path().filename();
+        if (ent.is_directory()) {
+            copy_tree(ent.path(), dest, skip_existing);
+            continue;
+        }
+        if (!ent.is_regular_file()) continue;
+        if (fs::exists(dest)) {
+            if (skip_existing) continue;
+            fs::copy_file(ent.path(), dest);
+            continue;
+        }
+        fs::copy_file(ent.path(), dest);
+    }
+}
+
 // Copia `from` para `to` so com o que mudou (data mais nova); a data e preservada.
 void syncTree(const fs::path& from, const fs::path& to) {
     std::error_code ec;
@@ -1088,14 +1118,12 @@ Result build(const Request& req, const Callbacks& cb) {
         }
         // mods de arquivos do projeto: <instalacao>\mods\assets (o jogo le no lugar dos originais)
         if (fromProject && fs::is_directory(kit / L"mods" / L"assets", ec)) {
-            fs::create_directories(stage / L"mods" / L"assets");
-            fs::copy(kit / L"mods" / L"assets", stage / L"mods" / L"assets", fs::copy_options::recursive);
+            copy_tree(kit / L"mods" / L"assets", stage / L"mods" / L"assets", false);
             log("mods de arquivos copiados para o pacote");
         }
         // N5: filmes e legendas de mods do projeto: <instalacao>\mods\video (substituem os convertidos)
         if (fromProject && fs::is_directory(kit / L"mods" / L"video", ec)) {
-            fs::create_directories(stage / L"mods" / L"video");
-            fs::copy(kit / L"mods" / L"video", stage / L"mods" / L"video", fs::copy_options::recursive);
+            copy_tree(kit / L"mods" / L"video", stage / L"mods" / L"video", false);
             log("mods de video copiados para o pacote");
         }
         // mods padrao do projeto (kit\mods-padrao\<id>\mod.toml, so texto: as legendas), em toda instalacao: vao para
@@ -1105,13 +1133,9 @@ Result build(const Request& req, const Callbacks& cb) {
             size_t n = 0;
             for (const auto& e : fs::directory_iterator(kit / L"mods-padrao")) {
                 if (!e.is_directory() || !fs::is_regular_file(e.path() / L"mod.toml", ec)) continue;
-                fs::create_directories(stage / L"mods" / e.path().filename());
-                fs::copy(e.path(), stage / L"mods" / e.path().filename(), fs::copy_options::recursive);
-                if (fs::is_directory(e.path() / L"video", ec)) {
-                    fs::create_directories(stage / L"mods" / L"video");
-                    fs::copy(e.path() / L"video", stage / L"mods" / L"video",
-                             fs::copy_options::recursive | fs::copy_options::skip_existing);
-                }
+                copy_tree(e.path(), stage / L"mods" / e.path().filename(), false);
+                if (fs::is_directory(e.path() / L"video", ec))
+                    copy_tree(e.path() / L"video", stage / L"mods" / L"video", true);
                 log("mod padrao: " + path_text(e.path().filename()));
                 ++n;
             }
