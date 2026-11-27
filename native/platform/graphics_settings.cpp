@@ -282,6 +282,7 @@ std::string to_toml(const GraphicsSettings& s) {
       << "msaa = " << s.msaa << "\n"
       << "antialiasing = \"" << name(s.antialiasing) << "\"\n"
       << "texturas_hd = " << (s.hd_textures ? "true" : "false") << "\n"
+      << "filmes_widescreen = " << (s.widescreen_movies ? "true" : "false") << "\n"
       << "iluminacao = " << (s.lighting ? "true" : "false") << "\n"
       << "sombras = \"" << name(s.shadows) << "\"\n"
       << "agua = \"" << name(s.water) << "\"\n"
@@ -355,6 +356,7 @@ GraphicsSettings from_toml(const std::string& text, std::string* warning) {
     }
     str("imagem", "resolucao", s.resolution), num("imagem", "escala", s.scale_pct), str("imagem", "filtragem", s.filter);
     num("imagem", "anisotropia", s.anisotropy), num("imagem", "msaa", s.msaa), bln("imagem", "texturas_hd", s.hd_textures);
+    bln("imagem", "filmes_widescreen", s.widescreen_movies);
     str("imagem", "antialiasing", s.antialiasing);  // N9.8 fase 8.3
     bln("imagem", "iluminacao", s.lighting), str("imagem", "sombras", s.shadows), str("imagem", "agua", s.water);
     if (auto v = doc["imagem"]["shader"].value<std::string>()) s.shader = *v;

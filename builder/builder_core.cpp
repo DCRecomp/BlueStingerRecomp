@@ -195,10 +195,15 @@ const size_t kMaxDirectKit = plat::max_direct_kit();
 // Cache de compilacao, um por pasta de saida: <raiz>\build\<hash da saida>. Tudo o que o
 // Ninja ve fica ali (build do CMake, C++ gerado e, se preciso, uma copia do kit): caminho
 // curto (limite de 260 do MSVC) e representavel na pagina ANSI (o Ninja usa as APIs "A").
-fs::path cacheDir(const fs::path& out, const fs::path& work) {
+fs::path cacheDir(const fs::path& out, const fs::path& work, bool portable) {
     char name[16];
     std::snprintf(name, sizeof name, "%08x", plat::cache_key(out));
-    for (const auto& r : plat::cache_roots(work)) {
+    auto roots = plat::cache_roots(work);
+    if (portable) {
+        const char* overrideRoot = std::getenv("BS_BUILDER_CACHE");
+        roots = {overrideRoot && *overrideRoot ? roots.front() : work};
+    }
+    for (const auto& r : roots) {
         const fs::path c = r / L"build" / name;
         if (!plat::build_path_ok(c) || c.native().size() > kMaxCachePath) continue;
         std::error_code ec;
@@ -206,6 +211,7 @@ fs::path cacheDir(const fs::path& out, const fs::path& work) {
         if (ec) continue;
         if (!plat::probe_writable(c)) return c;
     }
+    if (portable) throw StepError("cache portatil indisponivel: escolha uma pasta de saida curta e gravavel");
     throw StepError(plat::cache_hint());
 }
 
@@ -606,7 +612,8 @@ Result build(const Request& req, const Callbacks& cb) {
         log("imagem: " + path_text(req.disc));
         log("saida: " + path_text(out));
         log("kit: " + path_text(kit));
-        const fs::path cache = cacheDir(out, work);
+        const bool portable = install_config_for(req, res.installDir, nullptr).saves == native::install::SavesLocation::Portable;
+        const fs::path cache = cacheDir(out, work, portable);
         log("cache de compilacao: " + path_text(cache));
         std::ofstream(cache / L".bs-out", std::ios::binary | std::ios::trunc) << path_text(out) << "\n";  // de quem e
 
@@ -619,7 +626,9 @@ Result build(const Request& req, const Callbacks& cb) {
 #ifdef _WIN32
                 // v0.9.7-5: o compilador portatil (confirmado pelo usuario), baixado e montado no cache dele se preciso
                 if (req.portableCompiler && dir.empty()) {
-                    dir = portatil::pasta_padrao();
+                    dir = portable ? work / L"compilador" / portatil::kVersao : portatil::pasta_padrao();
+                    if (portable && (!plat::build_path_ok(dir) || dir.native().size() > kMaxCachePath))
+                        throw std::runtime_error("compilador portatil: escolha uma pasta de saida mais curta");
                     if (dir.empty()) throw std::runtime_error(std::string("compilador portatil: ") + plat::cache_hint());
                     portatil::Pedido pp;
                     pp.pasta     = dir;
@@ -1223,7 +1232,8 @@ Result build(const Request& req, const Callbacks& cb) {
                 // 2026-11-24: o cache compartilhado dos filmes (BS_BUILDER_CACHE nos testes, senao %LOCALAPPDATA%\BlueStingerRecomp):
                 // uma atualizacao ou uma instalacao em outra pasta nao baixa os filmes de novo
                 const auto     raizes = plat::cache_roots_privadas();
-                const fs::path cacheFilmes = raizes.empty() ? fs::path() : raizes.front() / L"filmes-widescreen";
+                const fs::path cacheFilmes = portable ? work / L"filmes-widescreen" :
+                    (raizes.empty() ? fs::path() : raizes.front() / L"filmes-widescreen");
                 const widescreen::Report wr = widescreen::install(
                     res.installDir / L"mods" / L"video", plat::http_download_paralelo, cb.cancel, log,
                     [&](double f) { progress(0.5 + 0.5 * f, "filmes widescreen"); }, widescreen::kBaseUrl,

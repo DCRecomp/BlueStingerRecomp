@@ -169,6 +169,9 @@ std::vector<SettingsMenu::Entry> SettingsMenu::entries() const {
                      [](Preferences& p, int d) { p.graphics.water = cycle(p.graphics.water, d, 3); }});
         e.push_back({L("Texturas HD", "HD textures"), soon(f.hd_textures, onoff(g.hd_textures)), f.hd_textures,
                      [](Preferences& p, int) { p.graphics.hd_textures = !p.graphics.hd_textures; }});
+        if (profile_.hd_textures)
+            e.push_back({L("Filmes", "Movies"), g.widescreen_movies ? "widescreen" : L("originais", "originals"), true,
+                         [](Preferences& p, int) { p.graphics.widescreen_movies = !p.graphics.widescreen_movies; }});
         {  // N7c (secao 21): os efeitos de imagem numa pagina propria (submenu: sem valor; "em breve" sem nenhum efeito)
             const bool any = f.color || f.tonemap || f.sharpen || f.bloom || f.crt || f.post || f.shaders || f.ssao;
             sub(L("Efeitos de imagem", "Image effects"), Page::Effects, any, any ? std::string() : soon(false, ""));

@@ -85,7 +85,7 @@ private:
     MwCoreOptions                                 o_;
     std::wstring                                  lastSub_;  // BS_VIDEO_LEGENDA_LOG
     int64_t                                       audibleMax_ = 0;
-    native::video::MovieCatalog                   catalog_;
+    native::video::MovieCatalog                   catalog_, originalCatalog_;
     const native::video::MovieEntry*              entry_ = nullptr;
     std::unique_ptr<native::video::MoviePlayback> play_;
     std::unique_ptr<native::audio::IAudioOutput>  audio_;
@@ -104,6 +104,7 @@ private:
 // N7c (menu interno): a preferencia do jogador sobre as legendas dos filmes, valida em qualquer thread. Sem chamada,
 // vale Options::subtitleLang. "" = desligadas (o filme em curso para de mostra-las na hora); outro idioma vale a partir
 // do proximo filme.
+void set_widescreen_movie_preference(bool enabled);
 void set_subtitle_preference(const std::string& language);
 
 } // namespace bs::transitional::video

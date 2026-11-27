@@ -135,6 +135,8 @@ public:
         SDL_GetWindowSizeInPixels(window_, &w, &h);
     }
     void set_vsync(bool on) override { vsync_ = on; }
+    void window_changed() override { recreate_ = true; }
+    bool frame_shown() const override { return frameShown_; }
 
     bool present(const GameFrame& f, uint64_t frameSeq, const SDL_FRect& area, const SDL_FRect& cpuArea,
                          std::span<const WindowLayer> layers,
@@ -146,6 +148,7 @@ public:
         output_size(w, h);
         nr::PresentRequest r;
         r.out_w = uint32_t(std::max(w, 0)), r.out_h = uint32_t(std::max(h, 0)), r.vsync = vsync_;
+        r.recreate_swapchain = recreate_;
         r.area[0] = area.x, r.area[1] = area.y, r.area[2] = area.w, r.area[3] = area.h;
         r.cpu_area[0] = cpuArea.x, r.cpu_area[1] = cpuArea.y, r.cpu_area[2] = cpuArea.w, r.cpu_area[3] = cpuArea.h;
         r.slot_seq = f.hiresSeq, r.slot_y0 = f.hiresY0, r.slot_rows = f.hiresRows;
@@ -159,11 +162,16 @@ public:
             if (l.argb && l.argb->size() >= size_t(l.width) * l.height) r.layers[i] = {l.argb->data(), l.width, l.height, l.version};
         }
         r.capture = capture;
+        const auto before = dev_->present_stats().frames;
         const auto res = dev_->present(r);
+        frameShown_ = res && dev_->present_stats().frames != before;
+        const bool refreshing = std::exchange(recreate_, false);
         if (!res && res.error() == native::Error::Io) {  // dispositivo perdido: o compartilhado e descartado e refeito
             // com um shader de mod ativo, ele e o primeiro suspeito (um passe que prende a GPU): sai antes de refazer
             if (spec_.shader) postError_ = "perda do dispositivo com o shader ativo", spec_.shader = nullptr, spec_.shaderParams.clear();
             nr::vulkan_shared_lost(dev_.get());
+            reattach();
+        } else if (!res && refreshing) {
             reattach();
         }
         return bool(res);
@@ -211,7 +219,7 @@ private:
     VkInstance                        instance_ = {};
     VkSurfaceKHR                      surface_  = {};
     uint64_t                          generation_ = 0;
-    bool                              vsync_ = true;
+    bool                              vsync_ = true, recreate_ = false, frameShown_ = false;
     PostSpec                          spec_;
     std::vector<nr::PostPass>         passes_;
     std::map<std::string, int>        loaded_;  // shader de mod -> id no dispositivo atual

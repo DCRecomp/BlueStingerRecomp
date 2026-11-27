@@ -97,6 +97,13 @@ BS_TEST(video_mods_subtitle_language_fallback) {
     std::ofstream(d.mods / "manifest.toml") << "[[filme]]\nid = 3\narquivo = \"E001b.mp4\"\nlegendas = { ES = \"fala.srt\" }\n";
     movie(d.mods / "E001b.mp4", 320, 240, 30, 9);
     BS_CHECK(bottomWhite("es-MX") > 30);
+
+    nv::CatalogOptions original{d.data, d.mods};
+    original.allowVideoMods = false;
+    const auto catalog = nv::MovieCatalog::load(original);
+    const auto* entry = catalog.find("E001.SFD");
+    BS_CHECK(entry && !entry->mod && entry->file.filename() == "E001.mp4");
+    BS_CHECK(entry && entry->subtitles.contains("es") && entry->subtitles.contains("pt"));
 }
 
 // cor do sprite (O1b): filme do Builder na faixa de TV e modulado pela cor base; offset aditivo; um mod

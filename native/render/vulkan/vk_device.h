@@ -115,6 +115,7 @@ struct PostTiming {  // tempo de GPU de um shader da cadeia (consultas de timest
 struct PresentRequest {
     uint32_t        out_w = 0, out_h = 0;  // tamanho da janela em pixels
     bool            vsync = true;
+    bool            recreate_swapchain = false;
     float           area[4] = {};          // area do jogo em pixels da saida (x, y, largura, altura)
     // N9.5 fase 1: a area da imagem da CPU quando ela difere da do slot (o quadro largo: o slot no 16:9, a imagem da CPU
     // de 640 x 480 no 4:3 central, sem esticar). Largura 0 = a mesma `area`.

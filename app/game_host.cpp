@@ -773,6 +773,7 @@ void GameHost::vblank() {
                      static_cast<unsigned long long>(transitional::time::game_steps()));
         if (n % 250 == 0) std::fflush(frameLog);
     }
+    scratch_.renderCount = transitional::render_capture::stats().renders;
     scratch_.vblank   = n;
     scratch_.subtitle = dialogue_ ? dialogue_->text : std::wstring();
     {

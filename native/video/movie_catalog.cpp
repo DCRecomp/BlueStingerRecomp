@@ -193,7 +193,14 @@ MovieCatalog MovieCatalog::load(const CatalogOptions& o) {
             }
         }
     if (o.modsDir.empty()) return c;
-    readManifest(resolve_case(o.modsDir, "manifest.toml"), true, c.byId_, c.problems_);
+    if (o.allowVideoMods) {
+        readManifest(resolve_case(o.modsDir, "manifest.toml"), true, c.byId_, c.problems_);
+    } else {
+        auto entries = c.byId_;
+        readManifest(resolve_case(o.modsDir, "manifest.toml"), true, entries, c.problems_);
+        for (auto& [id, entry] : c.byId_)
+            entry.subtitles = std::move(entries.at(id).subtitles);
+    }
     // mod pelo nome do original (sem manifesto): mods\video\<NOME>.mp4 e <NOME>.<idioma>.srt/.vtt
     for (auto& [id, e] : c.byId_) {
         if (e.original.empty()) continue;
@@ -203,7 +210,7 @@ MovieCatalog MovieCatalog::load(const CatalogOptions& o) {
             if (!f.is_regular_file(ec)) continue;
             const std::string name = upper(f.path().filename().string());
             // o achado pelo nome tambem guarda o canonico conferido dentro da pasta (revisao Codex 20261103-034502)
-            if (!e.mod && name == stem + ".MP4" && modPlayable(f.path(), "mods de video", c.problems_)) {
+            if (o.allowVideoMods && !e.mod && name == stem + ".MP4" && modPlayable(f.path(), "mods de video", c.problems_)) {
                 if (const fs::path canon = contained(o.modsDir, f.path()); !canon.empty()) {
                     e.file = canon, e.mod = true, e.absent = false, e.audioDelaySamples = 0;
                     e.frames = e.width = e.height = 0, e.fps = 0, e.sha256.clear();

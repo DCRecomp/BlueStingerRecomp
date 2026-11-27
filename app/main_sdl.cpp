@@ -45,6 +45,7 @@
 #include "debug/file_log.h"
 #include "pad_contract.h"
 #include "platform/install_config.h"
+#include "video_mw_core.h"
 #include "platform/input.h"
 
 #include <SDL3/SDL.h>
@@ -1021,6 +1022,8 @@ public:
             host_.setFiltering(g.vulkan ? uint32_t(g.filter) : 0, g.anisotropy);
         if (start || g.vulkan != old.graphics.vulkan || g.antialiasing != old.graphics.antialiasing)  // N9.8 fase 8.3 (A2)
             host_.setEdgeAntialiasing(g.vulkan && g.antialiasing == st::Antialiasing::Edges);
+        if (editionProfile().hd_textures && (start || g.widescreen_movies != old.graphics.widescreen_movies))
+            bs::transitional::video::set_widescreen_movie_preference(g.widescreen_movies);
         if (start || g.vulkan != old.graphics.vulkan || g.hd_textures != old.graphics.hd_textures)  // N9.8 fase 8.2
             host_.setHdTextures(g.vulkan && g.hd_textures);
         // N9.6 fase 1: a oclusao ambiente (clamp_to ja a desliga sem o recurso: a Original e o recuo para o SDL)
@@ -1522,6 +1525,9 @@ int runWindow(bs::GameHost& host, ni::InputSystem& input, const Args& a, SDL_Win
     uint64_t      seq  = 0;
     bool          quit = false, fullscreen = false;
     uint64_t      lastTitle = SDL_GetTicks();
+    uint64_t      presentations = 0, renderUpdates = 0, lastRender = 0;
+    double        pauseUiMs = 0, pausePresentMs = 0;
+    uint64_t      pauseSamples = 0;
     int           captures  = 0;
     int           gfxFailures = 0;
     uint64_t      lastWinShot = 0;  // BS_JANELA_CAPTURA
@@ -1567,7 +1573,16 @@ int runWindow(bs::GameHost& host, ni::InputSystem& input, const Args& a, SDL_Win
                 if (!n.empty()) input.key(n, e.type == SDL_EVENT_KEY_DOWN);
                 break;
             }
-            case SDL_EVENT_WINDOW_FOCUS_LOST: input.release_keyboard(); break;
+            case SDL_EVENT_WINDOW_FOCUS_LOST:
+                input.release_keyboard();
+                gfxFailures = 0;
+                break;
+            case SDL_EVENT_WINDOW_FOCUS_GAINED:
+            case SDL_EVENT_WINDOW_RESTORED:
+            case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
+                gfxFailures = 0;
+                pres.p->window_changed();
+                break;
             default: gamepadEvent(input, e); break;
             }
         }
@@ -1604,6 +1619,14 @@ int runWindow(bs::GameHost& host, ni::InputSystem& input, const Args& a, SDL_Win
         menu.update();
         int ow = 0, oh = 0;
         pres.p->output_size(ow, oh);
+        const auto flags = SDL_GetWindowFlags(window);
+        if (quit || !host.running()) break;
+        if (ow <= 0 || oh <= 0 || (flags & (SDL_WINDOW_MINIMIZED | SDL_WINDOW_HIDDEN)) ||
+            ((flags & SDL_WINDOW_FULLSCREEN) && !(flags & SDL_WINDOW_INPUT_FOCUS))) {
+            gfxFailures = 0;
+            SDL_Delay(16);
+            continue;
+        }
         // N9.5 fase 1: com o quadro largo, a imagem larga ocupa o maior 16:9 da saida, e o 4:3 do jogo (camadas, filmes,
         // telas da CPU) e o centro dele
         const uint32_t               wideW    = menu.wide_width();
@@ -1617,7 +1640,10 @@ int runWindow(bs::GameHost& host, ni::InputSystem& input, const Args& a, SDL_Win
         const bool wideImage = wideW && wideSlot;
         std::vector<bs::WindowLayer> layers;
         bool                         shot = false;
+        const bool timingPause = host.paused() && menu.open();
+        const uint64_t uiStart = timingPause ? SDL_GetTicksNS() : 0;
         menu.layers(subs, frame.subtitle, ow, oh, area, layers, shot);
+        if (timingPause) pauseUiMs += (SDL_GetTicksNS() - uiStart) / 1000000.0;
         // diagnostico: BS_JANELA_CAPTURA=<pasta> grava a imagem APRESENTADA a cada BS_JANELA_CAPTURA_CADA quadros novos do
         // jogo (padrao 300): o que o jogador ve, com legendas e menu, no tamanho real da janela; BS_JANELA_CAPTURA_VBLANKS=a-b
         // limita a essa faixa
@@ -1639,7 +1665,15 @@ int runWindow(bs::GameHost& host, ni::InputSystem& input, const Args& a, SDL_Win
         // o framebuffer do jogo nunca passa de 640 (640x476 e 640x240 tambem contam como "largos" para o is_wide_slot)
         const bool      wideCpu = !frame.hiresSeq && frame.width > 640 && bs::native::render::is_wide_slot(frame.width, frame.height);
         const SDL_FRect cpuArea = wideCpu ? bs::frame_area(ow, oh, frame.width, frame.height) : area;
+        const uint64_t presentStart = timingPause ? SDL_GetTicksNS() : 0;
         const bool presented = pres.p->present(frame, seq, wideImage ? wideArea : area, cpuArea, layers, shot || winShot ? &image : nullptr);
+        if (presented && pres.p->frame_shown()) ++presentations;
+        if (frame.renderCount >= lastRender) renderUpdates += frame.renderCount - lastRender;
+        lastRender = frame.renderCount;
+        if (timingPause) {
+            pausePresentMs += (SDL_GetTicksNS() - presentStart) / 1000000.0;
+            ++pauseSamples;
+        }
         ok &= presented;
         // N9.5 fase 5C (BS_TELEMETRIA; desligada, so a leitura de um bool): o quadro apresentado (so os que deram certo, com a
         // janela visivel: minimizada, a apresentacao nao mostra nada; revisao Codex 20261110-014042), a CPU desta thread, a linha.
@@ -1695,11 +1729,19 @@ int runWindow(bs::GameHost& host, ni::InputSystem& input, const Args& a, SDL_Win
         }
         if (!host.running()) quit = true;  // o jogo parou (erro): mostra a mensagem abaixo
         if (SDL_GetTicks() - lastTitle >= 1000) {  // ritmo do jogo no titulo da janela
-            lastTitle             = SDL_GetTicks();
+            const uint64_t now = SDL_GetTicks();
+            const double seconds = (now - lastTitle) / 1000.0;
+            lastTitle = now;
             const bs::GameStats s = host.stats();
-            char                t[200];
-            std::snprintf(t, sizeof t, "%s %s - %.1f campos/s, trabalho %.1f ms (max %.1f)", kTitle, BS_VERSION,
-                          s.fieldsPerSecond, s.workAvgMs, s.workMaxMs);
+            char t[240];
+            std::snprintf(t, sizeof t, "%s %s - %.1f apresentacoes/s, %.1f quadros 3D/s, %.1f campos/s",
+                          kTitle, BS_VERSION, presentations / seconds, renderUpdates / seconds, s.fieldsPerSecond);
+            if (pauseSamples && std::getenv("BS_APP_TRACE"))
+                std::fprintf(stderr, "[pausa] %llu amostras, interface %.2f ms, apresentacao %.2f ms\n",
+                             static_cast<unsigned long long>(pauseSamples), pauseUiMs / pauseSamples,
+                             pausePresentMs / pauseSamples);
+            presentations = renderUpdates = pauseSamples = 0;
+            pauseUiMs = pausePresentMs = 0;
             std::string full = g_spectator.on ? t + spectatorText() : std::string(t);
             if (g_recorder) {
                 const uint64_t st = g_spectator.step.load();
@@ -2587,6 +2629,8 @@ int mainWindow(Args& a) {
             };
         bs::transitional::render_capture::set_materials(editionProfile().lighting_effects);  // N9.6 fase 2b
         host.setTexturePacks(texturePacks.empty() ? nullptr : &texturePacks);  // N9.8 fase 8.2
+        if (editionProfile().hd_textures)
+            bs::transitional::video::set_widescreen_movie_preference(prefs.graphics.widescreen_movies);
         host.start(std::move(opt));
         InGameMenu menu(host, *input, window, pres, prefsDir, prefs, persisted, renderOverride, subtitleOverride, cameraOverride, caps,
                         languages);

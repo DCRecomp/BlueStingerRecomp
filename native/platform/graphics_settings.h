@@ -74,6 +74,7 @@ struct GraphicsSettings {
     uint32_t   window_w = 0, window_h = 0;  // tamanho da janela (0 = o padrao); tela cheia usa a do monitor
     Aspect     aspect = Aspect::Original4x3;
     bool       vsync  = true;
+    bool       widescreen_movies = false;
     bool       vulkan = true;  // renderizador: Vulkan (padrao desde o fechamento do N7) ou o rasterizador em software
     // v0.9.7-1: a versao dos padroes da Remastered ja aplicada a este arquivo ([padroes] remastered; 0 = nenhuma). Fora dos
     // presets e da classificacao

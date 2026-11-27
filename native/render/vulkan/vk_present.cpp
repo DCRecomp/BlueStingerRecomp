@@ -96,7 +96,7 @@ public:
         }
         releasePinned();
         if (!r.out_w || !r.out_h) return {};  // janela minimizada
-        if (!swap_ || r.out_w != sw_ || r.out_h != sh_ || r.vsync != vsync_ || recreate_)
+        if (!swap_ || r.out_w != requested_w_ || r.out_h != requested_h_ || r.vsync != vsync_ || recreate_ || r.recreate_swapchain)
             if (!createSwapchain(r.out_w, r.out_h, r.vsync)) return fail("swapchain", VK_SUCCESS);
         uint32_t   idx = 0;
         const auto     ta  = std::chrono::steady_clock::now();
@@ -338,6 +338,7 @@ private:
     // swapchain
     VkSwapchainKHR             swap_ = VK_NULL_HANDLE;
     uint32_t                   sw_ = 0, sh_ = 0;
+    uint32_t                   requested_w_ = 0, requested_h_ = 0;
     bool                       vsync_ = true, recreate_ = false, canCapture_ = false;
     std::vector<VkImage>       images_;
     std::vector<VkImageView>   views_;
@@ -620,6 +621,7 @@ private:
             done.push_back(x), ++g_live;
         }
         swap_ = next, images_ = std::move(images), views_ = std::move(views), fbs_ = std::move(fbs), done_ = std::move(done);
+        requested_w_ = w, requested_h_ = h;
         sw_ = ext.width, sh_ = ext.height, vsync_ = vsync, recreate_ = false, ++st_.recreated;
         canCapture_ = (ci.imageUsage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) != 0;
         if (!canCapture_) std::fprintf(stderr, "[apresentacao] sem captura (a janela nao permite)\n");

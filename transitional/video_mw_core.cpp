@@ -1,6 +1,7 @@
 #include "video_mw_core.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cstdio>
 #include <cstdlib>
 #include <mutex>
@@ -11,6 +12,7 @@ namespace nv = native::video;
 namespace na = native::audio;
 
 namespace {
+std::atomic<bool> g_widescreenMovies{true};
 std::mutex  g_prefMutex;
 bool        g_prefSet = false;
 std::string g_prefLang;
@@ -25,6 +27,9 @@ std::string baseName(std::string_view f) {
 } // namespace
 
 MwPlayerCore::MwPlayerCore(MwCoreOptions o) : o_(std::move(o)), catalog_(nv::MovieCatalog::load(o_.catalog)) {
+    auto originalOptions = o_.catalog;
+    originalOptions.allowVideoMods = false;
+    originalCatalog_ = nv::MovieCatalog::load(originalOptions);
     for (const auto& p : catalog_.problems())
         if (o_.log) o_.log("[video] manifesto: " + p);
 }
@@ -34,7 +39,7 @@ int32_t MwPlayerCore::start(std::string_view fname, int64_t now) {
     stop();
     ++stats_.starts;
     const std::string name = baseName(fname);
-    entry_                 = catalog_.find(name);
+    entry_ = (g_widescreenMovies.load(std::memory_order_relaxed) ? catalog_ : originalCatalog_).find(name);
     colorDirty_            = true;  // a faixa de TV depende da origem (Builder ou mod)
     start100ns_ = now, lastPos_ = 0, audibleMax_ = 0, lastSub_.clear();
     if (!entry_ || entry_->absent || entry_->file.empty()) {
@@ -216,6 +221,10 @@ bool MwPlayerCore::frame(nv::VideoFrame& out) {
         }
     }
     return true;
+}
+
+void set_widescreen_movie_preference(bool enabled) {
+    g_widescreenMovies.store(enabled, std::memory_order_relaxed);
 }
 
 void set_subtitle_preference(const std::string& language) {

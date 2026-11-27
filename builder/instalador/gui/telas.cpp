@@ -149,7 +149,7 @@ struct Instalador::Impl {
     bool                      edicaoEscolhida = false;
     std::wstring              cdi, pasta;
     bool                      filmes = true, portatil = false, aceitaAlheia = false, logTecnico = false;
-    bool                      filmesWidescreen = true;  // v0.9.7-2: o mod baixado na instalacao (so a Remastered), marcado por padrao
+    bool                      filmesWidescreen = false;
     // Director's Cut (directors_cut.h): so com o disco japones v1.006; o segundo disco e a confirmacao do download
     int                       cdiVersao = -1;  // game_version_of do disco conferido (-1: desconhecida, ex. dentro de .zip)
     bool                      cdiPacote = false;  // .zip/.7z: so a lista foi lida

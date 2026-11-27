@@ -62,6 +62,8 @@ public:
     virtual const char* name() const  = 0;  // "Vulkan" ou "SDL"
     virtual void        output_size(int& w, int& h) = 0;
     virtual void        set_vsync(bool on)          = 0;
+    virtual void        window_changed() {}
+    virtual bool frame_shown() const { return true; }
     // Desenha e apresenta. frameSeq muda a cada quadro novo do jogo; capture != nullptr recebe a imagem apresentada
     // (ARGB, o tamanho da saida). false = falhou (o chamador conta as falhas seguidas e pode recuar para o SDL).
     // N9.5 fase 1: `area` e a da imagem do slot (o quadro largo no 16:9) e `cpuArea` a da imagem da CPU (640 x 480: o 4:3
