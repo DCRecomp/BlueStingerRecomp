@@ -8,6 +8,13 @@
       "id": "game",
       "label": "Your Blue Stinger disc (.gdi, .cue, .chd or .cdi, also inside .zip or .7z): USA, Europe PAL or Japan",
       "role": "game",
+      "dumps": [
+        { "name": "USA (CHD)", "size": 682239421, "crc32": "52979bf6" },
+        { "name": "Europe (CHD)", "size": 749517743, "crc32": "637933fe" },
+        { "name": "France (CHD)", "size": 744491774, "crc32": "d87fabbd" },
+        { "name": "Japan (CHD)", "size": 736456917, "crc32": "139f5372" },
+        { "name": "USA DCCM (CDI)", "size": 811293765, "crc32": "80c098f8" }
+      ],
       "formats": [
         {
           "type": "file",
