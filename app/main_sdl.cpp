@@ -58,6 +58,8 @@
 #include <cstdlib>
 #include <exception>
 #include <cstring>
+#include <chrono>
+#include <deque>
 #include <filesystem>
 #include <fstream>
 #include <memory>
@@ -1517,8 +1519,142 @@ bool fallbackToSdl(SDL_Window* window, PresenterRef& pres, SDL_Renderer*& render
     return pres.p != nullptr;
 }
 
+struct BugSample {
+    uint64_t ms, sample;
+    bs::PadState pad;
+};
+
+class BugReport {
+    std::mutex lock_;
+    std::deque<BugSample> samples_;
+
+public:
+    void add(const ni::SampleContext& ctx, const ni::ControllerState& state) {
+        const auto now = SDL_GetTicks();
+        std::lock_guard guard(lock_);
+        while (!samples_.empty() && (now - samples_.front().ms > 10000 || samples_.size() >= 20000))
+            samples_.pop_front();
+        samples_.push_back({now, ctx.sample, ib::to_pad(state)});
+        if (active_ && captured_.size() < 200000)
+            captured_.push_back(samples_.back());
+        else if (active_)
+            truncated_ = true;
+    }
+
+    bool active() const { return active_; }
+
+    void start() {
+        std::lock_guard guard(lock_);
+        captured_.assign(samples_.begin(), samples_.end());
+        marked_ = SDL_GetTicks();
+        truncated_ = false;
+        active_ = true;
+    }
+
+    fs::path finish(SDL_Window* window, const bs::GameFrame& frame) {
+        std::vector<BugSample> captured;
+        {
+            std::lock_guard guard(lock_);
+            active_ = false;
+            captured.swap(captured_);
+        }
+        const std::string description = describe(window);
+        if (description.empty()) return {};
+
+        const auto stamp = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count();
+        const auto root = exeDir() / "bugs";
+        const auto name = "bug-" + std::to_string(stamp);
+        const auto pending = root / (name + ".tmp");
+        const auto ready = root / name;
+        if (!fs::create_directories(pending)) throw std::runtime_error("Pasta de relatorio ja existe.");
+        std::ofstream report(pending / "relatorio.txt");
+        report << "Blue Stinger " << BS_VERSION << "\nEdicao: "
+               << (editionProfile().native_menus ? "Remastered" : "Original") << "\n"
+               << "F5 inicial (ms): " << marked_ << "\n"
+               << "Registro atingiu o limite: " << (truncated_ ? "sim" : "nao") << "\n\n"
+               << description << '\n';
+        std::ofstream entries(pending / "controles.tsv");
+        entries << "ms\tamostra\tbotoes\tLT\tRT\tX\tY\tX2\tY2\tconectado\n";
+        for (const auto& [ms, sample, pad] : captured)
+            entries << ms << '\t' << sample << '\t' << pad.buttons << '\t'
+                    << int(pad.ltrig) << '\t' << int(pad.rtrig) << '\t'
+                    << int(pad.joyx) << '\t' << int(pad.joyy) << '\t'
+                    << int(pad.joy2x) << '\t' << int(pad.joy2y) << '\t' << pad.connected << '\n';
+        report.close();
+        entries.close();
+        if (!report || !entries) throw std::runtime_error("Falha ao gravar os arquivos.");
+        if (frame.width && !writeBmp(pending / "captura.bmp", frame))
+            throw std::runtime_error("Falha ao salvar a captura.");
+        fs::rename(pending, ready);
+        return fs::path("bugs") / name;
+    }
+
+private:
+    bool active_ = false, truncated_ = false;
+    uint64_t marked_ = 0;
+    std::vector<BugSample> captured_;
+
+    static std::string describe(SDL_Window* parent) {
+        const bool fullscreen = (SDL_GetWindowFlags(parent) & SDL_WINDOW_FULLSCREEN) != 0;
+        if (fullscreen) SDL_SetWindowFullscreen(parent, false);
+        SDL_Window* popup = SDL_CreateWindow("Descreva o problema", 680, 310, SDL_WINDOW_ALWAYS_ON_TOP);
+        SDL_Renderer* renderer = popup ? SDL_CreateRenderer(popup, nullptr) : nullptr;
+        std::string description;
+        if (renderer) {
+            SDL_SetWindowParent(popup, parent);
+            SDL_SetWindowModal(popup, true);
+            SDL_RaiseWindow(popup);
+            SDL_StartTextInput(popup);
+            const auto id = SDL_GetWindowID(popup);
+            bool done = false;
+            while (!done) {
+                SDL_Event e;
+                while (SDL_PollEvent(&e)) {
+                    if (e.type == SDL_EVENT_QUIT ||
+                        (e.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED && e.window.windowID == id)) {
+                        description.clear();
+                        done = true;
+                    } else if (e.type == SDL_EVENT_TEXT_INPUT && e.text.windowID == id) {
+                        if (description.size() + std::strlen(e.text.text) <= 1600) description += e.text.text;
+                    } else if (e.type == SDL_EVENT_KEY_DOWN && e.key.windowID == id) {
+                        if (e.key.key == SDLK_ESCAPE) {
+                            description.clear();
+                            done = true;
+                        } else if (e.key.key == SDLK_RETURN && !description.empty()) {
+                            done = true;
+                        } else if (e.key.key == SDLK_BACKSPACE && !description.empty()) {
+                            size_t pos = description.size() - 1;
+                            while (pos && (static_cast<unsigned char>(description[pos]) & 0xc0) == 0x80) --pos;
+                            description.resize(pos);
+                        }
+                    }
+                }
+                SDL_SetRenderDrawColor(renderer, 23, 28, 36, 255);
+                SDL_RenderClear(renderer);
+                SDL_SetRenderDrawColor(renderer, 240, 244, 250, 255);
+                SDL_RenderDebugText(renderer, 20, 20, "Descreva o que aconteceu e onde.");
+                SDL_RenderDebugText(renderer, 20, 44, "Enter salva o relatorio. Esc cancela.");
+                const size_t capacity = 80 * 13;
+                size_t begin = description.size() > capacity ? description.size() - capacity : 0;
+                for (int row = 0; begin < description.size(); ++row, begin += 80)
+                    SDL_RenderDebugText(renderer, 20, float(80 + row * 16), description.substr(begin, 80).c_str());
+                SDL_RenderPresent(renderer);
+                SDL_Delay(16);
+            }
+            SDL_StopTextInput(popup);
+            SDL_DestroyRenderer(renderer);
+        }
+        if (popup) SDL_DestroyWindow(popup);
+        if (fullscreen) SDL_SetWindowFullscreen(parent, true);
+        SDL_RaiseWindow(parent);
+        if (!renderer) throw std::runtime_error("Nao foi possivel abrir a janela de descricao.");
+        return description;
+    }
+};
+
 int runWindow(bs::GameHost& host, ni::InputSystem& input, const Args& a, SDL_Window* window, PresenterRef& pres,
-              SDL_Renderer*& renderer, InGameMenu& menu) {
+              SDL_Renderer*& renderer, InGameMenu& menu, BugReport& bugs) {
     // N7c: legendas das falas por cima do gameplay, na resolucao da janela (camada propria; o quadro nao e tocado)
     bs::SubtitleOverlay subs;
     bs::GameFrame frame;
@@ -1546,6 +1682,29 @@ int runWindow(bs::GameHost& host, ni::InputSystem& input, const Args& a, SDL_Win
         if (virtualPad && virtualPad->step()) quit = true;
         SDL_Event e;
         while (SDL_PollEvent(&e)) {
+            if (!g_recorder && !g_spectator.on &&
+                (e.type == SDL_EVENT_KEY_DOWN || e.type == SDL_EVENT_KEY_UP) && e.key.key == SDLK_F5) {
+                if (e.type == SDL_EVENT_KEY_DOWN && !e.key.repeat) {
+                    if (!bugs.active()) {
+                        bugs.start();
+                        SDL_SetWindowTitle(window, "Blue Stinger | Relatorio em andamento: F5 para encerrar");
+                    } else {
+                        input.release_keyboard();
+                        const bool wasPaused = host.paused();
+                        host.setPaused(true);
+                        try {
+                            const auto saved = bugs.finish(window, frame);
+                            if (!saved.empty())
+                                SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_INFORMATION, "Relatorio salvo",
+                                                         utf8(saved).c_str(), window);
+                        } catch (const std::exception& error) {
+                            SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Falha ao salvar relatorio", error.what(), window);
+                        }
+                        host.setPaused(wasPaused);
+                    }
+                }
+                continue;
+            }
             if (e.type != SDL_EVENT_QUIT && menu.event(e)) continue;  // N7c: o menu interno (aberto, a entrada e dele)
             switch (e.type) {
             case SDL_EVENT_QUIT:
@@ -1743,6 +1902,7 @@ int runWindow(bs::GameHost& host, ni::InputSystem& input, const Args& a, SDL_Win
             presentations = renderUpdates = pauseSamples = 0;
             pauseUiMs = pausePresentMs = 0;
             std::string full = g_spectator.on ? t + spectatorText() : std::string(t);
+            if (bugs.active()) full += " | Relatorio em andamento: F5 para encerrar";
             if (g_recorder) {
                 const uint64_t st = g_spectator.step.load();
                 full += (st < g_recorder->rec->base_until() ? " | REPRODUZINDO ate o passo " + std::to_string(g_recorder->rec->base_until())
@@ -2616,6 +2776,12 @@ int mainWindow(Args& a) {
     uint64_t endVblank = 0;
     {
         bs::GameHost host;
+        BugReport bugs;
+        if (!g_recorder && !g_spectator.on)
+            input->set_filter([&bugs](const ni::SampleContext& ctx, const ni::ControllerState& state) {
+                bugs.add(ctx, state);
+                return state;
+            });
         bs::GameOptions opt = gameOptions(a);
         opt.input           = input.get();
         opt.camera          = prefs.camera;  // N7c: [camera] do controles.toml (--camera troca o modo so nesta execucao)
@@ -2651,11 +2817,12 @@ int mainWindow(Args& a) {
         menu.set_speakers_available(speakers);
         menu.set_internal_height_override(a.internalHeight, gpuMaxHeight);  // so nesta execucao (com o limite da proporcao em uso)
         menu.apply(prefs, true);
-        rc = runWindow(host, *input, a, window, pres, renderer, menu);
+        rc = runWindow(host, *input, a, window, pres, renderer, menu, bugs);
         // a thread do jogo le a fonte de entrada: para e espera ANTES de destrui-la, em todos
         // os caminhos (revisao Codex 2026-10-14)
         host.requestStop();
         host.join();
+        if (!g_recorder && !g_spectator.on) input->set_filter({});
         bs::native::telemetry::finish();  // N9.5 fase 5C: o resumo depois de parar as threads do jogo
         endVblank = host.vblanks();
     }
